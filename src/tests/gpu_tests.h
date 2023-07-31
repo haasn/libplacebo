@@ -927,13 +927,10 @@ static const char *user_shader_tests[] = {
     "                                                                       \n"
     "//!TEXTURE DISCO                                                       \n"
     "//!SIZE 3 3                                                            \n"
-    "//!FORMAT rgba32f                                                      \n"
+    "//!FORMAT rgba8                                                        \n"
     "//!FILTER NEAREST                                                      \n"
     "//!BORDER REPEAT                                                       \n"
-    "0000803f000000000000000000000000000000000000803f0000000000000000000000000"
-    "00000000000803f00000000000000000000803f0000803f000000000000803f0000000000"
-    "00803f000000000000803f0000803f00000000000000009a99993e9a99993e9a99993e000"
-    "000009a99193F9A99193f9a99193f000000000000803f0000803f0000803f00000000  \n",
+    "ff0000ff00ff00ff0000ffff00ffffffff00ffffffff00ff4c4c4cff999999ffffffffff\n"
 
     // Test custom parameters
     "//!PARAM test                                                          \n"
