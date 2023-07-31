@@ -174,6 +174,7 @@ static inline bool check_mod(pl_gpu gpu, pl_fmt fmt, uint64_t mod)
 
 pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 {
+    require(params->format);
     require(!params->import_handle || !params->export_handle);
     require(!params->import_handle || !params->initial_data);
     if (params->export_handle) {
@@ -202,6 +203,7 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         require(!params->renderable);
         require(!params->blit_src || gpu->limits.blittable_1d_3d);
         require(!params->blit_dst || gpu->limits.blittable_1d_3d);
+        require(!params->format->num_planes);
         break;
     case 2:
         require(params->w > 0 && params->h > 0);
@@ -216,10 +218,10 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         require(!params->renderable);
         require(!params->blit_src || gpu->limits.blittable_1d_3d);
         require(!params->blit_dst || gpu->limits.blittable_1d_3d);
+        require(!params->format->num_planes);
         break;
     }
 
-    require(params->format);
     enum pl_fmt_caps fmt_caps = params->format->caps;
     bool fmt_opaque = params->format->opaque;
     for (int i = 0; i < params->format->num_planes; i++) {
