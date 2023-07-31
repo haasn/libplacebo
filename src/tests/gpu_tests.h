@@ -1585,11 +1585,11 @@ static void pl_test_export_import(pl_gpu gpu,
         !(gpu->import_caps.tex & handle_type))
         goto skip_tex;
 
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0, PL_FMT_CAP_BLITTABLE);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 4, 0, 0, PL_FMT_CAP_BLITTABLE);
     if (!fmt)
         goto skip_tex;
 
-    printf("testing texture import/export\n");
+    printf("testing texture import/export with fmt %s\n", fmt->name);
 
     pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
