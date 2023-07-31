@@ -195,10 +195,12 @@ static const struct vk_format vk_formats[] = {
     // Packed 16 bit formats
     {VK_FORMAT_R10X6_UNORM_PACK16,                  PACKED16FMT("rx10",         1, 10)},
     {VK_FORMAT_R10X6G10X6_UNORM_2PACK16,            PACKED16FMT("rxgx10",       2, 10)},
-    {VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16,  PACKED16FMT("rxgxbxax10",   4, 10)},
     {VK_FORMAT_R12X4_UNORM_PACK16,                  PACKED16FMT("rx12",         1, 12)},
     {VK_FORMAT_R12X4G12X4_UNORM_2PACK16,            PACKED16FMT("rxgx12",       2, 12)},
-    {VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,  PACKED16FMT("rxgxbxax12",   4, 12)},
+
+    // FIXME: enabling these requires VK_EXT_rgba10x6_formats or equivalent
+    // {VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16,  PACKED16FMT("rxgxbxax10",   4, 10)},
+    // {VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,  PACKED16FMT("rxgxbxax12",   4, 12)},
 
     // Planar formats
     {VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM, PLANARFMT("g8_b8_r8_420", 3, 12, 8),
