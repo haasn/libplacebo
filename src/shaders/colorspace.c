@@ -1760,7 +1760,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     ident_t lms2ipt = SH_MAT3(pl_ipt_lms2ipt);
     ident_t ipt2lms = SH_MAT3(pl_ipt_ipt2lms);
 
-    if (gamut.function == &pl_gamut_map_saturation && can_fast) {
+    if (need_gamut_map && gamut.function == &pl_gamut_map_saturation && can_fast) {
         const pl_matrix3x3 lms2src = pl_ipt_lms2rgb(&gamut.input_gamut);
         const pl_matrix3x3 dst2lms = pl_ipt_rgb2lms(&gamut.output_gamut);
         sh_describe(sh, "gamut map (saturation)");
