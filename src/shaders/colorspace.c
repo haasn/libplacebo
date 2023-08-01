@@ -17,6 +17,7 @@
 
 #include <math.h>
 #include "shaders.h"
+#include "colorspace.h"
 
 #include <libplacebo/shaders/colorspace.h>
 
@@ -1709,6 +1710,14 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .out_min    = &gamut.min_luma,
         .out_max    = &gamut.max_luma,
     ));
+
+    // Clip the gamut mapping output to the input gamut for perceptual
+    if (gamut.function == &pl_gamut_map_perceptual) {
+        if (pl_primaries_compatible(&gamut.input_gamut, &gamut.output_gamut)) {
+            gamut.output_gamut = pl_primaries_clip(&gamut.output_gamut,
+                                                   &gamut.input_gamut);
+        }
+    }
 
     // Backwards compatibility with older API
     switch (params->gamut_mode) {
