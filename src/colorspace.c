@@ -702,6 +702,10 @@ void pl_color_space_infer_map(struct pl_color_space *src,
 
     if (unknown_contrast && dynamic_contrast)
         src->hdr.min_luma = dst->hdr.min_luma;
+
+    // If the src is HLG and the output is HDR, tune the HLG peak to the output
+    if (src->transfer == PL_COLOR_TRC_HLG && pl_color_space_is_hdr(dst))
+        src->hdr.max_luma = dst->hdr.max_luma;
 }
 
 const struct pl_color_adjustment pl_color_adjustment_neutral = {
