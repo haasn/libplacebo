@@ -167,7 +167,7 @@ sanitize:
             meson build --buildtype debugoptimized
                         --werror
                         -Dtests=true
-                        -Dc_args='-DCI_MAXGL'
+                        -Dc_args='-DCI_MAXGL -Wno-deprecated-declarations'
                         -Db_sanitize=address,undefined
                         -Db_lundef=false
                         -Dshaderc=enabled
@@ -187,7 +187,7 @@ msan:
                         --werror
                         --default-library static
                         -Dtests=true
-                        -Dc_args='-DMSAN -DCI_MAXGL'
+                        -Dc_args='-DMSAN -DCI_MAXGL -Wno-deprecated-declarations'
                         -Dglslang=disabled
                         -Db_sanitize=memory
                         -Db_lundef=false
