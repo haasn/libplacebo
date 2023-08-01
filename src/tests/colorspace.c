@@ -75,11 +75,31 @@ int main()
     float pc10to16 = pl_color_repr_normalize(&pc_repr);
     REQUIRE_FEQ(pc10to16 * 1000/65535., 1000/1023., 1e-7);
 
-    const struct pl_raw_primaries *bt709, *bt2020;
+    const struct pl_raw_primaries *bt709, *bt2020, *dcip3;
     bt709 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
     bt2020 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020);
+    dcip3 = pl_raw_primaries_get(PL_COLOR_PRIM_DCI_P3);
     REQUIRE(pl_primaries_superset(bt2020, bt709));
+    REQUIRE(!pl_primaries_superset(bt2020, dcip3)); // small region doesn't overlap
+    REQUIRE(pl_primaries_superset(dcip3, bt709));
     REQUIRE(!pl_primaries_superset(bt709, bt2020));
+    REQUIRE(pl_primaries_compatible(bt2020, bt2020));
+    REQUIRE(pl_primaries_compatible(bt2020, bt709));
+    REQUIRE(pl_primaries_compatible(bt709, bt2020));
+    REQUIRE(pl_primaries_compatible(bt2020, dcip3));
+    REQUIRE(pl_primaries_compatible(bt709, dcip3));
+
+    struct pl_raw_primaries bt709_2020 = pl_primaries_clip(bt709, bt2020);
+    struct pl_raw_primaries bt2020_709 = pl_primaries_clip(bt2020, bt709);
+    REQUIRE(pl_raw_primaries_similar(&bt709_2020, bt709));
+    REQUIRE(pl_raw_primaries_similar(&bt2020_709, bt709));
+
+    struct pl_raw_primaries dcip3_bt2020 = pl_primaries_clip(dcip3, bt2020);
+    struct pl_raw_primaries dcip3_bt709  = pl_primaries_clip(dcip3, bt709);
+    REQUIRE(pl_primaries_superset(dcip3,  &dcip3_bt2020));
+    REQUIRE(pl_primaries_superset(dcip3,  &dcip3_bt709));
+    REQUIRE(pl_primaries_superset(bt2020, &dcip3_bt2020));
+    REQUIRE(pl_primaries_superset(bt709,  &dcip3_bt709));
 
     pl_matrix3x3 rgb2xyz, rgb2xyz_;
     rgb2xyz = rgb2xyz_ = pl_get_rgb2xyz_matrix(bt709);
