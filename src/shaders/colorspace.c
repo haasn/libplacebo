@@ -1710,6 +1710,14 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .out_max    = &gamut.max_luma,
     ));
 
+    // Clip the gamut mapping output to the input gamut if disabled
+    if (!params->gamut_expansion && gamut.function->bidirectional) {
+        if (pl_primaries_compatible(&gamut.input_gamut, &gamut.output_gamut)) {
+            gamut.output_gamut = pl_primaries_clip(&gamut.output_gamut,
+                                                   &gamut.input_gamut);
+        }
+    }
+
     // Backwards compatibility with older API
     switch (params->gamut_mode) {
     case PL_GAMUT_CLIP:

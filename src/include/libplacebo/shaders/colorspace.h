@@ -247,6 +247,12 @@ struct pl_color_map_params {
     // the 3DLUT gamut mapping accuracy.
     bool lut3d_tricubic;
 
+    // If true, allows the gamut mapping function to expand the gamut, in
+    // cases where the target gamut exceeds that of the source. If false,
+    // the source gamut will never be enlarged, even when using a gamut
+    // mapping function capable of bidirectional mapping.
+    bool gamut_expansion;
+
     // --- Tone mapping options
 
     // Function and configuration used for tone-mapping. For non-tunable

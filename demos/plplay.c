@@ -1381,6 +1381,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_checkbox_label(nk, "Tricubic interpolation", &cpar->lut3d_tricubic);
             nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
             nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
+            nk_checkbox_label(nk, "Gamut expansion", &cpar->gamut_expansion);
             nk_checkbox_label(nk, "Show clipping", &cpar->show_clipping);
             nk_checkbox_label(nk, "Visualize LUT", &cpar->visualize_lut);
 
