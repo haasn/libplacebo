@@ -5,6 +5,10 @@
 #include "common.h"
 #include "window.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 extern const struct window_impl win_impl_glfw_vk;
 extern const struct window_impl win_impl_glfw_gl;
 extern const struct window_impl win_impl_glfw_d3d11;
@@ -39,7 +43,7 @@ struct window *window_create(pl_log log, const struct window_params *params)
         printf("Attempting to initialize API: %s\n", (*impl)->name);
         struct window *win = (*impl)->create(log, params);
         if (win) {
-#ifdef PL_HAVE_WIN32
+#ifdef _WIN32
             if (timeBeginPeriod(1) != TIMERR_NOERROR)
                 fprintf(stderr, "timeBeginPeriod failed!\n");
 #endif
@@ -62,7 +66,7 @@ void window_destroy(struct window **win)
 
     (*win)->impl->destroy(win);
 
-#ifdef PL_HAVE_WIN32
+#ifdef _WIN32
     timeEndPeriod(1);
 #endif
 }
