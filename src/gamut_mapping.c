@@ -606,7 +606,6 @@ enum {
 
 // Hue-shift helper struct
 struct hueshift {
-    bool disabled;
     float dh[N];
     float dddh[N];
     float K[N];
@@ -630,14 +629,7 @@ static void hueshift_prepare(struct hueshift *s, struct gamut src, struct gamut 
     for (int i = 0; i < S; i++) {
         struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src));
         struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst));
-        float delta = wrap(ich_dst.h - ich_src.h);
-        if (fabsf(delta) > 1.0f) {
-            // Disable hue-shifting because one hue vector is rotated too far,
-            // probably as the result of this being some sort of synthetic / fake
-            // "test" image - preserve hues in this case
-            s->disabled = true;
-            return;
-        }
+        const float delta = wrap(ich_dst.h - ich_src.h);
         s->hueshift[i+1].hue = ich_src.h;
         s->hueshift[i+1].delta = delta;
     }
@@ -678,8 +670,6 @@ static void hueshift_prepare(struct hueshift *s, struct gamut src, struct gamut 
 
 static struct ICh hueshift_apply(struct hueshift *s, struct ICh ich)
 {
-    if (s->disabled)
-        return ich;
     if (fabsf(ich.h - s->prev_hue) < 1e-6f)
         goto done;
 
