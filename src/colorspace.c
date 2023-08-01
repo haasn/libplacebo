@@ -1322,6 +1322,65 @@ bool pl_primaries_valid(const struct pl_raw_primaries *prim)
     return fabs(area) > 1e-6 && test_point_gamut(prim->white, prim);
 }
 
+static inline float xy_dist2(struct pl_cie_xy a, struct pl_cie_xy b)
+{
+    const float dx = a.x - b.x, dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
+bool pl_primaries_compatible(const struct pl_raw_primaries *a,
+                             const struct pl_raw_primaries *b)
+{
+    float RR = xy_dist2(a->red, b->red),    RG = xy_dist2(a->red, b->green),
+          RB = xy_dist2(a->red, b->blue),   GG = xy_dist2(a->green, b->green),
+          GB = xy_dist2(a->green, b->blue), BB = xy_dist2(a->blue, b->blue);
+    return RR < RG && RR < RB && GG < RG && GG < GB && BB < RB && BB < GB;
+}
+
+// returns the intersection of the two lines defined by ab and cd
+static struct pl_cie_xy intersection(struct pl_cie_xy a, struct pl_cie_xy b,
+                                     struct pl_cie_xy c, struct pl_cie_xy d)
+{
+    float det = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+    float t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / det;
+    return (struct pl_cie_xy) {
+        .x = t ? a.x + t * (b.x - a.x) : 0.0f,
+        .y = t ? a.y + t * (b.y - a.y) : 0.0f,
+    };
+}
+
+// x, y, z specified in clockwise order, with a, b, c being the enclosing gamut
+static struct pl_cie_xy
+clip_point(struct pl_cie_xy x, struct pl_cie_xy y, struct pl_cie_xy z,
+           struct pl_cie_xy a, struct pl_cie_xy b, struct pl_cie_xy c)
+{
+    const float d1 = test_point_line(y, a, b);
+    const float d2 = test_point_line(y, b, c);
+    if (d1 <= 0.0f && d2 <= 0.0f) {
+        return y; // already inside triangle
+    } else if (d1 > 0.0f && d2 > 0.0f) {
+        return b; // target vertex fully enclosed
+    } else if (d1 > 0.0f) {
+        return intersection(a, b, y, z);
+    } else {
+        return intersection(x, y, b, c);
+    }
+}
+
+struct pl_raw_primaries pl_primaries_clip(const struct pl_raw_primaries *src,
+                                          const struct pl_raw_primaries *dst)
+{
+    return (struct pl_raw_primaries) {
+        .red   = clip_point(src->green, src->red, src->blue,
+                            dst->green, dst->red, dst->blue),
+        .green = clip_point(src->blue, src->green, src->red,
+                            dst->blue, dst->green, dst->red),
+        .blue  = clip_point(src->red, src->blue, src->green,
+                            dst->red, dst->blue, dst->green),
+        .white = src->white,
+    };
+}
+
 /* Fill in the Y, U, V vectors of a yuv-to-rgb conversion matrix
  * based on the given luma weights of the R, G and B components (lr, lg, lb).
  * lr+lg+lb is assumed to equal 1.

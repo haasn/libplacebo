@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '299': 'add pl_primaries_compatible and pl_primaries_clip',
       '298': 'add pl_gamut_map_softclip',
       '297': 'add pl_tone_map_linear_light',
       '296': 'add pl_queue_estimate_fps/fps, pl_queue_num_frames and pl_queue_peek',

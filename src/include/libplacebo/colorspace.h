@@ -590,6 +590,19 @@ PL_API bool pl_primaries_superset(const struct pl_raw_primaries *a,
 // merely that they satisfy the requirements for colorspace math (to avoid NaN).
 PL_API bool pl_primaries_valid(const struct pl_raw_primaries *prim);
 
+// Returns true if two primaries are 'compatible', which is the case if
+// they preserve the relationship between primaries (red=red, green=green,
+// blue=blue). In other words, this is false for synthetic primaries that have
+// channels misordered from the convention (e.g. for some test ICC profiles).
+PL_API bool pl_primaries_compatible(const struct pl_raw_primaries *a,
+                                    const struct pl_raw_primaries *b);
+
+// Clip points in the first gamut (src) to be fully contained inside the second
+// gamut (dst). Only works on compatible primaries (pl_primaries_compatible).
+PL_API struct pl_raw_primaries
+pl_primaries_clip(const struct pl_raw_primaries *src,
+                  const struct pl_raw_primaries *dst);
+
 // Primary-dependent RGB->LMS matrix for the IPTPQc4 color system. This is
 // derived from the HPE XYZ->LMS matrix with 4% crosstalk added.
 PL_API pl_matrix3x3 pl_ipt_rgb2lms(const struct pl_raw_primaries *prim);
