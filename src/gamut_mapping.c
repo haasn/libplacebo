@@ -45,6 +45,9 @@ bool pl_gamut_map_params_noop(const struct pl_gamut_map_params *params)
         return true;
 
     struct pl_raw_primaries src = params->input_gamut, dst = params->output_gamut;
+    if (!pl_primaries_compatible(&dst, &src))
+        return true;
+
     bool need_map = !pl_primaries_superset(&dst, &src);
     need_map |= !pl_cie_xy_equal(&src.white, &dst.white);
     if (FUN(params).bidirectional)
