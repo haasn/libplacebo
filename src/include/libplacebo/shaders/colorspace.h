@@ -239,7 +239,7 @@ struct pl_color_map_params {
     // colors which are out-of-gamut as a consequence of tone mapping.
     const struct pl_gamut_map_function *gamut_mapping;
 
-    // Gamut mapping 3DLUT size, for channels ICh. Defaults to {23, 32, 128}
+    // Gamut mapping 3DLUT size, for channels ICh. Defaults to {48, 32, 256}
     int lut3d_size[3];
 
     // Use higher quality tricubic interpolation for gamut mapping 3DLUTs.
@@ -316,7 +316,7 @@ struct pl_color_map_params {
     .gamut_mapping          = &pl_gamut_map_perceptual,         \
     .tone_mapping_function  = &pl_tone_map_auto,                \
     .metadata               = PL_HDR_METADATA_ANY,              \
-    .lut3d_size             = {23, 32, 128},                    \
+    .lut3d_size             = {48, 32, 256},                    \
     .lut_size               = 256,                              \
     .contrast_smoothness    = 3.5f,
 
