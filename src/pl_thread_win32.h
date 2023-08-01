@@ -140,10 +140,14 @@ static inline int pl_thread_join(pl_thread thread)
     return 0;
 }
 
-// Returns true, if slept full time
+// Returns true if slept the full time, false otherwise
 static inline bool pl_thread_sleep(double t)
 {
-    if (t <= 0.0)
+    // Time is expected in 100 nanosecond intervals.
+    // Negative values indicate relative time.
+    LARGE_INTEGER time = { .QuadPart = -(LONGLONG) (t * 1e7) };
+
+    if (time.QuadPart >= 0)
         return true;
 
     bool ret = false;
@@ -164,9 +168,6 @@ static inline bool pl_thread_sleep(double t)
     if (!timer)
         goto end;
 
-    // Time is expected in 100 nanosecond intervals.
-    // Negative values indicate relative time.
-    LARGE_INTEGER time = (LARGE_INTEGER){ .QuadPart = -(t * 1e7) };
     if (!SetWaitableTimer(timer, &time, 0, NULL, NULL, 0))
         goto end;
 
