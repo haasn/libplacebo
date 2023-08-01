@@ -690,18 +690,27 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
 void pl_color_space_infer_map(struct pl_color_space *src,
                               struct pl_color_space *dst)
 {
-    bool unknown_contrast = !src->hdr.min_luma;
+    bool unknown_src_contrast = !src->hdr.min_luma;
+    bool unknown_dst_contrast = !dst->hdr.min_luma;
 
     infer_both_ref(dst, src);
 
     // If the src has an unspecified SDR-like gamma, default it to match the
     // dst colorspace contrast. This does not matter in most cases, but ensures
     // that BT.1886 is tuned to the appropriate black point by default.
-    bool dynamic_contrast = pl_color_space_is_black_scaled(src) ||
+    bool dynamic_src_contrast = pl_color_space_is_black_scaled(src) ||
                             src->transfer == PL_COLOR_TRC_BT_1886;
 
-    if (unknown_contrast && dynamic_contrast)
+    if (unknown_src_contrast && dynamic_src_contrast)
         src->hdr.min_luma = dst->hdr.min_luma;
+
+    // Do the same in reverse if the dst is unspecified SDR-like and the source
+    // has known contrast information
+    bool dynamic_dst_contrast = pl_color_space_is_black_scaled(dst) ||
+                            dst->transfer == PL_COLOR_TRC_BT_1886;
+
+    if (unknown_dst_contrast && dynamic_dst_contrast)
+        dst->hdr.min_luma = src->hdr.min_luma;
 
     // If the src is HLG and the output is HDR, tune the HLG peak to the output
     if (src->transfer == PL_COLOR_TRC_HLG && pl_color_space_is_hdr(dst))
