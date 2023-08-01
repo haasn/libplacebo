@@ -1299,8 +1299,8 @@ static float test_point_gamut(struct pl_cie_xy point,
           d2 = test_point_line(point, prim->green, prim->blue),
           d3 = test_point_line(point, prim->blue, prim->red);
 
-    bool has_neg = d1 < 0 || d2 < 0 || d3 < 0,
-         has_pos = d1 > 0 || d2 > 0 || d3 > 0;
+    bool has_neg = d1 < -1e-6f || d2 < -1e-6f || d3 < -1e-6f,
+         has_pos = d1 >  1e-6f || d2 >  1e-6f || d3 >  1e-6f;
 
     return !(has_neg && has_pos);
 }
