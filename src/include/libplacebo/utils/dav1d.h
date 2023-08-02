@@ -47,9 +47,9 @@ PL_API_BEGIN
 PL_DAV1D_API void pl_frame_from_dav1dpicture(struct pl_frame *out_frame,
                                              const Dav1dPicture *picture);
 
-// Helper function to generate a `pl_swapchain_colors` struct from a Dav1dPicture.
+// Helper function to generate a `pl_color_space` struct from a Dav1dPicture.
 // Useful to update the swapchain colorspace mode dynamically (e.g. for HDR).
-PL_DAV1D_API void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
+PL_DAV1D_API void pl_swapchain_colors_from_dav1dpicture(struct pl_color_space *out_colors,
                                                         const Dav1dPicture *picture);
 
 struct pl_dav1d_upload_params {
