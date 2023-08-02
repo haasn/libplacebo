@@ -63,19 +63,6 @@ void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
     struct pl_swapchain_colors fix = {0};
     if (csp) {
         fix = *csp;
-
-        bool has_metadata = !pl_hdr_metadata_equal(&fix.hdr, &pl_hdr_metadata_empty);
-        bool is_hdr = pl_color_transfer_is_hdr(fix.transfer);
-
-        // Ensure consistency of the metadata and requested transfer function
-        if (has_metadata && !fix.transfer) {
-            fix.transfer = PL_COLOR_TRC_PQ;
-        } else if (has_metadata && !is_hdr) {
-            fix.hdr = pl_hdr_metadata_empty;
-        } else if (!has_metadata && is_hdr) {
-            fix.hdr = pl_hdr_metadata_hdr10;
-        }
-
         // Ensure we have valid values set for all the fields
         pl_color_space_infer(&fix);
     }
