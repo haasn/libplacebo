@@ -1,4 +1,4 @@
-glsl_preproc = [ find_program('./main.py'), '@INPUT@', '@OUTPUT@' ]
+glsl_preproc = [ python, join_paths(meson.current_source_dir(), 'main.py'), '@INPUT@', '@OUTPUT@' ]
 glsl_deps = files(
   'macros.py',
   'statement.py',
