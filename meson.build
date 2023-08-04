@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '302': 'change type of pl_icc_params.size_r/g/b to int',
       '301': 'add PL_COLOR_ADJUSTMENT_NEUTRAL and pl_color_adjustment()',
       '300': 'add pl_color_map_params.gamut_expansion',
       '299': 'add pl_primaries_compatible and pl_primaries_clip',

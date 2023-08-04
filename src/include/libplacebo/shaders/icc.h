@@ -39,7 +39,7 @@ struct pl_icc_params {
     // The size of the 3DLUT to generate. If left as NULL, these individually
     // default to values appropriate for the profile. (Based on internal
     // precision heuristics)
-    size_t size_r, size_g, size_b;
+    int size_r, size_g, size_b;
 
     // This field can be used to override the detected brightness level of the
     // ICC profile. If you set this to the special value 0 (or a negative
