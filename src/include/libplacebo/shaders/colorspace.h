@@ -121,7 +121,7 @@ struct pl_peak_detect_params {
     // lower and upper bounds of this window, in units of 1% PQ.
     //
     // The default values are 5.5 and 10.0, respectively. To disable this logic
-    // entirely, set either one to a negative value.
+    // entirely, set either one to 0.
     float scene_threshold_low;
     float scene_threshold_high;
 
