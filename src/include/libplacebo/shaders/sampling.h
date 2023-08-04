@@ -72,7 +72,7 @@ struct pl_deband_params {
 
     // The debanding filter's cut-off threshold. Higher numbers increase the
     // debanding strength dramatically, but progressively diminish image
-    // details. Defaults to 4.0.
+    // details. Defaults to 2.0.
     float threshold;
 
     // The debanding filter's initial radius. The radius increases linearly
@@ -98,7 +98,7 @@ struct pl_deband_params {
 
 #define PL_DEBAND_DEFAULTS  \
     .iterations = 1,        \
-    .threshold  = 4.0,      \
+    .threshold  = 2.0,      \
     .radius     = 16.0,     \
     .grain      = 6.0,
 
