@@ -213,7 +213,7 @@ PL_API extern const struct pl_filter_config pl_filter_nearest;     // AKA box
 PL_API extern const struct pl_filter_config pl_filter_bilinear;    // AKA triangle
 PL_API extern const struct pl_filter_config pl_filter_gaussian;
 // Sinc family (all configured to 3 taps):
-PL_API extern const struct pl_filter_config pl_filter_sinc;        // unwindowed,
+PL_API extern const struct pl_filter_config pl_filter_sinc;        // unwindowed
 PL_API extern const struct pl_filter_config pl_filter_lanczos;     // sinc-sinc
 PL_API extern const struct pl_filter_config pl_filter_ginseng;     // sinc-jinc
 PL_API extern const struct pl_filter_config pl_filter_ewa_jinc;    // unwindowed
