@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '309': 'add <libplacebo/options.h>',
       '308': 'add pl_hook_par.names',
       '307': 'add pl_filter.radius_zero',
       '306': 'add pl_filter_functions and pl_filter_configs',
