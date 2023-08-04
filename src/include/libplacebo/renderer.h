@@ -371,8 +371,6 @@ struct pl_render_params {
 // Bare minimum parameters, with no features enabled. This is the fastest
 // possible configuration, and should therefore be fine on any system.
 #define PL_RENDER_DEFAULTS                              \
-    /* set a frame mixer for pl_render_image_mix */     \
-    .frame_mixer        = &pl_filter_oversample,        \
     .color_map_params   = &pl_color_map_default_params, \
     .color_adjustment   = &pl_color_adjustment_neutral, \
     .icc_params         = &pl_icc_default_params,       \
