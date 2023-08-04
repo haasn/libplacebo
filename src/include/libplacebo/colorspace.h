@@ -538,7 +538,12 @@ struct pl_color_adjustment {
     float temperature;
 };
 
-// A struct pre-filled with all-neutral values.
+#define PL_COLOR_ADJUSTMENT_NEUTRAL \
+    .contrast       = 1.0,           \
+    .saturation     = 1.0,           \
+    .gamma          = 1.0,
+
+#define pl_color_adjustment(...) (&(struct pl_color_adjustment) { PL_COLOR_ADJUSTMENT_NEUTRAL __VA_ARGS__ })
 PL_API extern const struct pl_color_adjustment pl_color_adjustment_neutral;
 
 // Represents the chroma placement with respect to the luma samples. This is

@@ -716,12 +716,7 @@ void pl_color_space_infer_map(struct pl_color_space *src,
 }
 
 const struct pl_color_adjustment pl_color_adjustment_neutral = {
-    .brightness     = 0.0,
-    .contrast       = 1.0,
-    .saturation     = 1.0,
-    .hue            = 0.0,
-    .gamma          = 1.0,
-    .temperature    = 0.0,
+    PL_COLOR_ADJUSTMENT_NEUTRAL
 };
 
 void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '301': 'add PL_COLOR_ADJUSTMENT_NEUTRAL and pl_color_adjustment()',
       '300': 'add pl_color_map_params.gamut_expansion',
       '299': 'add pl_primaries_compatible and pl_primaries_clip',
       '298': 'add pl_gamut_map_softclip',
