@@ -158,6 +158,9 @@ int pl_str_find(pl_str haystack, pl_str needle);
 pl_str pl_str_split_char(pl_str str, char sep, pl_str *out_rest);
 pl_str pl_str_split_str(pl_str str, pl_str sep, pl_str *out_rest);
 
+// Like `pl_str_split_char`, but splits on any char in `seps`
+pl_str pl_str_split_chars(pl_str str, const char *seps, pl_str *out_rest);
+
 static inline pl_str pl_str_getline(pl_str str, pl_str *out_rest)
 {
     return pl_str_split_char(str, '\n', out_rest);

@@ -165,6 +165,20 @@ pl_str pl_str_split_char(pl_str str, char sep, pl_str *out_rest)
     }
 }
 
+pl_str pl_str_split_chars(pl_str str, const char *seps, pl_str *out_rest)
+{
+    int pos = pl_strcspn(str, seps);
+    if (pos < 0) {
+        if (out_rest)
+            *out_rest = (pl_str) {0};
+        return str;
+    } else {
+        if (out_rest)
+            *out_rest = pl_str_drop(str, pos + 1);
+        return pl_str_take(str, pos);
+    }
+}
+
 pl_str pl_str_split_str(pl_str str, pl_str sep, pl_str *out_rest)
 {
     int pos = pl_str_find(str, sep);
