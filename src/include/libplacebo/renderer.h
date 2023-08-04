@@ -374,6 +374,8 @@ struct pl_render_params {
     /* set a frame mixer for pl_render_image_mix */     \
     .frame_mixer        = &pl_filter_oversample,        \
     .color_map_params   = &pl_color_map_default_params, \
+    .color_adjustment   = &pl_color_adjustment_neutral, \
+    .icc_params         = &pl_icc_default_params,       \
     .lut_entries        = 64,                           \
     .tile_colors        = {{0.93, 0.93, 0.93},          \
                            {0.87, 0.87, 0.87}},         \
