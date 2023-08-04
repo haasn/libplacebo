@@ -1910,10 +1910,11 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
                  "float detail = highres - lowres;                  \n"
                  "float base = tone_map(highres);                   \n"
                  "float sharp = tone_map(lowres) + detail;          \n"
-                 "ipt.x = mix(base, sharp, "$");                    \n",
+                 "ipt.x = clamp(mix(base, sharp, "$"), "$", "$");   \n",
                  pos, pt, lowres,
                  lowres, lowres, lowres, lowres,
-                 SH_FLOAT(params->contrast_recovery));
+                 SH_FLOAT(params->contrast_recovery),
+                 SH_FLOAT(tone.output_min), SH_FLOAT_DYN(tone.output_max));
 
         } else {
 
