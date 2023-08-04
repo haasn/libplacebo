@@ -116,6 +116,19 @@ static inline pl_log pl_test_logger(void)
     }                                                                           \
 } while (0)
 
+#define REQUIRE_STREQ(a, b) do                                                  \
+{                                                                               \
+    const char *_a = (a);                                                       \
+    const char *_b = (b);                                                       \
+    if (strcmp(_a, _b) != 0) {                                                  \
+        fprintf(stderr, "=== FAILED: !strcmp("#a", "#b") at "__FILE__":%d\n"    \
+                        " %-31s = %s\n"                                         \
+                        " %-31s = %s\n\n",                                      \
+                __LINE__, #a, _a, #b, _b);                                      \
+        exit(1);                                                                \
+    }                                                                           \
+} while (0)
+
 static inline void log_array(const uint8_t *a, const uint8_t *ref, size_t size)
 {
     for (size_t n = 0; n < size; n++) {
