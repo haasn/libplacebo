@@ -142,7 +142,7 @@ PL_API extern const struct pl_gamut_map_function pl_gamut_map_linear;
 // A list of built-in gamut mapping functions, terminated by NULL
 PL_API extern const struct pl_gamut_map_function * const pl_gamut_map_functions[];
 PL_API extern const int pl_num_gamut_map_functions; // excluding trailing NULL
-                                             //
+
 // Find the gamut mapping function with the given name, or NULL on failure.
 PL_API const struct pl_gamut_map_function *pl_find_gamut_map_function(const char *name);
 
