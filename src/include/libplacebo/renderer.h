@@ -400,16 +400,6 @@ PL_API extern const struct pl_render_params pl_render_default_params;
 // quality is desired.
 PL_API extern const struct pl_render_params pl_render_high_quality_params;
 
-// A list of recommended frame mixer presets, terminated by {0}
-PL_API extern const struct pl_filter_preset pl_frame_mixers[];
-PL_API extern const int pl_num_frame_mixers; // excluding trailing {0}
-
-// A list of recommended scaler presets, terminated by {0}. This is almost
-// equivalent to `pl_filter_presets` with the exception of including extra
-// built-in filters that don't map to the `pl_filter` architecture.
-PL_API extern const struct pl_filter_preset pl_scale_filters[];
-PL_API extern const int pl_num_scale_filters; // excluding trailing {0}
-
 #define PL_MAX_PLANES 4
 
 // High level description of a single slice of an image. This basically
@@ -810,6 +800,20 @@ static inline float pl_frame_mix_radius(const struct pl_render_params *params)
 PL_API bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                                 const struct pl_frame *target,
                                 const struct pl_render_params *params);
+
+// Backwards compatibility with old filters API, may be deprecated.
+// Redundant with pl_filter_configs and masking `allowed` for
+// PL_FILTER_SCALING and PL_FILTER_FRAME_MIXING respectively.
+
+// A list of recommended frame mixer presets, terminated by {0}
+PL_API extern const struct pl_filter_preset pl_frame_mixers[];
+PL_API extern const int pl_num_frame_mixers; // excluding trailing {0}
+
+// A list of recommended scaler presets, terminated by {0}. This is almost
+// equivalent to `pl_filter_presets` with the exception of including extra
+// built-in filters that don't map to the `pl_filter` architecture.
+PL_API extern const struct pl_filter_preset pl_scale_filters[];
+PL_API extern const int pl_num_scale_filters; // excluding trailing {0}
 
 PL_API_END
 
