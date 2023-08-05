@@ -180,10 +180,6 @@ PL_API extern const int pl_num_filter_function_presets; // excluding trailing {0
 // Find the filter function preset with the given name, or NULL on failure.
 PL_API const struct pl_filter_function_preset *pl_find_filter_function_preset(const char *name);
 
-#define pl_named_filter_function        pl_filter_function_preset
-#define pl_named_filter_functions       pl_filter_function_presets
-#define pl_find_named_filter_function   pl_find_filter_function_preset
-
 // Different usage domains for a filter
 enum pl_filter_usage {
     PL_FILTER_UPSCALING    = (1 << 0),
@@ -314,10 +310,6 @@ PL_API extern const int pl_num_filter_presets; // excluding trailing {0}
 
 // Find the filter preset with the given name, or NULL on failure.
 PL_API const struct pl_filter_preset *pl_find_filter_preset(const char *name);
-
-#define pl_named_filter_config  pl_filter_preset
-#define pl_named_filters        pl_filter_presets
-#define pl_find_named_filter    pl_find_filter_preset
 
 // Parameters for filter generation.
 struct pl_filter_params {
