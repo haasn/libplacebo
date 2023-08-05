@@ -228,32 +228,6 @@ void pl_filter_free(pl_filter *filter)
     pl_free_ptr((void **) filter);
 }
 
-const struct pl_filter_function_preset *pl_find_filter_function_preset(const char *name)
-{
-    if (!name)
-        return NULL;
-
-    for (int i = 0; pl_filter_function_presets[i].name; i++) {
-        if (strcmp(pl_filter_function_presets[i].name, name) == 0)
-            return &pl_filter_function_presets[i];
-    }
-
-    return NULL;
-}
-
-const struct pl_filter_preset *pl_find_filter_preset(const char *name)
-{
-    if (!name)
-        return NULL;
-
-    for (int i = 0; pl_filter_presets[i].name; i++) {
-        if (strcmp(pl_filter_presets[i].name, name) == 0)
-            return &pl_filter_presets[i];
-    }
-
-    return NULL;
-}
-
 // Built-in filter functions
 
 static double box(const struct pl_filter_ctx *f, double x)
@@ -594,42 +568,51 @@ const struct pl_filter_function pl_filter_function_oversample = {
     .opaque  = true,
 };
 
-// Named filter functions
-const struct pl_filter_function_preset pl_filter_function_presets[] = {
-    {"none",            NULL},
-    {"box",             &pl_filter_function_box},
-    {"dirichlet",       &pl_filter_function_box}, // alias
-    {"triangle",        &pl_filter_function_triangle},
-    {"cosine",          &pl_filter_function_cosine},
-    {"hann",            &pl_filter_function_hann},
-    {"hanning",         &pl_filter_function_hann}, // alias
-    {"hamming",         &pl_filter_function_hamming},
-    {"welch",           &pl_filter_function_welch},
-    {"kaiser",          &pl_filter_function_kaiser},
-    {"blackman",        &pl_filter_function_blackman},
-    {"bohman",          &pl_filter_function_bohman},
-    {"gaussian",        &pl_filter_function_gaussian},
-    {"quadratic",       &pl_filter_function_quadratic},
-    {"quadric",         &pl_filter_function_quadratic}, // alias
-    {"sinc",            &pl_filter_function_sinc},
-    {"jinc",            &pl_filter_function_jinc},
-    {"sphinx",          &pl_filter_function_sphinx},
-    {"bcspline",        &pl_filter_function_bcspline},
-    {"hermite",         &pl_filter_function_bcspline}, // alias
-    {"catmull_rom",     &pl_filter_function_catmull_rom},
-    {"mitchell",        &pl_filter_function_mitchell},
-    {"robidoux",        &pl_filter_function_robidoux},
-    {"robidouxsharp",   &pl_filter_function_robidouxsharp},
-    {"bicubic",         &pl_filter_function_bicubic},
-    {"spline16",        &pl_filter_function_spline16},
-    {"spline36",        &pl_filter_function_spline36},
-    {"spline64",        &pl_filter_function_spline64},
-    {0},
+const struct pl_filter_function * const pl_filter_functions[] = {
+    &pl_filter_function_box,
+    &pl_filter_function_triangle,
+    &pl_filter_function_cosine,
+    &pl_filter_function_hann,
+    &pl_filter_function_hamming,
+    &pl_filter_function_welch,
+    &pl_filter_function_kaiser,
+    &pl_filter_function_blackman,
+    &pl_filter_function_bohman,
+    &pl_filter_function_gaussian,
+    &pl_filter_function_quadratic,
+    &pl_filter_function_sinc,
+    &pl_filter_function_jinc,
+    &pl_filter_function_sphinx,
+    &pl_filter_function_bcspline,
+    &pl_filter_function_catmull_rom,
+    &pl_filter_function_mitchell,
+    &pl_filter_function_robidoux,
+    &pl_filter_function_robidouxsharp,
+    &pl_filter_function_bicubic,
+    &pl_filter_function_spline16,
+    &pl_filter_function_spline36,
+    &pl_filter_function_spline64,
+    &pl_filter_function_oversample,
+    NULL,
 };
 
-const int pl_num_filter_function_presets = PL_ARRAY_SIZE(pl_filter_function_presets) - 1;
+const int pl_num_filter_functions = PL_ARRAY_SIZE(pl_filter_functions) - 1;
 
-// Built-in filter function presets
+const struct pl_filter_function *pl_find_filter_function(const char *name)
+{
+    if (!name)
+        return NULL;
+
+    for (int i = 0; pl_num_filter_functions; i++) {
+        if (strcmp(name, pl_filter_functions[i]->name) == 0)
+            return pl_filter_functions[i];
+    }
+
+    return NULL;
+}
+
+// Built-in filter function configs
+
 const struct pl_filter_config pl_filter_spline16 = {
     .name        = "spline16",
     .description = "Spline (2 taps)",
@@ -825,7 +808,114 @@ const struct pl_filter_config pl_filter_oversample = {
     .recommended = PL_FILTER_UPSCALING | PL_FILTER_FRAME_MIXING,
 };
 
-// Named filter configs
+const struct pl_filter_config * const pl_filter_configs[] = {
+    // Sorted roughly in terms of priority / relevance
+    &pl_filter_bilinear,
+    &pl_filter_nearest,
+    &pl_filter_spline16,
+    &pl_filter_spline36,
+    &pl_filter_spline64,
+    &pl_filter_lanczos,
+    &pl_filter_ewa_lanczos,
+    &pl_filter_bicubic,
+    &pl_filter_gaussian,
+    &pl_filter_oversample,
+    &pl_filter_mitchell,
+    &pl_filter_mitchell_clamp,
+    &pl_filter_sinc,
+    &pl_filter_ginseng,
+    &pl_filter_ewa_jinc,
+    &pl_filter_ewa_ginseng,
+    &pl_filter_ewa_hann,
+    &pl_filter_catmull_rom,
+    &pl_filter_robidoux,
+    &pl_filter_robidouxsharp,
+    &pl_filter_ewa_robidoux,
+    &pl_filter_ewa_robidouxsharp,
+
+    NULL,
+};
+
+const int pl_num_filter_configs = PL_ARRAY_SIZE(pl_filter_configs) - 1;
+
+const struct pl_filter_config *
+pl_find_filter_config(const char *name, enum pl_filter_usage usage)
+{
+    if (!name)
+        return NULL;
+
+    for (int i = 0; pl_num_filter_configs; i++) {
+        if ((pl_filter_configs[i]->allowed & usage) != usage)
+            continue;
+        if (strcmp(name, pl_filter_configs[i]->name) == 0)
+            return pl_filter_configs[i];
+    }
+
+    return NULL;
+}
+
+// Backwards compatibility with older API
+
+const struct pl_filter_function_preset pl_filter_function_presets[] = {
+    {"none",            NULL},
+    {"box",             &pl_filter_function_box},
+    {"dirichlet",       &pl_filter_function_box}, // alias
+    {"triangle",        &pl_filter_function_triangle},
+    {"cosine",          &pl_filter_function_cosine},
+    {"hann",            &pl_filter_function_hann},
+    {"hanning",         &pl_filter_function_hann}, // alias
+    {"hamming",         &pl_filter_function_hamming},
+    {"welch",           &pl_filter_function_welch},
+    {"kaiser",          &pl_filter_function_kaiser},
+    {"blackman",        &pl_filter_function_blackman},
+    {"bohman",          &pl_filter_function_bohman},
+    {"gaussian",        &pl_filter_function_gaussian},
+    {"quadratic",       &pl_filter_function_quadratic},
+    {"quadric",         &pl_filter_function_quadratic}, // alias
+    {"sinc",            &pl_filter_function_sinc},
+    {"jinc",            &pl_filter_function_jinc},
+    {"sphinx",          &pl_filter_function_sphinx},
+    {"bcspline",        &pl_filter_function_bcspline},
+    {"hermite",         &pl_filter_function_bcspline}, // alias
+    {"catmull_rom",     &pl_filter_function_catmull_rom},
+    {"mitchell",        &pl_filter_function_mitchell},
+    {"robidoux",        &pl_filter_function_robidoux},
+    {"robidouxsharp",   &pl_filter_function_robidouxsharp},
+    {"bicubic",         &pl_filter_function_bicubic},
+    {"spline16",        &pl_filter_function_spline16},
+    {"spline36",        &pl_filter_function_spline36},
+    {"spline64",        &pl_filter_function_spline64},
+    {0},
+};
+
+const int pl_num_filter_function_presets = PL_ARRAY_SIZE(pl_filter_function_presets) - 1;
+
+const struct pl_filter_function_preset *pl_find_filter_function_preset(const char *name)
+{
+    if (!name)
+        return NULL;
+
+    for (int i = 0; pl_filter_function_presets[i].name; i++) {
+        if (strcmp(pl_filter_function_presets[i].name, name) == 0)
+            return &pl_filter_function_presets[i];
+    }
+
+    return NULL;
+}
+
+const struct pl_filter_preset *pl_find_filter_preset(const char *name)
+{
+    if (!name)
+        return NULL;
+
+    for (int i = 0; pl_filter_presets[i].name; i++) {
+        if (strcmp(pl_filter_presets[i].name, name) == 0)
+            return &pl_filter_presets[i];
+    }
+
+    return NULL;
+}
+
 const struct pl_filter_preset pl_filter_presets[] = {
     {"none",                NULL,                   "Built-in sampling"},
     COMMON_FILTER_PRESETS,

@@ -158,6 +158,16 @@ PL_API extern const struct pl_filter_function pl_filter_function_spline64;
 // nearest neighbour sampling. (See `pl_shader_sample_oversample`)
 PL_API extern const struct pl_filter_function pl_filter_function_oversample;
 
+// A list of built-in filter functions, terminated by NULL
+PL_API extern const struct pl_filter_function * const pl_filter_functions[];
+PL_API extern const int pl_num_filter_functions; // excluding trailing NULL
+
+// Find the filter function with the given name, or NULL on failure.
+PL_API const struct pl_filter_function *pl_find_filter_function(const char *name);
+
+// Backwards compatibility with the older configuration API. Redundant with
+// `pl_filter_function.name`. May be formally deprecated in the future.
+
 struct pl_filter_function_preset {
     const char *name;
     const struct pl_filter_function *function;
@@ -170,7 +180,6 @@ PL_API extern const int pl_num_filter_function_presets; // excluding trailing {0
 // Find the filter function preset with the given name, or NULL on failure.
 PL_API const struct pl_filter_function_preset *pl_find_filter_function_preset(const char *name);
 
-// Backwards compatibility
 #define pl_named_filter_function        pl_filter_function_preset
 #define pl_named_filter_functions       pl_filter_function_presets
 #define pl_find_named_filter_function   pl_find_filter_function_preset
@@ -280,6 +289,17 @@ PL_API extern const struct pl_filter_config pl_filter_oversample;
 #define pl_filter_triangle          pl_filter_bilinear
 #define pl_oversample_frame_mixer   pl_filter_oversample
 
+// A list of built-in filter configs, terminated by NULL
+PL_API extern const struct pl_filter_config * const pl_filter_configs[];
+PL_API extern const int pl_num_filter_configs; // excluding trailing NULL
+
+// Find the filter config with the given name, or NULL on failure.
+// `usage` restricts the valid usage (based on `pl_filter_config.allowed`).
+PL_API const struct pl_filter_config *
+pl_find_filter_config(const char *name, enum pl_filter_usage usage);
+
+// Backward compatibility with the previous filter configuration API. Redundant
+// with pl_filter_config.name/description. May be deprecated in the future.
 struct pl_filter_preset {
     const char *name;
     const struct pl_filter_config *filter;
@@ -295,7 +315,6 @@ PL_API extern const int pl_num_filter_presets; // excluding trailing {0}
 // Find the filter preset with the given name, or NULL on failure.
 PL_API const struct pl_filter_preset *pl_find_filter_preset(const char *name);
 
-// Backwards compatibility
 #define pl_named_filter_config  pl_filter_preset
 #define pl_named_filters        pl_filter_presets
 #define pl_find_named_filter    pl_find_filter_preset
