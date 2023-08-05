@@ -213,24 +213,6 @@ const struct pl_render_params pl_render_high_quality_params = {
     .deband_params      = &pl_deband_default_params,
 };
 
-// This is only used as a sentinel, to use the GLSL implementation
-static double oversample(const struct pl_filter_ctx *f, double x)
-{
-    pl_unreachable();
-}
-
-static const struct pl_filter_function oversample_kernel = {
-    .weight     = oversample,
-    .tunable    = {true},
-    .params     = {0.0},
-    .name       = "oversample",
-};
-
-const struct pl_filter_config pl_filter_oversample = {
-    .kernel = &oversample_kernel,
-    .name   = "oversample",
-};
-
 const struct pl_filter_preset pl_frame_mixers[] = {
     { "none",           NULL,                       "No frame mixing" },
     { "linear",         &pl_filter_bilinear,        "Linear frame mixing" },
@@ -646,7 +628,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         !info.config)
     {
         info.type = SAMPLER_DIRECT;
-    } else if (info.config->kernel->weight == oversample) {
+    } else if (info.config->kernel == &pl_filter_function_oversample) {
         info.type = SAMPLER_OVERSAMPLE;
     } else {
         info.type = SAMPLER_COMPLEX;
@@ -3274,7 +3256,7 @@ retry:
             }
 
         // For backwards compatibility, treat !kernel as oversample
-        } else if (!mixer->kernel || mixer->kernel->weight == oversample) {
+        } else if (!mixer->kernel || mixer->kernel == &pl_filter_function_oversample) {
 
             // Compute the visible interval [rts, end] of this frame
             float end = i+1 < images->num_frames ? images->timestamps[i+1] : INFINITY;

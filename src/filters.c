@@ -101,6 +101,7 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
     if (kx > radius)
         return 0.0;
 
+    pl_assert(!c->kernel->opaque);
     double k = c->kernel->weight(&(const struct pl_filter_ctx) {
         .radius = radius,
         .params = { c->params[0], c->params[1] },
@@ -108,6 +109,7 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
 
     // Apply the optional windowing function
     if (c->window) {
+        pl_assert(!c->window->opaque);
         double wx = x / radius * c->window->radius;
         k *= c->window->weight(&(struct pl_filter_ctx) {
             .radius = c->window->radius,
@@ -579,6 +581,19 @@ const struct pl_filter_function pl_filter_function_spline64 = {
     .radius = 4.0,
 };
 
+static double oversample(const struct pl_filter_ctx *f, double x)
+{
+    return 0.0;
+}
+
+const struct pl_filter_function pl_filter_function_oversample = {
+    .weight  = oversample,
+    .tunable = {true},
+    .params  = {0.0},
+    .name    = "oversample",
+    .opaque  = true,
+};
+
 // Named filter functions
 const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"none",            NULL},
@@ -799,6 +814,15 @@ const struct pl_filter_config pl_filter_ewa_robidouxsharp = {
     .params      = {6 / (13 + 7 * M_SQRT2), 7 / (2 + 12 * M_SQRT2)},
     .polar       = true,
     .allowed     = PL_FILTER_SCALING,
+};
+
+const struct pl_filter_config pl_filter_oversample = {
+    .name        = "oversample",
+    .description = "Oversampling",
+    .kernel      = &pl_filter_function_oversample,
+    .params      = {0.0},
+    .allowed     = PL_FILTER_UPSCALING | PL_FILTER_FRAME_MIXING,
+    .recommended = PL_FILTER_UPSCALING | PL_FILTER_FRAME_MIXING,
 };
 
 // Named filter configs

@@ -400,15 +400,6 @@ PL_API extern const struct pl_render_params pl_render_default_params;
 // quality is desired.
 PL_API extern const struct pl_render_params pl_render_high_quality_params;
 
-// Special filter config for the built-in oversampling algorithm. This is an
-// opaque filter with no meaningful representation. though it has one tunable
-// parameter controlling the threshold at which to switch back to ordinary
-// nearest neighbour sampling. (See `pl_shader_sample_oversample`)
-PL_API extern const struct pl_filter_config pl_filter_oversample;
-
-// Backwards compatibility
-#define pl_oversample_frame_mixer pl_filter_oversample
-
 // A list of recommended frame mixer presets, terminated by {0}
 PL_API extern const struct pl_filter_preset pl_frame_mixers[];
 PL_API extern const int pl_num_frame_mixers; // excluding trailing {0}

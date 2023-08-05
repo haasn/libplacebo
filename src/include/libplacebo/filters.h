@@ -54,6 +54,11 @@ struct pl_filter_function {
     // the center point, and in particular weight(0) = 1.0. The functions may
     // be undefined for values of x outside [0, radius].
     double (*weight)(const struct pl_filter_ctx *f, double x);
+
+    // If true, this filter represents an opaque placeholder for a more
+    // sophisticated filter function which does not fit into the pl_filter
+    // framework. `weight()` will always return 0.0.
+    bool opaque;
 };
 
 // Deprecated function, merely checks a->weight == b->weight
@@ -146,6 +151,12 @@ PL_API extern const struct pl_filter_function pl_filter_function_bicubic;
 PL_API extern const struct pl_filter_function pl_filter_function_spline16;
 PL_API extern const struct pl_filter_function pl_filter_function_spline36;
 PL_API extern const struct pl_filter_function pl_filter_function_spline64;
+
+// Special filter function for the built-in oversampling algorithm. This is an
+// opaque filter with no meaningful representation. though it has one tunable
+// parameter controlling the threshold at which to switch back to ordinary
+// nearest neighbour sampling. (See `pl_shader_sample_oversample`)
+PL_API extern const struct pl_filter_function pl_filter_function_oversample;
 
 struct pl_filter_function_preset {
     const char *name;
@@ -261,10 +272,13 @@ PL_API extern const struct pl_filter_config pl_filter_robidoux;
 PL_API extern const struct pl_filter_config pl_filter_robidouxsharp;
 PL_API extern const struct pl_filter_config pl_filter_ewa_robidoux;
 PL_API extern const struct pl_filter_config pl_filter_ewa_robidouxsharp;
+// Special/opaque filters
+PL_API extern const struct pl_filter_config pl_filter_oversample;
 
 // Backwards compatibility
-#define pl_filter_box       pl_filter_nearest
-#define pl_filter_triangle  pl_filter_bilinear
+#define pl_filter_box               pl_filter_nearest
+#define pl_filter_triangle          pl_filter_bilinear
+#define pl_oversample_frame_mixer   pl_filter_oversample
 
 struct pl_filter_preset {
     const char *name;
