@@ -196,12 +196,12 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
         for (int i = 0; i < params->lut_entries; i++) {
             double x = radius * i / (params->lut_entries - 1);
             weights[i] = pl_filter_sample(&params->config, x);
-            if (fabs(weights[i]) > params->cutoff)
+            if (fabsf(weights[i]) > params->cutoff)
                 f->radius_cutoff = x * params->filter_scale;
         }
     } else {
         // Pick the most appropriate row size
-        f->row_size = ceil(f->radius) * 2;
+        f->row_size = ceilf(f->radius) * 2;
         if (params->max_row_size && f->row_size > params->max_row_size) {
             pl_info(log, "Required filter size %d exceeds the maximum allowed "
                     "size of %d. This may result in adverse effects (aliasing, "
