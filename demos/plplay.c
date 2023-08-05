@@ -64,7 +64,6 @@ struct plplay {
     bool exit_thread;
 
     // settings / ui state
-    const struct pl_filter_preset *upscaler, *downscaler, *plane_scaler, *frame_mixer;
     struct pl_render_params params;
     struct pl_deband_params deband_params;
     struct pl_sigmoid_params sigmoid_params;
@@ -84,6 +83,7 @@ struct plplay {
     bool ignore_dovi;
     bool toggle_fullscreen;
     bool software_decoding;
+    bool advanced_scalers;
 
     bool target_override; // if false, fields below are ignored
     struct pl_color_repr force_repr;
@@ -843,24 +843,6 @@ int main(int argc, char **argv)
     p->ui = ui_create(p->win->gpu);
     if (!p->ui)
         goto error;
-
-    // Find the right named filter entries for the defaults
-    const struct pl_filter_preset *f;
-    for (f = pl_scale_filters; f->name; f++) {
-        if (p->params.upscaler == f->filter)
-            p->upscaler = f;
-        if (p->params.downscaler == f->filter)
-            p->downscaler = f;
-        if (p->params.plane_upscaler == f->filter)
-            p->plane_scaler = f;
-    }
-
-    for (f = pl_frame_mixers; f->name; f++) {
-        if (p->params.frame_mixer == f->filter)
-            p->frame_mixer = f;
-    }
-
-    assert(p->upscaler && p->downscaler && p->frame_mixer);
 #endif
 
     if (!init_codec(p))
@@ -928,11 +910,6 @@ static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *p
 
 error:
     pl_mpv_user_shader_destroy(&hook);
-}
-
-static const char *pscale_desc(const struct pl_filter_preset *f)
-{
-    return f->filter ? f->description : "None (Use regular upscaler)";
 }
 
 static void auto_property_int(struct nk_context *nk, int auto_val, int min, int *val,
@@ -1076,57 +1053,86 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Image scaling", NK_MAXIMIZED)) {
-            const struct pl_filter_preset *f;
+            const struct pl_filter_config *f;
+            static const char *scale_none = "None (Built-in sampling)";
+            static const char *pscale_none = "None (Use regular upscaler)";
+            static const char *tscale_none = "None (No frame mixing)";
+            #define SCALE_DESC(scaler, fallback) (par->scaler ? par->scaler->description : fallback)
+
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
             nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
-            if (nk_combo_begin_label(nk, p->upscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
+            if (nk_combo_begin_label(nk, SCALE_DESC(upscaler, scale_none), nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
-                for (f = pl_scale_filters; f->name; f++) {
+                if (nk_combo_item_label(nk, scale_none, NK_TEXT_LEFT))
+                    par->upscaler = NULL;
+                for (int i = 0; i < pl_num_filter_configs; i++) {
+                    f = pl_filter_configs[i];
                     if (!f->description)
                         continue;
+                    if (!(f->allowed & PL_FILTER_UPSCALING))
+                        continue;
+                    if (!p->advanced_scalers && !(f->recommended & PL_FILTER_UPSCALING))
+                        continue;
                     if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
-                        p->upscaler = f;
+                        par->upscaler = f;
                 }
-                par->upscaler = p->upscaler->filter;
                 nk_combo_end(nk);
             }
 
             nk_label(nk, "Downscaler:", NK_TEXT_LEFT);
-            if (nk_combo_begin_label(nk, p->downscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
+            if (nk_combo_begin_label(nk, SCALE_DESC(downscaler, scale_none), nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
-                for (f = pl_scale_filters; f->name; f++) {
+                if (nk_combo_item_label(nk, scale_none, NK_TEXT_LEFT))
+                    par->downscaler = NULL;
+                for (int i = 0; i < pl_num_filter_configs; i++) {
+                    f = pl_filter_configs[i];
                     if (!f->description)
                         continue;
+                    if (!(f->allowed & PL_FILTER_DOWNSCALING))
+                        continue;
+                    if (!p->advanced_scalers && !(f->recommended & PL_FILTER_DOWNSCALING))
+                        continue;
                     if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
-                        p->downscaler = f;
+                        par->downscaler = f;
                 }
-                par->downscaler = p->downscaler->filter;
                 nk_combo_end(nk);
             }
 
             nk_label(nk, "Plane scaler:", NK_TEXT_LEFT);
-            if (nk_combo_begin_label(nk, pscale_desc(p->plane_scaler), nk_vec2(nk_widget_width(nk), 500))) {
+            if (nk_combo_begin_label(nk, SCALE_DESC(plane_upscaler, pscale_none), nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
-                for (f = pl_scale_filters; f->name; f++) {
+                if (nk_combo_item_label(nk, pscale_none, NK_TEXT_LEFT))
+                    par->downscaler = NULL;
+                for (int i = 0; i < pl_num_filter_configs; i++) {
+                    f = pl_filter_configs[i];
                     if (!f->description)
                         continue;
-                    if (nk_combo_item_label(nk, pscale_desc(f), NK_TEXT_LEFT))
-                        p->plane_scaler = f;
+                    if (!(f->allowed & PL_FILTER_UPSCALING))
+                        continue;
+                    if (!p->advanced_scalers && !(f->recommended & PL_FILTER_UPSCALING))
+                        continue;
+                    if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
+                        par->plane_upscaler = f;
                 }
-                par->plane_upscaler = p->plane_scaler->filter;
                 nk_combo_end(nk);
             }
 
             nk_label(nk, "Frame mixing:", NK_TEXT_LEFT);
-            if (nk_combo_begin_label(nk, p->frame_mixer->description, nk_vec2(nk_widget_width(nk), 300))) {
+            if (nk_combo_begin_label(nk, SCALE_DESC(frame_mixer, tscale_none), nk_vec2(nk_widget_width(nk), 300))) {
                 nk_layout_row_dynamic(nk, 16, 1);
-                for (f = pl_frame_mixers; f->name; f++) {
+                if (nk_combo_item_label(nk, tscale_none, NK_TEXT_LEFT))
+                    par->frame_mixer = NULL;
+                for (int i = 0; i < pl_num_filter_configs; i++) {
+                    f = pl_filter_configs[i];
                     if (!f->description)
                         continue;
+                    if (!(f->allowed & PL_FILTER_FRAME_MIXING))
+                        continue;
+                    if (!p->advanced_scalers && !(f->recommended & PL_FILTER_FRAME_MIXING))
+                        continue;
                     if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
-                        p->frame_mixer = f;
+                        par->frame_mixer = f;
                 }
-                par->frame_mixer = p->frame_mixer->filter;
                 nk_combo_end(nk);
             }
 
@@ -1820,6 +1826,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         if (nk_tree_push(nk, NK_TREE_NODE, "Debug", NK_MINIMIZED)) {
             nk_layout_row_dynamic(nk, 24, 1);
             nk_checkbox_label(nk, "Preserve mixing cache", &par->preserve_mixing_cache);
+            nk_checkbox_label(nk, "Show all scaler presets", &p->advanced_scalers);
             nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);
             nk_checkbox_label(nk, "Disable built-in scalers", &par->disable_builtin_scalers);
             nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
