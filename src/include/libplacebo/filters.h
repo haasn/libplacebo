@@ -25,39 +25,41 @@ PL_API_BEGIN
 
 #define PL_FILTER_MAX_PARAMS 2
 
+// Invocation parameters for a given kernel
+struct pl_filter_ctx {
+    float radius;
+    float params[PL_FILTER_MAX_PARAMS];
+};
+
 // Represents a single filter function, i.e. kernel or windowing function.
-// To invoke a filter with a different configuration than the default, you can
-// make a copy of this struct and modify the non-const fields before passing it
-// to pl_filter_initialize.
 struct pl_filter_function {
-    // These bools indicate whether or not `radius` and `params` may be
-    // modified by the user.
+    // The cosmetic name associated with this filter function.
+    const char *name;
+
+    // The radius of the filter function. For resizable filters, this gives
+    // the radius needed to represent a single filter lobe (tap).
+    float radius;
+
+    // If true, the filter function is resizable (see pl_filter_config.radius)
     bool resizable;
+
+    // If true, the filter function is tunable (see pl_filter_config.params)
     bool tunable[PL_FILTER_MAX_PARAMS];
+
+    // If the relevant parameter is tunable, this contains the default values.
+    float params[PL_FILTER_MAX_PARAMS];
 
     // The underlying filter function itself: Computes the weight as a function
     // of the offset. All filter functions must be normalized such that x=0 is
     // the center point, and in particular weight(0) = 1.0. The functions may
     // be undefined for values of x outside [0, radius].
-    double (*weight)(const struct pl_filter_function *k, double x);
-
-    // This field may be used to adjust the function's radius. Defaults to the
-    // the radius needed to represent a single filter lobe (tap). If the
-    // function is not resizable, this field must not be modified - otherwise
-    // the result of filter evaluation is undefined.
-    float radius;
-
-    // These fields may be used to adjust the function. Defaults to the
-    // function's preferred defaults. if the relevant setting is not tunable,
-    // they are ignored entirely.
-    float params[PL_FILTER_MAX_PARAMS];
-
-    // The cosmetic name associated with this filter function. Optional.
-    const char *name;
+    double (*weight)(const struct pl_filter_ctx *f, double x);
 };
 
-PL_API bool pl_filter_function_eq(const struct pl_filter_function *a,
-                                  const struct pl_filter_function *b);
+// Deprecated function, merely checks a->weight == b->weight
+PL_DEPRECATED PL_API bool
+pl_filter_function_eq(const struct pl_filter_function *a,
+                      const struct pl_filter_function *b);
 
 // Box filter: Entirely 1.0 within the radius, entirely 0.0 outside of it.
 // This is also sometimes called a Dirichlet window
@@ -162,11 +164,26 @@ PL_API const struct pl_filter_function_preset *pl_find_filter_function_preset(co
 #define pl_named_filter_functions       pl_filter_function_presets
 #define pl_find_named_filter_function   pl_find_filter_function_preset
 
-// Represents a particular configuration/combination of filter functions to
-// form a filter.
+// Represents a tuned combination of filter functions, plus parameters
 struct pl_filter_config {
-    const struct pl_filter_function *kernel; // The kernel function
-    const struct pl_filter_function *window; // The windowing function. Optional
+    // The cosmetic name associated with this filter config. Optional for
+    // user-provided configs, but always set by built-in configurations.
+    const char *name;
+
+    // Longer / friendly name. Same rules apply as for `name`
+    const char *description;
+
+    // The kernel function and (optionally) windowing function.
+    const struct pl_filter_function *kernel;
+    const struct pl_filter_function *window;
+
+    // The radius. Ignored if !kernel->resizable. Optional, defaults to
+    // kernel->radius if unset.
+    float radius;
+
+    // Parameters for the respective filter function. Ignored if not tunable.
+    float params[PL_FILTER_MAX_PARAMS];
+    float wparams[PL_FILTER_MAX_PARAMS];
 
     // Represents a clamping coefficient for negative weights. A value of 0.0
     // (the default) represents no clamping. A value of 1.0 represents full
@@ -191,9 +208,6 @@ struct pl_filter_config {
     // instead of a separable/1D filter. Does not affect the actual sampling,
     // but provides information about how the results are to be interpreted.
     bool polar;
-
-    // The cosmetic name associated with this filter config. Optional.
-    const char *name;
 };
 
 PL_API bool pl_filter_config_eq(const struct pl_filter_config *a,

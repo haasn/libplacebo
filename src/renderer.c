@@ -214,7 +214,7 @@ const struct pl_render_params pl_render_high_quality_params = {
 };
 
 // This is only used as a sentinel, to use the GLSL implementation
-static double oversample(const struct pl_filter_function *k, double x)
+static double oversample(const struct pl_filter_ctx *f, double x)
 {
     pl_unreachable();
 }
