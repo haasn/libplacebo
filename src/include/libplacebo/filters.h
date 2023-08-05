@@ -144,10 +144,10 @@ PL_API extern const struct pl_filter_function pl_filter_function_robidouxsharp;
 // need to be windowed.
 PL_API extern const struct pl_filter_function pl_filter_function_bicubic;
 
-// Piecewise approximations of the Lanczos filter function (sinc-windowed
-// sinc). Referred to as "spline16", "spline36" and "spline64" mainly for
-// historical reasons, based on their fixed radii of 2, 3 and 4 (respectively).
-// These do not need to be windowed.
+// Cubic splines with 2/3/4 taps. Referred to as "spline16", "spline36", and
+// "spline64" mainly for historical reasons, based on the number of pixels in
+// their window when using them as 2D orthogonal filters. Do not need to be
+// windowed.
 PL_API extern const struct pl_filter_function pl_filter_function_spline16;
 PL_API extern const struct pl_filter_function pl_filter_function_spline36;
 PL_API extern const struct pl_filter_function pl_filter_function_spline64;
