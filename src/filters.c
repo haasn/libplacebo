@@ -232,13 +232,14 @@ void pl_filter_free(pl_filter *filter)
 
 static double box(const struct pl_filter_ctx *f, double x)
 {
-    return x < 0.5 ? 1.0 : 0.0;
+    return 1.0;
 }
 
 const struct pl_filter_function pl_filter_function_box = {
     .weight    = box,
     .name      = "box",
     .radius    = 1.0,
+    .resizable = true,
 };
 
 static double triangle(const struct pl_filter_ctx *f, double x)
@@ -639,6 +640,7 @@ const struct pl_filter_config pl_filter_nearest = {
     .name        = "nearest",
     .description = "Nearest neighbor",
     .kernel      = &pl_filter_function_box,
+    .radius      = 0.5,
     .allowed     = PL_FILTER_SCALING,
     .recommended = PL_FILTER_SCALING,
 };
