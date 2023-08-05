@@ -684,6 +684,14 @@ const struct pl_filter_config pl_filter_bilinear = {
     .recommended = PL_FILTER_SCALING,
 };
 
+const struct pl_filter_config filter_linear = {
+    .name        = "linear",
+    .description = "Linear mixing",
+    .kernel      = &pl_filter_function_triangle,
+    .allowed     = PL_FILTER_FRAME_MIXING,
+    .recommended = PL_FILTER_FRAME_MIXING,
+};
+
 static const struct pl_filter_config filter_triangle = {
     .name        = "triangle",
     .kernel      = &pl_filter_function_triangle,
@@ -860,6 +868,7 @@ const struct pl_filter_config * const pl_filter_configs[] = {
     // Sorted roughly in terms of priority / relevance
     &pl_filter_bilinear,
     &filter_triangle, // alias
+    &filter_linear, // pseudo-alias (frame mixing only)
     &pl_filter_nearest,
     &pl_filter_spline16,
     &pl_filter_spline36,
