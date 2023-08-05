@@ -164,6 +164,16 @@ PL_API const struct pl_filter_function_preset *pl_find_filter_function_preset(co
 #define pl_named_filter_functions       pl_filter_function_presets
 #define pl_find_named_filter_function   pl_find_filter_function_preset
 
+// Different usage domains for a filter
+enum pl_filter_usage {
+    PL_FILTER_UPSCALING    = (1 << 0),
+    PL_FILTER_DOWNSCALING  = (1 << 0),
+    PL_FILTER_FRAME_MIXING = (1 << 1),
+
+    PL_FILTER_SCALING = PL_FILTER_UPSCALING | PL_FILTER_DOWNSCALING,
+    PL_FILTER_ALL     = PL_FILTER_SCALING | PL_FILTER_FRAME_MIXING,
+};
+
 // Represents a tuned combination of filter functions, plus parameters
 struct pl_filter_config {
     // The cosmetic name associated with this filter config. Optional for
@@ -172,6 +182,14 @@ struct pl_filter_config {
 
     // Longer / friendly name. Same rules apply as for `name`
     const char *description;
+
+    // Allowed and recommended usage domains (respectively)
+    //
+    // When it is desired to maintain a simpler user interface, it may be
+    // recommended to include only scalers whose recommended usage domains
+    // includes the relevant context in which it will be used.
+    enum pl_filter_usage allowed;
+    enum pl_filter_usage recommended;
 
     // The kernel function and (optionally) windowing function.
     const struct pl_filter_function *kernel;

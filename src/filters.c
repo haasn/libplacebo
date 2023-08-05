@@ -619,30 +619,38 @@ const struct pl_filter_config pl_filter_spline16 = {
     .name        = "spline16",
     .description = "Spline (2 taps)",
     .kernel      = &pl_filter_function_spline16,
+    .allowed     = PL_FILTER_ALL,
 };
 
 const struct pl_filter_config pl_filter_spline36 = {
     .name        = "spline36",
     .description = "Spline (3 taps)",
     .kernel      = &pl_filter_function_spline36,
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_spline64 = {
     .name        = "spline64",
     .description = "Spline (4 taps)",
     .kernel      = &pl_filter_function_spline64,
+    .allowed     = PL_FILTER_ALL,
 };
 
 const struct pl_filter_config pl_filter_nearest = {
     .name        = "nearest",
     .description = "Nearest neighbor",
     .kernel      = &pl_filter_function_box,
+    .allowed     = PL_FILTER_SCALING,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_bilinear = {
     .name        = "bilinear",
     .description = "Bilinear",
     .kernel      = &pl_filter_function_triangle,
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_gaussian = {
@@ -650,6 +658,8 @@ const struct pl_filter_config pl_filter_gaussian = {
     .description = "Gaussian",
     .kernel      = &pl_filter_function_gaussian,
     .params      = {1.0},
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_sinc = {
@@ -657,6 +667,7 @@ const struct pl_filter_config pl_filter_sinc = {
     .description = "Sinc (unwindowed)",
     .kernel      = &pl_filter_function_sinc,
     .radius      = 3.0,
+    .allowed     = PL_FILTER_ALL,
 };
 
 const struct pl_filter_config pl_filter_lanczos = {
@@ -665,6 +676,8 @@ const struct pl_filter_config pl_filter_lanczos = {
     .kernel      = &pl_filter_function_sinc,
     .window      = &pl_filter_function_sinc,
     .radius      = 3.0,
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_ginseng = {
@@ -673,6 +686,7 @@ const struct pl_filter_config pl_filter_ginseng = {
     .kernel      = &pl_filter_function_sinc,
     .window      = &pl_filter_function_jinc,
     .radius      = 3.0,
+    .allowed     = PL_FILTER_ALL,
 };
 
 #define JINC_ZERO3 3.2383154841662362
@@ -683,6 +697,7 @@ const struct pl_filter_config pl_filter_ewa_jinc = {
     .kernel      = &pl_filter_function_jinc,
     .radius      = JINC_ZERO3,
     .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_ewa_lanczos = {
@@ -692,6 +707,8 @@ const struct pl_filter_config pl_filter_ewa_lanczos = {
     .window      = &pl_filter_function_jinc,
     .radius      = JINC_ZERO3,
     .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+    .recommended = PL_FILTER_UPSCALING,
 };
 
 const struct pl_filter_config pl_filter_ewa_ginseng = {
@@ -701,6 +718,7 @@ const struct pl_filter_config pl_filter_ewa_ginseng = {
     .window      = &pl_filter_function_sinc,
     .radius      = JINC_ZERO3,
     .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_ewa_hann = {
@@ -710,6 +728,7 @@ const struct pl_filter_config pl_filter_ewa_hann = {
     .window      = &pl_filter_function_hann,
     .radius      = JINC_ZERO3,
     .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
 };
 
 // Spline family
@@ -717,6 +736,8 @@ const struct pl_filter_config pl_filter_bicubic = {
     .name        = "bicubic",
     .description = "Bicubic",
     .kernel      = &pl_filter_function_bicubic,
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_catmull_rom = {
@@ -724,6 +745,7 @@ const struct pl_filter_config pl_filter_catmull_rom = {
     .description = "Catmull-Rom",
     .kernel      = &pl_filter_function_bcspline,
     .params      = {0.0, 0.5},
+    .allowed     = PL_FILTER_ALL,
 };
 
 const struct pl_filter_config pl_filter_mitchell = {
@@ -731,6 +753,8 @@ const struct pl_filter_config pl_filter_mitchell = {
     .description = "Mitchell-Netravali",
     .kernel      = &pl_filter_function_bcspline,
     .params      = {1/3.0, 1/3.0},
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_mitchell_clamp = {
@@ -739,6 +763,8 @@ const struct pl_filter_config pl_filter_mitchell_clamp = {
     .kernel      = &pl_filter_function_bcspline,
     .params      = {1/3.0, 1/3.0},
     .clamp       = 1.0,
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_FRAME_MIXING,
 };
 
 const struct pl_filter_config pl_filter_robidoux = {
@@ -746,6 +772,7 @@ const struct pl_filter_config pl_filter_robidoux = {
     .description = "Robidoux",
     .kernel      = &pl_filter_function_bcspline,
     .params      = {12 / (19 + 9 * M_SQRT2), 113 / (58 + 216 * M_SQRT2)},
+    .allowed     = PL_FILTER_ALL,
 };
 
 const struct pl_filter_config pl_filter_robidouxsharp = {
@@ -753,6 +780,7 @@ const struct pl_filter_config pl_filter_robidouxsharp = {
     .description = "RobidouxSharp",
     .kernel      = &pl_filter_function_bcspline,
     .params      = {6 / (13 + 7 * M_SQRT2), 7 / (2 + 12 * M_SQRT2)},
+    .allowed     = PL_FILTER_ALL,
 };
 
 const struct pl_filter_config pl_filter_ewa_robidoux = {
@@ -761,6 +789,7 @@ const struct pl_filter_config pl_filter_ewa_robidoux = {
     .kernel      = &pl_filter_function_bcspline,
     .params      = {12 / (19 + 9 * M_SQRT2), 113 / (58 + 216 * M_SQRT2)},
     .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_ewa_robidouxsharp = {
@@ -769,6 +798,7 @@ const struct pl_filter_config pl_filter_ewa_robidouxsharp = {
     .kernel      = &pl_filter_function_bcspline,
     .params      = {6 / (13 + 7 * M_SQRT2), 7 / (2 + 12 * M_SQRT2)},
     .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
 };
 
 // Named filter configs

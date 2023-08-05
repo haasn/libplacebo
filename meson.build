@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '304': 'add pl_filter_config.allowed/recommended',
       '303': 'refactor pl_filter_config and pl_filter_function',
       '302': 'change type of pl_icc_params.size_r/g/b to int',
       '301': 'add PL_COLOR_ADJUSTMENT_NEUTRAL and pl_color_adjustment()',
