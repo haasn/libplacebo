@@ -132,7 +132,7 @@ struct pl_render_info {
 struct pl_render_params {
     // Configures the algorithms used for upscaling and downscaling,
     // respectively. If left as NULL, then libplacebo will only use inexpensive
-    // sampling (bilinear or neareast neighbour depending on the capabilities
+    // sampling (bilinear or nearest neighbour depending on the capabilities
     // of the hardware / texture).
     //
     // Note: Setting `downscaler` to NULL also implies `skip_anti_aliasing`,
