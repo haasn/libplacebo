@@ -1643,12 +1643,12 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
          "{                      \n");
 
     struct pl_tone_map_params tone = {
-        .function = params->tone_mapping_function,
-        .param = params->tone_mapping_param,
-        .input_scaling = PL_HDR_PQ,
+        .function       = PL_DEF(params->tone_mapping_function, &pl_tone_map_clip),
+        .param          = params->tone_mapping_param,
+        .input_scaling  = PL_HDR_PQ,
         .output_scaling = PL_HDR_PQ,
-        .lut_size = PL_DEF(params->lut_size, pl_color_map_default_params.lut_size),
-        .hdr = src.hdr,
+        .lut_size       = PL_DEF(params->lut_size, pl_color_map_default_params.lut_size),
+        .hdr            = src.hdr,
     };
 
     pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
