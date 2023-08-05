@@ -759,7 +759,7 @@ const struct pl_filter_config pl_filter_mitchell = {
 
 const struct pl_filter_config pl_filter_mitchell_clamp = {
     .name        = "mitchell_clamp",
-    .description = "Cubic spline (clamped)",
+    .description = "Mitchell (clamped)",
     .kernel      = &pl_filter_function_bcspline,
     .params      = {1/3.0, 1/3.0},
     .clamp       = 1.0,
