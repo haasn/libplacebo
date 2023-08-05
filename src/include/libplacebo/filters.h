@@ -159,6 +159,8 @@ PL_API extern const struct pl_filter_function pl_filter_function_spline64;
 PL_API extern const struct pl_filter_function pl_filter_function_oversample;
 
 // A list of built-in filter functions, terminated by NULL
+//
+// Note: May contain extra aliases for the above functions.
 PL_API extern const struct pl_filter_function * const pl_filter_functions[];
 PL_API extern const int pl_num_filter_functions; // excluding trailing NULL
 
@@ -196,7 +198,8 @@ struct pl_filter_config {
     // user-provided configs, but always set by built-in configurations.
     const char *name;
 
-    // Longer / friendly name. Same rules apply as for `name`
+    // Longer / friendly name. Always set for built-in configurations,
+    // except for names which are merely aliases of other filters.
     const char *description;
 
     // Allowed and recommended usage domains (respectively)
