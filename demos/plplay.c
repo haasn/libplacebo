@@ -946,6 +946,18 @@ static void draw_timing(struct nk_context *nk, const char *label,
               avg * 1e3, stddev * 1e3, t->peak * 1e3);
 }
 
+static void draw_opt_data(void *priv, pl_opt_data data)
+{
+    struct nk_context *nk = priv;
+    pl_opt opt = data->opt;
+    if (opt->type == PL_OPT_FLOAT) {
+        // Print floats less verbosely than the libplacebo built-in printf
+        nk_labelf(nk, NK_TEXT_LEFT, "%s = %f", opt->key, *(const float *) data->value);
+    } else {
+        nk_labelf(nk, NK_TEXT_LEFT, "%s = %s", opt->key, data->text);
+    }
+}
+
 static void update_settings(struct plplay *p, const struct pl_frame *target)
 {
     struct nk_context *nk = ui_get_context(p->ui);
@@ -1880,6 +1892,13 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
                 if (nk_button_label(nk, "Reset statistics"))
                     memset(&p->stats, 0, sizeof(p->stats));
+                nk_tree_pop(nk);
+            }
+
+            if (nk_tree_push(nk, NK_TREE_NODE, "Settings dump", NK_MINIMIZED)) {
+
+                nk_layout_row_dynamic(nk, 24, 1);
+                pl_options_iterate(opts, draw_opt_data, nk);
                 nk_tree_pop(nk);
             }
 
