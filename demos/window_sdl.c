@@ -55,6 +55,7 @@ struct priv {
     size_t files_num;
     size_t files_size;
     bool file_seen;
+    char *clip_text;
 };
 
 #ifdef USE_GL
@@ -222,6 +223,7 @@ static void sdl_destroy(struct window **window)
         SDL_free(p->files[i]);
     free(p->files);
 
+    SDL_free(p->clip_text);
     SDL_DestroyWindow(p->win);
     SDL_Quit();
     free(p);
@@ -372,6 +374,18 @@ static bool sdl_toggle_fullscreen(const struct window *window, bool fullscreen)
     return true;
 }
 
+static const char *sdl_get_clipboard(const struct window *window)
+{
+    struct priv *p = (struct priv *) window;
+    SDL_free(p->clip_text);
+    return p->clip_text = SDL_GetClipboardText();
+}
+
+static void sdl_set_clipboard(const struct window *window, const char *text)
+{
+    SDL_SetClipboardText(text);
+}
+
 const struct window_impl IMPL = {
     .name = IMPL_NAME,
     .tag = IMPL_TAG,
@@ -385,4 +399,6 @@ const struct window_impl IMPL = {
     .get_file = sdl_get_file,
     .toggle_fullscreen = sdl_toggle_fullscreen,
     .is_fullscreen = sdl_is_fullscreen,
+    .get_clipboard = sdl_get_clipboard,
+    .set_clipboard = sdl_set_clipboard,
 };

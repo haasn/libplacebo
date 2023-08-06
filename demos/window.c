@@ -110,3 +110,13 @@ bool window_is_fullscreen(const struct window *win)
 {
     return win->impl->is_fullscreen(win);
 }
+
+const char *window_get_clipboard(const struct window *win)
+{
+    return win->impl->get_clipboard(win);
+}
+
+void window_set_clipboard(const struct window *win, const char *text)
+{
+    win->impl->set_clipboard(win, text);
+}

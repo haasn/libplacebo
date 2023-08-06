@@ -506,6 +506,18 @@ static bool glfw_toggle_fullscreen(const struct window *window, bool fullscreen)
     return true;
 }
 
+static const char *glfw_get_clipboard(const struct window *window)
+{
+    struct priv *p = (struct priv *) window;
+    return glfwGetClipboardString(p->win);
+}
+
+static void glfw_set_clipboard(const struct window *window, const char *text)
+{
+    struct priv *p = (struct priv *) window;
+    glfwSetClipboardString(p->win, text);
+}
+
 const struct window_impl IMPL = {
     .name = IMPL_NAME,
     .tag = IMPL_TAG,
@@ -519,4 +531,6 @@ const struct window_impl IMPL = {
     .get_file = glfw_get_file,
     .toggle_fullscreen = glfw_toggle_fullscreen,
     .is_fullscreen = glfw_is_fullscreen,
+    .get_clipboard = glfw_get_clipboard,
+    .set_clipboard = glfw_set_clipboard,
 };

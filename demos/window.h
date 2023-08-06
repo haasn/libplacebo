@@ -45,6 +45,8 @@ bool window_get_key(const struct window *win, enum key);
 char *window_get_file(const struct window *win);
 bool window_toggle_fullscreen(const struct window *win, bool fullscreen);
 bool window_is_fullscreen(const struct window *win);
+const char *window_get_clipboard(const struct window *win);
+void window_set_clipboard(const struct window *win, const char *text);
 
 // For implementations
 struct window_impl {
@@ -60,4 +62,6 @@ struct window_impl {
     __typeof__(window_get_file) *get_file;
     __typeof__(window_toggle_fullscreen) *toggle_fullscreen;
     __typeof__(window_is_fullscreen) *is_fullscreen;
+    __typeof__(window_get_clipboard) *get_clipboard;
+    __typeof__(window_set_clipboard) *set_clipboard;
 };
