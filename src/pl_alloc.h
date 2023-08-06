@@ -150,9 +150,11 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
 
 #define PL_ARRAY_REMOVE_RANGE(arr, idx, count)                                  \
     do {                                                                        \
-        size_t _idx = (idx);                                                    \
+        ptrdiff_t _idx = (idx);                                                 \
+        if (_idx < 0)                                                           \
+            _idx += (arr).num;                                                  \
         size_t _count = (count);                                                \
-        assert(_idx + _count <= (arr).num);                                     \
+        assert(_idx >= 0 && _idx + _count <= (arr).num);                        \
         memmove(&(arr).elem[_idx], &(arr).elem[_idx + _count],                  \
                 ((arr).num - _idx - _count) * sizeof((arr).elem[0]));           \
         (arr).num -= _count;                                                    \
@@ -162,8 +164,10 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
 
 #define PL_ARRAY_INSERT_AT(parent, arr, idx, ...)                               \
     do {                                                                        \
-        size_t _idx = (idx);                                                    \
-        assert(_idx <= (arr).num);                                              \
+        ptrdiff_t _idx = (idx);                                                 \
+        if (_idx < 0)                                                           \
+            _idx += (arr).num + 1;                                              \
+        assert(_idx >= 0 && _idx <= (arr).num);                                 \
         PL_ARRAY_GROW(parent, arr);                                             \
         memmove(&(arr).elem[_idx + 1], &(arr).elem[_idx],                       \
                 ((arr).num++ - _idx) * sizeof((arr).elem[0]));                  \
