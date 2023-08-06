@@ -163,6 +163,18 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
         return NULL;
     }
 
+    if (params->config.kernel->opaque) {
+        pl_err(log, "Trying to use opaque kernel '%s' in non-opaque context!",
+               params->config.kernel->name);
+        return NULL;
+    }
+
+    if (params->config.window && params->config.window->opaque) {
+        pl_err(log, "Trying to use opaque window '%s' in non-opaque context!",
+               params->config.window->name);
+        return NULL;
+    }
+
     struct pl_filter_t *f = pl_zalloc_ptr(NULL, f);
     f->params = *params;
     f->params.config.kernel = dupfilter(f, params->config.kernel);
