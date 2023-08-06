@@ -35,6 +35,7 @@ static void ui_destroy(struct ui **ui) {}
 static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { return true; };
 #endif
 
+#include <libplacebo/options.h>
 #include <libplacebo/renderer.h>
 #include <libplacebo/shaders/lut.h>
 #include <libplacebo/utils/libav.h>
@@ -64,17 +65,7 @@ struct plplay {
     bool exit_thread;
 
     // settings / ui state
-    struct pl_render_params params;
-    struct pl_deband_params deband_params;
-    struct pl_sigmoid_params sigmoid_params;
-    struct pl_color_adjustment color_adjustment;
-    struct pl_peak_detect_params peak_detect_params;
-    struct pl_color_map_params color_map_params;
-    struct pl_dither_params dither_params;
-    struct pl_deinterlace_params deinterlace_params;
-    struct pl_distort_params distort_params;
-    struct pl_icc_params icc_params;
-    struct pl_cone_params cone_params;
+    pl_options opts;
     struct pl_icc_profile target_icc;
     char *target_icc_name;
     pl_rotation target_rot;
@@ -145,6 +136,7 @@ static void uninit(struct plplay *p)
 
     pl_queue_destroy(&p->queue);
     pl_renderer_destroy(&p->renderer);
+    pl_options_free(&p->opts);
 
     for (int i = 0; i < p->shader_num; i++) {
         pl_mpv_user_shader_destroy(&p->shader_hooks[i]);
@@ -388,7 +380,7 @@ static PL_THREAD_VOID decode_loop(void *arg)
                 .frame_data = frame,
 
                 // allow soft-disabling deinterlacing at the source frame level
-                .first_field = p->params.deinterlace_params
+                .first_field = p->opts->params.deinterlace_params
                                     ? pl_field_from_avframe(frame)
                                     : PL_FIELD_NONE,
             });
@@ -476,6 +468,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
                          const struct pl_frame_mix *mix)
 {
     struct pl_frame target;
+    pl_options opts = p->opts;
     pl_frame_from_swapchain(&target, frame);
     update_settings(p, &target);
 
@@ -487,12 +480,12 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
 
         if (p->use_icc_luma) {
             // Always use detected luminance
-            p->icc_params.max_luma = 0;
+            opts->icc_params.max_luma = 0;
         } else {
             // Use HDR levels if available, fall back to default luminance
-            p->icc_params.max_luma = target.color.hdr.max_luma;
-            if (!p->icc_params.max_luma)
-                p->icc_params.max_luma = pl_icc_default_params.max_luma;
+            opts->icc_params.max_luma = target.color.hdr.max_luma;
+            if (!opts->icc_params.max_luma)
+                opts->icc_params.max_luma = pl_icc_default_params.max_luma;
         }
     }
 
@@ -505,7 +498,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
                               mix->frames[0]->rotation - target.rotation,
                               0.0);
 
-    struct pl_color_map_params *cpars = &p->color_map_params;
+    struct pl_color_map_params *cpars = &opts->color_map_params;
     if (cpars->visualize_lut) {
         cpars->visualize_rect = (pl_rect2df) {0, 0, 1, 1};
         float tar = pl_rect2df_aspect(&target.crop);
@@ -513,7 +506,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     }
 
     pl_clock_t ts_pre = pl_clock_now();
-    if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
+    if (!pl_render_image_mix(p->renderer, mix, &target, &opts->params))
         return false;
     pl_clock_t ts_rendered = pl_clock_now();
     if (!ui_draw(p->ui, frame))
@@ -529,6 +522,8 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
 
 static bool render_loop(struct plplay *p)
 {
+    pl_options opts = p->opts;
+
     struct pl_queue_params qparams = {
         .interpolation_threshold = 0.01,
         .timeout = UINT64_MAX,
@@ -551,7 +546,7 @@ static bool render_loop(struct plplay *p)
     // Disable background transparency by default if the swapchain does not
     // appear to support alpha transaprency
     if (frame.color_repr.alpha == PL_ALPHA_UNKNOWN)
-        p->params.background_transparency = 0.0;
+        opts->params.background_transparency = 0.0;
 
     if (!render_frame(p, &frame, &mix))
         goto error;
@@ -591,7 +586,7 @@ static bool render_loop(struct plplay *p)
             ts_start = ts_pre_update;
 
         qparams.timeout = 0; // non-blocking update
-        qparams.radius = pl_frame_mix_radius(&p->params);
+        qparams.radius = pl_frame_mix_radius(&p->opts->params);
         qparams.pts = fmax(pts_target, pl_clock_diff(ts_pre_update, ts_start));
         p->stats.current_pts = qparams.pts;
         if (qparams.pts != prev_pts)
@@ -663,7 +658,7 @@ retry:
 
         // In content-timed mode (frame mixing disabled), delay rendering
         // until the next frame should become visible
-        if (!p->params.frame_mixer) {
+        if (!opts->params.frame_mixer) {
             struct pl_source_frame next;
             for (int i = 0;; i++) {
                 if (!pl_queue_peek(p->queue, i, &next))
@@ -715,27 +710,23 @@ static struct plplay state;
 
 int main(int argc, char **argv)
 {
+    pl_log log = pl_log_create(PL_API_VER, pl_log_params(
+        .log_cb    = pl_log_color,
+        .log_level = PL_LOG_INFO,
+    ));
+
     state = (struct plplay) {
-        .params = pl_render_default_params,
-        .deband_params = pl_deband_default_params,
-        .sigmoid_params = pl_sigmoid_default_params,
-        .color_adjustment = pl_color_adjustment_neutral,
-        .peak_detect_params = pl_peak_detect_default_params,
-        .color_map_params = pl_color_map_default_params,
-        .dither_params = pl_dither_default_params,
-        .icc_params = pl_icc_default_params,
-        .cone_params = pl_vision_normal,
-        .deinterlace_params = pl_deinterlace_default_params,
-        .distort_params = pl_distort_default_params,
+        .log = log,
+        .opts = pl_options_alloc(log),
         .target_override = true,
         .use_icc_luma = true,
         .fps = 60.0,
     };
 
     const char *filename = NULL;
-    enum pl_log_level log_level = PL_LOG_INFO;
     bool print_help = false;
     const char *win_tag = NULL;
+    pl_options opts = state.opts;
 
     for (char **arg = argv + 1; !print_help && *arg; ++arg) {
         if ((*arg)[0] != '-') {
@@ -746,16 +737,14 @@ int main(int argc, char **argv)
         }
         switch ((*arg)[1]) {
         case 's': state.software_decoding = true; break;
-        case 'v': log_level = PL_LOG_DEBUG; break;
+        case 'v': pl_log_level_update(log, PL_LOG_DEBUG); break;
         case 'a':
             win_tag = *++arg;
             if (!win_tag)
                 print_help = true;
             break;
         case 'h':
-            state.params = pl_render_high_quality_params;
-            state.color_map_params = pl_color_map_high_quality_params;
-            state.peak_detect_params = pl_peak_detect_high_quality_params;;
+            pl_options_reset(opts, &pl_render_high_quality_params);
             break;
         default:
             fprintf(stderr, "Invalid arg: %s\n", *arg);
@@ -776,32 +765,21 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if (log_level == PL_LOG_DEBUG)
+    if (log->params.log_level == PL_LOG_DEBUG)
         av_log_set_level(AV_LOG_VERBOSE);
     else
         av_log_set_level(AV_LOG_INFO);
 
-    // Redirect all of the pointers in `params.default` to instead point to the
-    // structs inside `struct plplay`, so we can adjust them using the UI
-#define DEFAULT_PARAMS(field) \
-        state.params.field = state.params.field ? &state.field : NULL
-    DEFAULT_PARAMS(deband_params);
-    DEFAULT_PARAMS(sigmoid_params);
-    DEFAULT_PARAMS(peak_detect_params);
-    DEFAULT_PARAMS(dither_params);
-    DEFAULT_PARAMS(deinterlace_params);
-    state.params.color_adjustment = &state.color_adjustment;
-    state.params.color_map_params = &state.color_map_params;
-    state.params.cone_params = &state.cone_params;
-    state.params.icc_params = &state.icc_params;
+    // Enable this by default to save one click
+    opts->params.cone_params = &opts->cone_params;
 
     // Enable dynamic parameters by default, due to plplay's heavy reliance on
     // GUI controls for dynamically adjusting render parameters.
-    state.params.dynamic_constants = true;
+    opts->params.dynamic_constants = true;
 
     // Hook up our pass info callback
-    state.params.info_callback = info_callback;
-    state.params.info_priv = &state;
+    opts->params.info_callback = info_callback;
+    opts->params.info_priv = &state;
 
     struct plplay *p = &state;
     if (!open_file(p, filename))
@@ -821,13 +799,8 @@ int main(int argc, char **argv)
 
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
         params.alpha = true;
-        state.params.background_transparency = 1.0;
+        opts->params.background_transparency = 1.0;
     }
-
-    p->log = pl_log_create(PL_API_VER, pl_log_params(
-        .log_cb = pl_log_color,
-        .log_level = log_level,
-    ));
 
     p->win = window_create(p->log, &params);
     if (!p->win)
@@ -983,7 +956,8 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
     ui_update_input(p->ui, p->win);
     const char *dropped_file = window_get_file(p->win);
 
-    struct pl_render_params *par = &p->params;
+    pl_options opts = p->opts;
+    struct pl_render_params *par = &opts->params;
 
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
 
@@ -1145,7 +1119,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_property_float(nk, "Polar cutoff (%)", 0.0, &cutoff, 100.0, 0.1, 0.01);
             par->polar_cutoff = cutoff / 100.0;
 
-            struct pl_sigmoid_params *spar = &p->sigmoid_params;
+            struct pl_sigmoid_params *spar = &opts->sigmoid_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->sigmoid_params = nk_check_label(nk, "Sigmoidization", par->sigmoid_params) ? spar : NULL;
             if (nk_button_label(nk, "Default values"))
@@ -1156,7 +1130,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Deinterlacing", NK_MINIMIZED)) {
-            struct pl_deinterlace_params *dpar = &p->deinterlace_params;
+            struct pl_deinterlace_params *dpar = &opts->deinterlace_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->deinterlace_params = nk_check_label(nk, "Enable", par->deinterlace_params) ? dpar : NULL;
             if (nk_button_label(nk, "Reset settings"))
@@ -1185,7 +1159,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Debanding", NK_MINIMIZED)) {
-            struct pl_deband_params *dpar = &p->deband_params;
+            struct pl_deband_params *dpar = &opts->deband_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->deband_params = nk_check_label(nk, "Enable", par->deband_params) ? dpar : NULL;
             if (nk_button_label(nk, "Reset settings"))
@@ -1198,7 +1172,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Distortion", NK_MINIMIZED)) {
-            struct pl_distort_params *dpar = &p->distort_params;
+            struct pl_distort_params *dpar = &opts->distort_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->distort_params = nk_check_label(nk, "Enable", par->distort_params) ? dpar : NULL;
             if (nk_button_label(nk, "Reset settings"))
@@ -1262,7 +1236,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Color adjustment", NK_MINIMIZED)) {
-            struct pl_color_adjustment *adj = &p->color_adjustment;
+            struct pl_color_adjustment *adj = &opts->color_adjustment;
             nk_layout_row_dynamic(nk, 24, 2);
             par->color_adjustment = nk_check_label(nk, "Enable", par->color_adjustment) ? adj : NULL;
             if (nk_button_label(nk, "Default values"))
@@ -1283,7 +1257,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_property_int(nk, "Temperature (K)", 3000, &temp, 10000, 10, 5);
             adj->temperature = (temp - 6500) / 3500.0;
 
-            struct pl_cone_params *cpar = &p->cone_params;
+            struct pl_cone_params *cpar = &opts->cone_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->cone_params = nk_check_label(nk, "Color blindness", par->cone_params) ? cpar : NULL;
             if (nk_button_label(nk, "Default values"))
@@ -1300,7 +1274,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "HDR peak detection", NK_MINIMIZED)) {
-            struct pl_peak_detect_params *ppar = &p->peak_detect_params;
+            struct pl_peak_detect_params *ppar = &opts->peak_detect_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->peak_detect_params = nk_check_label(nk, "Enable", par->peak_detect_params) ? ppar : NULL;
             if (nk_button_label(nk, "Reset settings"))
@@ -1315,7 +1289,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Tone mapping", NK_MINIMIZED)) {
-            struct pl_color_map_params *cpar = &p->color_map_params;
+            struct pl_color_map_params *cpar = &opts->color_map_params;
             static const struct pl_color_map_params null_settings = {0};
             nk_layout_row_dynamic(nk, 24, 2);
             par->color_map_params = nk_check_label(nk, "Enable",
@@ -1435,7 +1409,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Dithering", NK_MINIMIZED)) {
-            struct pl_dither_params *dpar = &p->dither_params;
+            struct pl_dither_params *dpar = &opts->dither_params;
             nk_layout_row_dynamic(nk, 24, 2);
             par->dither_params = nk_check_label(nk, "Enable", par->dither_params) ? dpar : NULL;
             if (nk_button_label(nk, "Reset settings"))
@@ -1494,7 +1468,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Output color space", NK_MINIMIZED)) {
-            struct pl_icc_params *iccpar = &p->icc_params;
+            struct pl_icc_params *iccpar = &opts->icc_params;
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Enable", &p->target_override);
             bool reset = nk_button_label(nk, "Reset settings");
