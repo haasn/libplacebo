@@ -1897,6 +1897,12 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
             if (nk_tree_push(nk, NK_TREE_NODE, "Settings dump", NK_MINIMIZED)) {
 
+                nk_layout_row_dynamic(nk, 24, 2);
+                if (nk_button_label(nk, "Copy to clipboard"))
+                    window_set_clipboard(p->win, pl_options_save(opts));
+                if (nk_button_label(nk, "Load from clipboard"))
+                    pl_options_load(opts, window_get_clipboard(p->win));
+
                 nk_layout_row_dynamic(nk, 24, 1);
                 pl_options_iterate(opts, draw_opt_data, nk);
                 nk_tree_pop(nk);
