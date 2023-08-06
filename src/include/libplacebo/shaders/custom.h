@@ -326,9 +326,8 @@ struct pl_hook {
 //
 // The resulting `pl_hook` objects should be destroyed with the corresponding
 // destructor when no longer needed.
-PL_API const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
-                                                      const char *shader_text,
-                                                      size_t shader_len);
+PL_API const struct pl_hook *
+pl_mpv_user_shader_parse(pl_gpu gpu, const char *shader_text, size_t shader_len);
 
 PL_API void pl_mpv_user_shader_destroy(const struct pl_hook **hook);
 
