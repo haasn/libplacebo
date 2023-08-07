@@ -584,12 +584,10 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
     bool use_ar = params->antiring > 0 && PL_MIN(rx, ry) > 1.0f;
     if (use_ar) {
-        GLSL("vec4 hi = vec4(0.0);      \n"
-             "vec4 lo = vec4(0.0);      \n"
-             "float wgsum = 0.0;        \n"
-             "vec2 cg;                  \n"
-             "const float lmax = %f;    \n",
-             scale);
+        GLSL("vec4 hi = vec4(0.0);  \n"
+             "vec4 lo = vec4(0.0);  \n"
+             "float wgsum = 0.0;    \n"
+             "vec2 cg;              \n");
     }
 
     int bound   = ceil(obj->filter->radius_cutoff);
