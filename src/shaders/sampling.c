@@ -582,7 +582,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
          "vec4 c;                                       \n",
          pos, pt, src_tex);
 
-    bool use_ar = params->antiring > 0 && PL_MIN(rx, ry) > 1.0f;
+    bool use_ar = params->antiring > 0;
     if (use_ar) {
         GLSL("vec4 hi = vec4(0.0);  \n"
              "vec4 lo = vec4(0.0);  \n"
