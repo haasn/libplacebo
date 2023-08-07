@@ -459,7 +459,7 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     bool maybe_skippable = dmin >= filter->radius_cutoff - M_SQRT2;
 
     // Check for samples that definitely won't contribute to anti-ringing
-    const float ar_radius = 1.5f;
+    const float ar_radius = filter->radius_zero;
     use_ar &= dmin < ar_radius;
 
 #pragma GLSL                                                    \
@@ -479,16 +479,15 @@ static void polar_sample(pl_shader sh, pl_filter filter,
         color[@c] += w * c[@c];                                 \
     @if (use_ar) {                                              \
         if (d <= ${const float: ar_radius}) {                   \
-            wg = exp(-2.0 * d * d);                             \
-            wgsum += wg;                                        \
+            wgsum += w;                                         \
             @for (c : comp_mask) {                              \
                 cg = vec2(${float:scale} * c[@c]);              \
                 cg.y = 1.0 - cg.y;                              \
                 cg *= cg;                                       \
                 cg *= cg;                                       \
                 cg *= cg;                                       \
-                hi[@c] += wg * cg.x;                            \
-                lo[@c] += wg * cg.y;                            \
+                hi[@c] += w * cg.x;                             \
+                lo[@c] += w * cg.y;                             \
             @}                                                  \
         }                                                       \
     @}                                                          \
@@ -585,11 +584,11 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
     bool use_ar = params->antiring > 0 && PL_MIN(rx, ry) > 1.0f;
     if (use_ar) {
-        GLSL("vec4 hi = vec4(0.0);       \n"
-             "vec4 lo = vec4(0.0);       \n"
-             "float wg, wgsum = 0.0;     \n"
-             "vec2 cg;                   \n"
-             "const float lmax = %f;     \n",
+        GLSL("vec4 hi = vec4(0.0);      \n"
+             "vec4 lo = vec4(0.0);      \n"
+             "float wgsum = 0.0;        \n"
+             "vec2 cg;                  \n"
+             "const float lmax = %f;    \n",
              scale);
     }
 
@@ -824,8 +823,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     @if (use_ar) {                                                              \
         @for (c : cmask) {                                                      \
             cg = sqrt(sqrt(sqrt(vec2(hi[@c], lo[@c]) / wgsum)));                \
-            wg = clamp(color[@c], 1.0 - cg.y, cg.x);                            \
-            color[@c] = mix(color[@c], wg, ${float:params->antiring});          \
+            w = clamp(color[@c], 1.0 - cg.y, cg.x);                             \
+            color[@c] = mix(color[@c], w, ${float:params->antiring});           \
         @}                                                                      \
     @}                                                                          \
     @if (!(cmask & (1 << PL_CHANNEL_A)))                                        \

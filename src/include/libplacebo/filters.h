@@ -388,6 +388,9 @@ typedef const struct pl_filter_t {
     // performance gain for EWA sampling.
     float radius_cutoff;
 
+    // Radius of the first zero crossing (main lobe size).
+    float radius_zero;
+
     // --- separable filters only (!params.config.polar)
 
     // The number of source texels to convolve over for each row. This value
