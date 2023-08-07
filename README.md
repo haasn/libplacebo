@@ -191,6 +191,10 @@ identifiers (so they can be freely merged together).
 
 ### Tier 4 (high level renderer)
 
+- `options.h`: A high-level options framework which wraps all of the options
+  comprising `pl_render_params` into a memory-managed, serializable struct that
+  can also be treated as a key/value dictionary. Also includes an options
+  parser to load options provided by the API user in string format.
 - `renderer.h`: A high-level renderer which combines the shader primitives
   and dispatch mechanism into a fully-fledged rendering pipeline that takes
   raw texture data and transforms it into the desired output image.
