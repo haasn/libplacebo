@@ -139,6 +139,7 @@ tests = [
 
 fuzzers = [
   'lut.c',
+  'options.c',
   'shaders.c',
   'user_shaders.c',
 ]
