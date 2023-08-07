@@ -1,5 +1,8 @@
 #include "../tests.h"
 
+#include <libplacebo/dummy.h>
+#include <libplacebo/shaders/custom.h>
+
 __AFL_FUZZ_INIT();
 
 #pragma clang optimize off

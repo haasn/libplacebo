@@ -1,6 +1,11 @@
 #include "../tests.h"
 #include "shaders.h"
 
+#include <libplacebo/dummy.h>
+#include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/custom.h>
+#include <libplacebo/shaders/sampling.h>
+
 __AFL_FUZZ_INIT();
 
 #pragma clang optimize off
@@ -63,6 +68,7 @@ int main()
                     .filter = pl_filter_ewa_lanczos,
                     .lut = &polar,
                 ));
+                break;
             case 'O': ;
                 struct pl_sample_src srcfix = src;
                 srcfix.new_w = WIDTH;

@@ -1,5 +1,7 @@
 #include "../tests.h"
 
+#include <libplacebo/shaders/lut.h>
+
 __AFL_FUZZ_INIT();
 
 #pragma clang optimize off
