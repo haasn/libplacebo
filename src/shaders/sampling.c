@@ -482,13 +482,13 @@ static void polar_sample(pl_shader sh, pl_filter filter,
             @for (c : comp_mask) {                              \
                 cc = vec2(${float: scale} * c[@c]);             \
                 cc.x = 1.0 - cc.x;                              \
-                ww = cc + vec2(1.0);                            \
+                ww = cc + vec2(0.07);                           \
                 ww = ww * ww;                                   \
                 ww = ww * ww;                                   \
                 ww = ww * ww;                                   \
                 ww = ww * ww;                                   \
                 ww = ww * ww;                                   \
-                ww = max(w * ww, 1e-7);                         \
+                ww = max(w * ww, 1e-37);                        \
                 ar@c += ww * cc;                                \
                 wwsum@c += ww;                                  \
             @}                                                  \
