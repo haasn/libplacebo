@@ -222,11 +222,7 @@ best overall image quality, and so forth.
 
 libplacebo was founded and primarily developed by Niklas Haas
 ([@haasn](https://github.com/haasn)), but it would not be possible without the
-contributions of others. Special note also goes out to wm4, the developer of
-mpv, whose ideas helped shape the foundation of the shader dispatch system.
-This library also includes various excerpts from mpv, in particular the filter
-kernel code. For a full list of past contributors to mpv, see the [mpv
-authorship page](https://github.com/mpv-player/mpv/graphs/contributors)
+contributions of others, especially support for windows.
 
 [![contributor list](https://opencollective.com/libplacebo/contributors.svg?width=890&button=false)](https://github.com/haasn/libplacebo/graphs/contributors)
 
