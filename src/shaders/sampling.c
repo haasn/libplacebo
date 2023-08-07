@@ -479,15 +479,18 @@ static void polar_sample(pl_shader sh, pl_filter filter,
         color[@c] += w * c[@c];                                 \
     @if (use_ar) {                                              \
         if (d <= ${const float: ar_radius}) {                   \
-            wgsum += w;                                         \
             @for (c : comp_mask) {                              \
-                cg = vec2(${float:scale} * c[@c]);              \
-                cg.y = 1.0 - cg.y;                              \
-                cg *= cg;                                       \
-                cg *= cg;                                       \
-                cg *= cg;                                       \
-                hi[@c] += w * cg.x;                             \
-                lo[@c] += w * cg.y;                             \
+                cc = vec2(${float: scale} * c[@c]);             \
+                cc.x = 1.0 - cc.x;                              \
+                ww = cc + vec2(1.0);                            \
+                ww = ww * ww;                                   \
+                ww = ww * ww;                                   \
+                ww = ww * ww;                                   \
+                ww = ww * ww;                                   \
+                ww = ww * ww;                                   \
+                ww = max(w * ww, 1e-7);                         \
+                ar@c += ww * cc;                                \
+                wwsum@c += ww;                                  \
             @}                                                  \
         }                                                       \
     @}                                                          \
@@ -584,10 +587,10 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
     bool use_ar = params->antiring > 0;
     if (use_ar) {
-        GLSL("vec4 hi = vec4(0.0);  \n"
-             "vec4 lo = vec4(0.0);  \n"
-             "float wgsum = 0.0;    \n"
-             "vec2 cg;              \n");
+#pragma GLSL                                                                    \
+        vec2 ww, cc;                                                            \
+        @for (c : cmask)                                                        \
+            vec2 ar@c = vec2(0.0), wwsum@c = vec2(0.0);
     }
 
     int bound   = ceil(obj->filter->radius_cutoff);
@@ -820,8 +823,10 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     color = ${float:scale} / wsum * color;                                      \
     @if (use_ar) {                                                              \
         @for (c : cmask) {                                                      \
-            cg = sqrt(sqrt(sqrt(vec2(hi[@c], lo[@c]) / wgsum)));                \
-            w = clamp(color[@c], 1.0 - cg.y, cg.x);                             \
+            ww = ar@c / wwsum@c;                                                \
+            ww.x = 1.0 - ww.x;                                                  \
+            w = clamp(color[@c], ww.x, ww.y);                                   \
+            w = mix(w, dot(ww, vec2(0.5)), ww.x > ww.y);                        \
             color[@c] = mix(color[@c], w, ${float:params->antiring});           \
         @}                                                                      \
     @}                                                                          \
