@@ -13,27 +13,24 @@ on both quality and performance. These include features such as the following:
 - High-quality, optimized **upscaling and downscaling** including support for
   polar filters ("Jinc"), anti-aliasing, anti-ringing and gamma correct
   scaling.
-- **Color management** and format conversions for a wide variety of HDR or
-  wide gamut color spaces. This includes support for ICC profiles, ITU-R
-  BT.1886 emulation, colorimetrically accurate clipping, custom 1D/3D LUTs,
-  scene-referred OOTFs (such as HLG), constant luminance formats including
-  ICtCp and a variety of film industry formats ranging from XYZ to Sony's
-  S-Log or Panasonic's V-Gamut.
-- Tunable **debanding** shader. This is based on flash3kyuu, expanded to
-  provide high quality by combining multiple debanding passes.
-- Dynamic **HDR tone mapping**, including shaders for real-time peak and
-  scene-change detection, chroma-preserving (luma-only) tone mapping,
-  highlight desaturation, dynamic exposure control and a variety of
-  industry-standard EETFs including BT.2390.
-- High performance **film grain synthesis** for AV1 and H.274, allowing media
-  players to offload this part of decoding from the CPU to the GPU.
-- A **pluggable, extensible custom shader syntax**, equivalent to an improved
-  version of [mpv's `.hook`
-  syntax](https://mpv.io/manual/master/#options-glsl-shaders). This can be
-  used to arbitrarily extend the range of custom shaders to include popular
-  user shaders like RAVU, FSRCNNX, or Anime4K. See the [mpv wiki on user
+- Dynamic **HDR tone mapping**, including real-time measurement of scene
+  histogram, scene change detection, dynamic exposure control, perceptual gamut
+  stretching, contrast recovery and more.
+- Native support for **Dolby Vision HDR**, including conversion to HDR/PQ and,
+  SDR, reading DV side data, and reshaping. (BL only, currently)
+- A colorimetrically accurate **color management** engine with support for
+  soft gamut mapping, ICC profiles, accurate ITU-R BT.1886 emulation, black
+  point compensation, and custom 3DLUTs (.cube).
+- A pluggable, extensible [**custom shader
+  system**](http://libplacebo.org/custom-shaders/). This can be used to
+  arbitrarily extend the range of custom shaders to include popular user
+  shaders like RAVU, FSRCNNX, or Anime4K. See the [mpv wiki on user
   scripts](https://github.com/mpv-player/mpv/wiki/User-Scripts#user-shaders)
   for more information.
+- High performance **film grain synthesis** for AV1 and H.274, allowing media
+  players to offload this part of decoding from the CPU to the GPU.
+- Tunable, fast **debanding** and **deinterlacing** shaders.
+- High quality gamma-correct **dithering**, including error diffusion modes.
 
 Every attempt was made to provide these features at a **high level of
 abstraction**, taking away all the messy details of GPU programming, color
