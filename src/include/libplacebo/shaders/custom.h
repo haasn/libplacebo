@@ -291,6 +291,11 @@ struct pl_hook_par {
     pl_var_data initial;
     pl_var_data minimum;
     pl_var_data maximum;
+
+    // Human-readable names for the variants of an integer option. This array
+    // can be indexed directly by integer values, ranging from `minimum.i` to
+    // `maximum.i`. May be NULL, in which case options are unnamed.
+    const char * const *names;
 };
 
 // Struct describing a hook.

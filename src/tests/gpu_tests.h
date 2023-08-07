@@ -949,9 +949,21 @@ static const char *user_shader_tests[] = {
     "//!TYPE DEFINE                                                         \n"
     "100                                                                    \n"
     "                                                                       \n"
+    "//!PARAM testenum                                                      \n"
+    "//!TYPE ENUM DEFINE                                                    \n"
+    "FOO                                                                    \n"
+    "BAR                                                                    \n"
+    "                                                                       \n"
     "//!HOOK MAIN                                                           \n"
     "//!WHEN testconst 30 >                                                 \n"
-    "#error should not be run                                               \n",
+    "#error should not be run                                               \n"
+    "                                                                       \n"
+    "//!HOOK MAIN                                                           \n"
+    "//!WHEN testenum FOO =                                                 \n"
+    "#if testenum == BAR                                                    \n"
+    " #error bad                                                            \n"
+    "#endif                                                                 \n"
+    "vec4 hook() { return vec4(0.0); }                                      \n"
 };
 
 static const char *compute_shader_tests[] = {

@@ -479,11 +479,19 @@ parameter, exposed as part of the C API to end users.
 Provides the minimum/maximum value bound of this parameter. If absent, no
 minimum/maximum is enforced.
 
-### `TYPE <DEFINE | [DYNAMIC | CONSTANT] <type>>`
+### `TYPE [ENUM] <DEFINE | [DYNAMIC | CONSTANT] <type>>`
 
 This gives the type of the parameter, which determines what type of values it
 can hold and how it will be made available to the shader. `<type>` must be
 a scalar GLSL numeric type, such as `int`, `float` or `uint`.
+
+If a type is `ENUM`, it is treated as an enumeration type. To use this, `type`
+must either be `int` or `DEFINE`. Instead of providing a single default value,
+the param body should be a list of all possible enumeration values (as separate
+lines). These names will be made available inside the shader body (as a
+`#define`), as well as inside RPN expressions (e.g. `WHEN`). The qualifiers
+`MINIMUM` and `MAXIMUM` are ignored for `ENUM` parameters, with the value
+range instead being set implicitly from the list of options.
 
 The optional qualifiers `DYNAMIC` or `CONSTANT` mark the parameter as
 dynamically changing and compile-time constant, respectively. A `DYNAMIC`
@@ -531,6 +539,28 @@ const float weights[row_size] = {
 
     // ...
 };
+```
+
+An example of an enum parameter:
+
+``` glsl linenums="1"
+//!PARAM csp
+//!DESC Colorspace
+//!TYPE ENUM int
+BT709
+BT2020
+DCIP3
+
+//!HOOK MAIN
+//!BIND HOOKED
+const mat3 matrices[3] = {
+    mat3(...), // BT709
+    mat3(...), // BT2020
+    mat3(...), // DCIP3
+};
+
+#define MAT matrices[csp]
+// ...
 ```
 
 ## Full example

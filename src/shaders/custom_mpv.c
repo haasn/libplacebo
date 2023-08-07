@@ -690,6 +690,7 @@ static bool parse_param(pl_log log, void *alloc, pl_str *body,
     *out = (struct pl_hook_par) {0};
     pl_str minimum = {0};
     pl_str maximum = {0};
+    bool is_enum = false;
 
     while (true) {
         pl_str rest;
@@ -722,6 +723,8 @@ static bool parse_param(pl_log log, void *alloc, pl_str *body,
 
         if (pl_str_eatstart0(&line, "TYPE")) {
             line = pl_str_strip(line);
+            is_enum = pl_str_eatstart0(&line, "ENUM");
+            line = pl_str_strip(line);
             if (pl_str_eatstart0(&line, "DYNAMIC")) {
                 out->mode = PL_HOOK_PAR_DYNAMIC;
             } else if (pl_str_eatstart0(&line, "CONSTANT")) {
@@ -752,6 +755,10 @@ static bool parse_param(pl_log log, void *alloc, pl_str *body,
                     }
 
                     out->type = nv->var.type;
+                    if (is_enum && out->type != PL_VAR_SINT) {
+                        pl_err(log, "ENUM is only compatible with type int/DEFINE!");
+                        return false;
+                    }
                     goto next;
                 }
             }
@@ -792,14 +799,31 @@ next: ;
         return false;
     }
 
-    if (!parse_var(log, initial, out->type, &out->initial))
-        return false;
-    if (!parse_var(log, minimum, out->type, &out->minimum))
-        return false;
-    if (!parse_var(log, maximum, out->type, &out->maximum))
-        return false;
-    if (!check_bounds(log, out->type, out->initial, out->minimum, out->maximum))
-        return false;
+    if (is_enum) {
+        PL_ARRAY(const char *) names = {0};
+        pl_assert(out->type == PL_VAR_SINT);
+        do {
+            pl_str line = pl_str_strip(pl_str_getline(initial, &initial));
+            if (!line.len)
+                continue;
+            PL_ARRAY_APPEND(alloc, names, pl_strdup0(alloc, line));
+        } while (initial.len);
+
+        pl_assert(names.num >= 1);
+        out->initial.i = 0;
+        out->minimum.i = 0;
+        out->maximum.i = names.num - 1;
+        out->names = names.elem;
+    } else {
+        if (!parse_var(log, initial, out->type, &out->initial))
+            return false;
+        if (!parse_var(log, minimum, out->type, &out->minimum))
+            return false;
+        if (!parse_var(log, maximum, out->type, &out->maximum))
+            return false;
+        if (!check_bounds(log, out->type, out->initial, out->minimum, out->maximum))
+            return false;
+    }
 
     out->data = pl_memdup(alloc, &out->initial, sizeof(out->initial));
     return true;
@@ -971,19 +995,27 @@ static bool lookup_var(struct hook_ctx *ctx, pl_str var, float *val)
     struct hook_priv *p = ctx->priv;
     for (int i = 0; i < p->hook_params.num; i++) {
         const struct pl_hook_par *hp = &p->hook_params.elem[i];
-        if (!pl_str_equals0(var, hp->name))
-            continue;
+        if (pl_str_equals0(var, hp->name)) {
+            switch (hp->type) {
+            case PL_VAR_SINT:  *val = hp->data->i; return true;
+            case PL_VAR_UINT:  *val = hp->data->u; return true;
+            case PL_VAR_FLOAT: *val = hp->data->f; return true;
+            case PL_VAR_INVALID:
+            case PL_VAR_TYPE_COUNT:
+                break;
+            }
 
-        switch (hp->type) {
-        case PL_VAR_SINT:  *val = hp->data->i; return true;
-        case PL_VAR_UINT:  *val = hp->data->u; return true;
-        case PL_VAR_FLOAT: *val = hp->data->f; return true;
-        case PL_VAR_INVALID:
-        case PL_VAR_TYPE_COUNT:
-            break;
+            pl_unreachable();
         }
 
-        pl_unreachable();
+        if (hp->names) {
+            for (int j = hp->minimum.i; j <= hp->maximum.i; j++) {
+                if (pl_str_equals0(var, hp->names[j])) {
+                    *val = j;
+                    return true;
+                }
+            }
+        }
     }
 
     PL_WARN(p, "Variable '%.*s' not found in RPN expression!", PL_STR_FMT(var));
@@ -1396,6 +1428,11 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
             case PL_HOOK_PAR_MODE_COUNT:
                 pl_unreachable();
+            }
+
+            if (hp->names) {
+                for (int j = hp->minimum.i; j <= hp->maximum.i; j++)
+                    GLSLH("#define %s %d \n", hp->names[j], j);
             }
         }
 
