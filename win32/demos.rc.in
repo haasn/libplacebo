@@ -1,0 +1,47 @@
+/*
+ * This file is part of libplacebo.
+ *
+ * libplacebo is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * libplacebo is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <winuser.h>
+#include <winver.h>
+#include "version.h"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION @PL_MAJOR@, @PL_MINOR@, @PL_PATCH@
+PRODUCTVERSION @PL_MAJOR@, @PL_MINOR@, @PL_PATCH@
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS__WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+{
+    BLOCK "StringFileInfo" {
+        BLOCK "000004b0" {
+            VALUE "Comments", "libplacebo is distributed under the terms of the GNU Lesser General Public License, version 2.1"
+            VALUE "CompanyName", "libplacebo"
+            VALUE "FileDescription", "libplacebo"
+            VALUE "FileVersion", BUILD_VERSION
+            VALUE "LegalCopyright", "Copyright © 2017-2023 libplacebo project"
+            VALUE "ProductName", "libplacebo"
+            VALUE "ProductVersion", BUILD_VERSION
+        }
+    }
+    BLOCK "VarFileInfo" {
+        VALUE "Translation", 0, 1200
+    }
+}
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "demos.manifest"

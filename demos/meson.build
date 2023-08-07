@@ -133,7 +133,14 @@ else
     if host_machine.system() == 'windows'
       plplay_deps += cc.find_library('shlwapi', required: true)
     endif
-    executable('plplay', 'plplay.c',
+    plplay_sources = ['plplay.c']
+    if host_machine.system() == 'windows'
+      windows = import('windows')
+      plplay_sources += windows.compile_resources(demos_rc, args: '--codepage=65001',
+                          depends: version_h,
+                          include_directories: meson.project_source_root()/'win32')
+    endif
+    executable('plplay', plplay_sources,
       dependencies: plplay_deps,
       link_args: link_args,
       link_depends: link_depends,

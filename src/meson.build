@@ -206,7 +206,7 @@ sources += configure_file(
   configuration: conf_internal
 )
 
-sources += vcs_tag(
+version_h = vcs_tag(
   command: ['git', 'describe', '--dirty'],
   fallback: version_pretty,
   replace_string: '@buildver@',
@@ -214,6 +214,14 @@ sources += vcs_tag(
   output: 'version.h',
 )
 
+sources += version_h
+
+if host_machine.system() == 'windows'
+  windows = import('windows')
+  sources += windows.compile_resources(libplacebo_rc, args: '--codepage=65001',
+                                       depends: version_h,
+                                       include_directories: meson.project_source_root()/'win32')
+endif
 
 ### Main library build process
 inc = include_directories('./include')
