@@ -156,8 +156,8 @@ struct pl_render_params {
     // The number of entries for the scaler LUTs. Defaults to 64 if left unset.
     int lut_entries;
 
-    // The anti-ringing strength to apply to non-polar filters. See the
-    // equivalent option in `pl_sample_filter_params` for more information.
+    // The anti-ringing strength to apply to filters. See the equivalent option
+    // in `pl_sample_filter_params` for more information.
     float antiringing_strength;
 
     // Configures the algorithm used for frame mixing (when using
