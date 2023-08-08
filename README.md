@@ -17,8 +17,8 @@ on both quality and performance. These include features such as the following:
 - Dynamic **HDR tone mapping**, including real-time measurement of scene
   histogram, scene change detection, dynamic exposure control, perceptual gamut
   stretching, contrast recovery and more.
-- Native support for **Dolby Vision HDR**, including conversion to HDR/PQ and,
-  SDR, reading DV side data, and reshaping. (BL only, currently)
+- Native support for **Dolby Vision HDR**, including Profile 5 conversion to
+  HDR/PQ or SDR, reading DV side data, and reshaping. (BL only, currently)
 - A colorimetrically accurate **color management** engine with support for
   soft gamut mapping, ICC profiles, accurate ITU-R BT.1886 emulation, black
   point compensation, and custom 3DLUTs (.cube).
@@ -291,7 +291,7 @@ A full list of optional dependencies each feature requires:
 #### Vulkan support
 
 Because the vulkan backend requires on code generation at compile time,
-`python3-mako` is a hard dependency of the build system. In addition to this,
+`python3-Jinja2` is a hard dependency of the build system. In addition to this,
 the path to the Vulkan registry (`vk.xml`) must be locatable, ideally by
 explicitly providing it via the `-Dvulkan-registry=/path/to/vk.xml` option,
 unless it can be found in one of the built-in hard-coded locations.
