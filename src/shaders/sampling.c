@@ -962,9 +962,12 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         [SEP_VERT]  = "ortho (vert)",
     };
 
+    char swiz[5];
+    const char *ftype = sh_float_type(sh_tex_swiz(swiz, comp_mask));
+
     describe_filter(sh, &params->filter, names[pass], ratio[pass], ratio[pass]);
     GLSL("// pl_shader_sample_ortho                         \n"
-         "vec4 color = vec4(0.0);                           \n"
+         "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);            \n"
          "{                                                 \n"
          "vec2 pos = "$", pt = "$";                         \n"
          "vec2 size = vec2(textureSize("$", 0));            \n"
@@ -973,16 +976,17 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
          "vec2 fcoord2 = fract(pos * size - vec2(0.5));     \n"
          "float fcoord = dot(fcoord2, dir);                 \n"
          "vec2 base = pos - fcoord * pt - pt * vec2(%d.0);  \n"
-         "float weight;                                     \n"
-         "vec4 ws, c;                                       \n",
+         "vec4 ws;                                          \n"
+         "%s c, ca;                                         \n",
          pos, pt, src_tex,
          dir[pass][0], dir[pass][1],
-         N / 2 - 1);
+         N / 2 - 1, ftype);
 
     bool use_ar = params->antiring > 0 && ratio[pass] > 1.0;
     if (use_ar) {
-        GLSL("vec4 hi = vec4(0.0); \n"
-             "vec4 lo = vec4(1e9); \n");
+        GLSL("%s hi = %s(0.0); \n"
+             "%s lo = %s(1e9); \n",
+             ftype, ftype, ftype, ftype);
     }
 
     // Dispatch all of the samples
@@ -994,33 +998,26 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
             float denom = PL_MAX(1, width - 1); // avoid division by zero
             GLSL("ws = "$"(vec2(%f, fcoord)); \n", lut, (n / 4) / denom);
         }
-        GLSL("weight = ws[%d];\n", n % 4);
 
         // Load the input texel and add it to the running sum
-        GLSL("c = textureLod("$", base + pt * vec2(%d.0), 0.0); \n", src_tex, n);
-
-        for (uint8_t comps = comp_mask; comps;) {
-            uint8_t c = __builtin_ctz(comps);
-            GLSL("color[%d] += weight * c[%d]; \n", c, c);
-            comps &= ~(1 << c);
-
-            if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
-                GLSL("lo[%d] = min(lo[%d], c[%d]); \n"
-                     "hi[%d] = max(hi[%d], c[%d]); \n",
-                     c, c, c, c, c, c);
-            }
+        if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
+            GLSL("c = textureLod("$", base + pt * vec2(%d.0), 0.0).%s; \n"
+                 "ca += ws[%d] * c; \n"
+                 "lo = min(lo, c);  \n"
+                 "hi = max(hi, c);  \n",
+                 src_tex, n, swiz, n % 4);
+        } else {
+            GLSL("ca += ws[%d] * textureLod("$", base + pt * vec2(%d.0), 0.0).%s; \n",
+                 n % 4, src_tex, n, swiz);
         }
     }
 
     if (use_ar) {
-        GLSL("color = mix(color, clamp(color, lo, hi), "$"); \n",
+        GLSL("ca = mix(ca, clamp(ca, lo, hi), "$"); \n",
              sh_const_float(sh, "antiring", params->antiring));
     }
 
-    GLSL("color *= vec4("$"); \n", SH_FLOAT(scale));
-    if (!(comp_mask & (1 << PL_CHANNEL_A)))
-        GLSL("color.a = 1.0; \n");
-
+    GLSL("color.%s = "$" * ca; \n", swiz, SH_FLOAT(scale));
     GLSL("}\n");
     return true;
 }
