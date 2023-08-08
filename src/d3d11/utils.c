@@ -20,8 +20,8 @@
 #include "utils.h"
 
 // D3D11.3 message IDs, not present in mingw-w64 v9
-#define D3D11_MESSAGE_ID_CREATE_FENCE (0x300209)
-#define D3D11_MESSAGE_ID_DESTROY_FENCE (0x30020b)
+#define D3D11_MESSAGE_ID_CREATE_FENCE (0x30020c)
+#define D3D11_MESSAGE_ID_DESTROY_FENCE (0x30020a)
 
 #ifdef PL_HAVE_DXGI_DEBUG
 static enum pl_log_level log_level_override(unsigned int id)
