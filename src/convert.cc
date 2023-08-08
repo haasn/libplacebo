@@ -12,16 +12,93 @@
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
+ * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <math.h>
+#include <charconv>
+#include <cmath>
+#include <limits>
+#include <system_error>
 
-#include "common.h"
+#include <fast_float/fast_float.h>
 
-int print_hex(char *buf, unsigned int x)
+#include "pl_string.h"
+
+extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double value );
+
+namespace {
+
+template <typename T>
+concept has_std_to_chars = requires(char *begin, char *end, T &n)
 {
-    static const char hexdigits[16] = "0123456789abcdef";
+    std::to_chars(begin, end, n);
+};
+
+template <typename T, typename... Args>
+static inline int to_chars(char *buf, size_t len, T n, Args ...args)
+{
+    if constexpr (has_std_to_chars<T>) {
+        auto [ptr, ec] = std::to_chars(buf, buf + len, n, args...);
+        return ec == std::errc() ? ptr - buf : 0;
+    } else {
+        static_assert(std::is_same_v<float, T> || std::is_same_v<double, T>,
+                      "Not implemented!");
+        // FIXME: Fallback for GCC <= 10 currently required for MinGW-w64 on
+        // Ubuntu 22.04. Remove this when Ubuntu 24.04 is released, as it will
+        // provide newer MinGW-w64 GCC and it will be safe to require it.
+        return ccStrPrintDouble(buf, len, std::numeric_limits<T>::max_digits10, n);
+    }
+}
+
+template <typename T>
+concept has_std_from_chars = requires(const char *begin, const char *end, T &n)
+{
+    std::from_chars(begin, end, n);
+};
+
+template <typename T, typename... Args>
+static inline bool from_chars(pl_str str, T &n, Args ...args)
+{
+    if constexpr (has_std_from_chars<T>) {
+        auto [ptr, ec] = std::from_chars((const char *) str.buf,
+                                         (const char *) str.buf + str.len,
+                                         n, args...);
+        return ec == std::errc();
+    } else {
+        static_assert(std::is_same_v<float, T> || std::is_same_v<double, T>,
+                      "Not implemented!");
+        // FIXME: Fallback for libc++, as it does not implement floating-point
+        // variant of std::from_chars. Remove this when appropriate.
+        auto [ptr, ec] = fast_float::from_chars((const char *) str.buf,
+                                                (const char *) str.buf + str.len,
+                                                n, args...);
+        return ec == std::errc();
+    }
+}
+
+}
+
+#define CHAR_CONVERT(name, type, ...)                           \
+    int pl_str_print_##name(char *buf, size_t len, type n)      \
+    {                                                           \
+        return to_chars(buf, len, n __VA_OPT__(,) __VA_ARGS__); \
+    }                                                           \
+    bool pl_str_parse_##name(pl_str str, type *n)               \
+    {                                                           \
+        return from_chars(str, *n __VA_OPT__(,) __VA_ARGS__);   \
+    }
+
+// CHAR_CONVERT(hex, unsigned short, 16)
+// CHAR_CONVERT(int, int)
+// CHAR_CONVERT(uint, unsigned int)
+// CHAR_CONVERT(int64, int64_t)
+// CHAR_CONVERT(uint64, uint64_t)
+// CHAR_CONVERT(float, float)
+// CHAR_CONVERT(double, double)
+
+extern "C" int print_hex(char *buf, unsigned int x)
+{
+    static const char hexdigits[] = "0123456789abcdef";
     const int nibbles0 = __builtin_clz(x | 1) >> 2;
     buf -= nibbles0;
 
@@ -185,7 +262,7 @@ static inline int ccStrPrintLength64( uint64_t n )
     return size;
 }
 
-int ccStrPrintInt32( char *str, int32_t n )
+extern "C" int ccStrPrintInt32( char *str, int32_t n )
 {
     int sign, size, retsize, pos;
     uint32_t val32;
@@ -229,7 +306,7 @@ int ccStrPrintInt32( char *str, int32_t n )
     return retsize;
 }
 
-int ccStrPrintUint32( char *str, uint32_t n )
+extern "C" int ccStrPrintUint32( char *str, uint32_t n )
 {
     int size, retsize, pos;
     uint32_t val32;
@@ -266,7 +343,7 @@ int ccStrPrintUint32( char *str, uint32_t n )
     return retsize;
 }
 
-int ccStrPrintInt64( char *str, int64_t n )
+extern "C" int ccStrPrintInt64( char *str, int64_t n )
 {
     int sign, size, retsize, pos;
     uint64_t val64;
@@ -310,7 +387,7 @@ int ccStrPrintInt64( char *str, int64_t n )
     return retsize;
 }
 
-int ccStrPrintUint64( char *str, uint64_t n )
+extern "C" int ccStrPrintUint64( char *str, uint64_t n )
 {
     int size, retsize, pos;
     uint64_t val64;
@@ -357,7 +434,7 @@ int ccStrPrintUint64( char *str, uint64_t n )
 static const double ccStrPrintBiasTable[CC_STR_PRINT_DOUBLE_MAX_DECIMAL+1] =
 { 0.5, 0.05, 0.005, 0.0005, 0.00005, 0.000005, 0.0000005, 0.00000005, 0.000000005, 0.0000000005, 0.00000000005, 0.000000000005, 0.0000000000005, 0.00000000000005, 0.000000000000005, 0.0000000000000005, 0.00000000000000005, 0.000000000000000005, 0.0000000000000000005, 0.00000000000000000005, 0.000000000000000000005, 0.0000000000000000000005, 0.00000000000000000000005, 0.000000000000000000000005, 0.0000000000000000000000005 };
 
-int ccStrPrintDouble( char *str, int bufsize, int decimals, double value )
+extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double value )
 {
     int size, offset, index;
     int32_t frac, accumsub;
@@ -448,7 +525,7 @@ error:
 
 #define CC_CHAR_IS_DELIMITER(c) ((c)<=' ')
 
-int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint )
+extern "C" int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint )
 {
   int i, negflag;
   char c;
@@ -488,7 +565,7 @@ int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint )
   return 1;
 }
 
-int ccSeqParseUint64( char *seq, int seqlength, uint64_t *retint )
+extern "C" int ccSeqParseUint64( char *seq, int seqlength, uint64_t *retint )
 {
   int i;
   char c;
@@ -544,7 +621,7 @@ static inline double ccExp10(double x)
     return pow(10.0, x);
 }
 
-int ccSeqParseDouble( char *seq, int seqlength, double *retdouble )
+extern "C" int ccSeqParseDouble( char *seq, int seqlength, double *retdouble )
 {
   int i, negflag;
   char c;

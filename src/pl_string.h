@@ -19,6 +19,8 @@
 
 #include "common.h"
 
+PL_API_BEGIN
+
 typedef struct pl_str {
     uint8_t *buf;
     size_t len;
@@ -93,10 +95,23 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
                                  const void *args)
     PL_PRINTF(3, 0);
 
+// Locale-invariant number printing
+// int pl_str_print_hex(char *buf, size_t len, unsigned short n);
+// int pl_str_print_int(char *buf, size_t len, int n);
+// int pl_str_print_uint(char *buf, size_t len, unsigned int n);
+// int pl_str_print_int64(char *buf, size_t len, int64_t n);
+// int pl_str_print_uint64(char *buf, size_t len, uint64_t n);
+// int pl_str_print_float(char *buf, size_t len, float n);
+// int pl_str_print_double(char *buf, size_t len, double n);
+
 // Locale-invariant number parsing
-bool pl_str_parse_double(pl_str str, double *out);
+// bool pl_str_parse_hex(pl_str str, unsigned short *out);
+// bool pl_str_parse_int(pl_str str, int *out);
+// bool pl_str_parse_uint(pl_str str, unsigned int *out);
 bool pl_str_parse_int64(pl_str str, int64_t *out);
 bool pl_str_parse_uint64(pl_str str, uint64_t *out);
+// bool pl_str_parse_float(pl_str str, float *out);
+bool pl_str_parse_double(pl_str str, double *out);
 
 static inline bool pl_str_parse_float(pl_str str, float *out)
 {
@@ -349,3 +364,5 @@ void pl_str_builder_vprintf_c(pl_str_builder builder, const char *fmt, va_list a
 // Helper macros to deal with the non-portability of __VA_OPT__(,)
 #define _contains_fmt_chars(fmt, ...)   (strchr(fmt, '%'))
 #define _get_fmt(fmt, ...)              fmt
+
+PL_API_END
