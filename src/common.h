@@ -18,7 +18,18 @@
 #pragma once
 
 #define __STDC_FORMAT_MACROS
+
+#ifdef __cplusplus
+#include <version>
+#endif
+
+#if !defined(__cplusplus) || defined(__cpp_lib_stdatomic_h)
+#define PL_HAVE_STDATOMIC
+#endif
+
+#ifdef PL_HAVE_STDATOMIC
 #include <stdatomic.h>
+#endif
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -154,12 +165,16 @@ static inline size_t pl_lcm(size_t x, size_t y)
 # define pl_debug_abort() do {} while (0)
 #endif
 
+#ifdef PL_HAVE_STDATOMIC
+
 // Refcounting helpers
-typedef _Atomic uint32_t pl_rc_t;
+typedef atomic_uint_fast32_t pl_rc_t;
 #define pl_rc_init(rc)  atomic_init(rc, 1)
 #define pl_rc_ref(rc)   ((void) atomic_fetch_add_explicit(rc, 1, memory_order_acquire))
 #define pl_rc_deref(rc) (atomic_fetch_sub_explicit(rc, 1, memory_order_release) == 1)
 #define pl_rc_count(rc)  atomic_load(rc)
+
+#endif
 
 #define pl_unreachable() (assert(!"unreachable"), __builtin_unreachable())
 

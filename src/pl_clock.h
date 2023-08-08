@@ -61,7 +61,7 @@ static inline pl_clock_t pl_clock_now(void)
 
 #else
 
-    struct timespec tp = {0};
+    struct timespec tp = { .tv_sec = 0, .tv_nsec = 0 };
 #if defined(PL_CLOCK_MONOTONIC_RAW)
     clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
 #elif defined(PL_CLOCK_TIMESPEC_GET)
