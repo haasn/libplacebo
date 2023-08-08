@@ -41,7 +41,7 @@ static inline pl_str pl_str0(const char *str)
 static inline pl_str pl_strdup(void *alloc, pl_str str)
 {
     return (pl_str) {
-        .buf = str.len ? pl_memdup(alloc, str.buf, str.len) : NULL,
+        .buf = (uint8_t *) (str.len ? pl_memdup(alloc, str.buf, str.len) : NULL),
         .len = str.len,
     };
 }
@@ -141,7 +141,7 @@ static inline pl_str pl_str_take(pl_str str, size_t len)
 static inline pl_str pl_str_drop(pl_str str, size_t len)
 {
     if (len >= str.len)
-        return (pl_str) {0};
+        return (pl_str) { .buf = NULL, .len = 0 };
 
     str.buf += len;
     str.len -= len;
