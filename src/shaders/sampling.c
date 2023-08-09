@@ -962,63 +962,52 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         [SEP_VERT]  = "ortho (vert)",
     };
 
-    char swiz[5];
-    const char *ftype = sh_float_type(sh_tex_swiz(swiz, comp_mask));
-
     describe_filter(sh, &params->filter, names[pass], ratio[pass], ratio[pass]);
-    GLSL("// pl_shader_sample_ortho                         \n"
-         "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);            \n"
-         "{                                                 \n"
-         "vec2 pos = "$", pt = "$";                         \n"
-         "vec2 size = vec2(textureSize("$", 0));            \n"
-         "vec2 dir = vec2(%d.0, %d.0);                      \n"
-         "pt *= dir;                                        \n"
-         "vec2 fcoord2 = fract(pos * size - vec2(0.5));     \n"
-         "float fcoord = dot(fcoord2, dir);                 \n"
-         "vec2 base = pos - fcoord * pt - pt * vec2(%d.0);  \n"
-         "vec4 ws;                                          \n"
-         "%s c, ca;                                         \n",
-         pos, pt, src_tex,
-         dir[pass][0], dir[pass][1],
-         N / 2 - 1, ftype);
 
+    char swiz0[5];
+    const char *ftype0 = sh_float_type(sh_tex_swiz(swiz0, comp_mask));
+    ident_t ftype = sh_fresh(sh, "ftype");
+    ident_t swiz = sh_fresh(sh, "swiz");
+    GLSLH("#define "$" %s\n" \
+          "#define "$" %s\n",
+          ftype, ftype0, swiz, swiz0);
+
+    float denom = PL_MAX(1, width - 1); // avoid division by zero
     bool use_ar = params->antiring > 0 && ratio[pass] > 1.0;
-    if (use_ar) {
-        GLSL("%s hi = %s(0.0); \n"
-             "%s lo = %s(1e9); \n",
-             ftype, ftype, ftype, ftype);
+
+#pragma GLSL /* pl_shader_sample_ortho */                                      \
+    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                                     \
+    {                                                                          \
+    vec2 pos = $pos, pt = $pt;                                                 \
+    vec2 size = vec2(textureSize($src_tex, 0));                                \
+    vec2 dir = vec2(${const float:dir[pass][0]}, ${const float:dir[pass][1]}); \
+    pt *= dir;                                                                 \
+    vec2 fcoord2 = fract(pos * size - vec2(0.5));                              \
+    float fcoord = dot(fcoord2, dir);                                          \
+    vec2 base = pos - fcoord * pt - pt * vec2(${const float:N / 2 - 1});       \
+    vec4 ws;                                                                   \
+    $ftype c, ca;                                                              \
+    @if (use_ar) {                                                             \
+        $ftype hi = $ftype(0.0);                                               \
+        $ftype lo = $ftype(1e9);                                               \
+    @}                                                                         \
+    @for (n < N) {                                                             \
+        @if @(n % 4 == 0)                                                      \
+            ws = $lut(vec2(float(@n / 4) / ${const float:denom}, fcoord));     \
+        @if @(vars.use_ar && (n == vars.n / 2 - 1 || n == vars.n / 2)) {       \
+            c = textureLod($src_tex, base + pt * @n.0, 0.0).$swiz;             \
+            ca += ws[@n % 4] * c;                                              \
+            lo = min(lo, c);                                                   \
+            hi = max(hi, c);                                                   \
+        @} else {                                                              \
+            ca += ws[@n % 4] * textureLod($src_tex, base + pt * vec2(@n.0), 0.0).$swiz; \
+        @}                                                                     \
+    @}                                                                         \
+    @if (use_ar)                                                               \
+        ca = mix(ca, clamp(ca, lo, hi), ${const float:params->antiring});      \
+    color.$swiz = ${const float:scale} * ca;                                   \
     }
 
-    // Dispatch all of the samples
-    GLSL("// scaler samples\n");
-    for (int n = 0; n < N; n++) {
-        // Load the right weight for this instance. For every 4th weight, we
-        // need to fetch another LUT entry. Otherwise, just use the previous
-        if (n % 4 == 0) {
-            float denom = PL_MAX(1, width - 1); // avoid division by zero
-            GLSL("ws = "$"(vec2(%f, fcoord)); \n", lut, (n / 4) / denom);
-        }
-
-        // Load the input texel and add it to the running sum
-        if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
-            GLSL("c = textureLod("$", base + pt * vec2(%d.0), 0.0).%s; \n"
-                 "ca += ws[%d] * c; \n"
-                 "lo = min(lo, c);  \n"
-                 "hi = max(hi, c);  \n",
-                 src_tex, n, swiz, n % 4);
-        } else {
-            GLSL("ca += ws[%d] * textureLod("$", base + pt * vec2(%d.0), 0.0).%s; \n",
-                 n % 4, src_tex, n, swiz);
-        }
-    }
-
-    if (use_ar) {
-        GLSL("ca = mix(ca, clamp(ca, lo, hi), "$"); \n",
-             sh_const_float(sh, "antiring", params->antiring));
-    }
-
-    GLSL("color.%s = "$" * ca; \n", swiz, SH_FLOAT(scale));
-    GLSL("}\n");
     return true;
 }
 
