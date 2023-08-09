@@ -1,6 +1,6 @@
 #line {{ block.linenr }}
 {% if block.refs %}
-    pl_str_append_asprintf(alloc, buf,
+    pl_str_append_asprintf_c(alloc, buf,
     {% for line in block.lines %}
         {{ line.fmtstr }}{{ ',' if loop.last }}
     {% endfor %}

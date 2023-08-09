@@ -313,7 +313,7 @@ size_t _glsl_330_fn(void *alloc, pl_str *buf, const uint8_t *ptr)
     } vars;
     memcpy(&vars, ptr, sizeof(vars));
 
-    pl_str_append_asprintf(alloc, buf,
+    pl_str_append_asprintf_c(alloc, buf,
         "/* pl_shader_sample_bicubic */\n"
         "    vec4 color;\n"
         "    {\n"
