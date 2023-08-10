@@ -64,7 +64,7 @@ class Macro(object):
 
     # yields output lines
     @staticmethod
-    def process_file(lines):
+    def process_file(lines, strip=False):
         macro = None
         macros = []
 
@@ -87,7 +87,7 @@ class Macro(object):
                     line = re.sub(f'^\s{{1,{leading_spaces}}}', '', line)
                 if more_lines := line.endswith('\\'):
                     line = line[:-1]
-                if statement := Statement.parse(line, linenr=linenr):
+                if statement := Statement.parse(line, strip=strip, linenr=linenr):
                     macro.push_line(statement)
                 if more_lines:
                     continue # stay in macro

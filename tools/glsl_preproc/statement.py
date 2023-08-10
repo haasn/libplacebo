@@ -36,10 +36,16 @@ VAR_TYPES = {
     'dynamic float':    Fmt.FLOAT_DYN,
 }
 
-def stringify(value):
-    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '\\n"'
+def stringify(value, strip):
+    end = '\\n"'
+    if strip:
+        end = '"'
+        value = re.sub(r'(?:\/\*[^\*]*\*\/|\/\/[^\n]+|^\s*)', '', value)
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + end
 
-def commentify(value):
+def commentify(value, strip):
+    if strip:
+        return ''
     return '/*' + value.replace('/*', '[[').replace('*/', ']]') + '*/'
 
 # Represents a statement + its enclosed variables
@@ -66,14 +72,15 @@ class GLSLLine(Statement):
             self.fmt = fmt
             self.var = var
 
-    def __init__(self, text, **kwargs):
+    def __init__(self, text, strip=False, **kwargs):
         super().__init__(**kwargs)
         self.refs = []
+        self.strip = strip
 
         # produce two versions of line, one for printf() and one for append()
         text = text.rstrip()
-        self.rawstr = stringify(text)
-        self.fmtstr = stringify(re.sub(VAR_PATTERN, self.handle_var, text.replace('%', '%%')))
+        self.rawstr = stringify(text, strip)
+        self.fmtstr = stringify(re.sub(VAR_PATTERN, self.handle_var, text.replace('%', '%%')), strip)
 
     def handle_var(self, match):
         # local @var
@@ -95,7 +102,7 @@ class GLSLLine(Statement):
         ))
 
         if fmt.ctype == 'ident_t':
-            return commentify(name) + fmt.fmtstr
+            return commentify(name, self.strip) + fmt.fmtstr
         else:
             return fmt.fmtstr
 
@@ -247,7 +254,7 @@ PARSERS = {
     PATTERN_BRACE:      lambda _, **kw: EndBrace(**kw),
 }
 
-def parse_line(text_orig, **kwargs):
+def parse_line(text_orig, strip, **kwargs):
     # skip empty lines
     text = text_orig.strip()
     if not text:
@@ -261,6 +268,6 @@ def parse_line(text_orig, **kwargs):
         raise SyntaxError('Syntax error in directive: ' + text.lstrip())
     else:
         # default to literal GLSL line
-        return GLSLLine(text_orig, **kwargs)
+        return GLSLLine(text_orig, strip, **kwargs)
 
 Statement.parse = parse_line
