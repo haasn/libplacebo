@@ -71,13 +71,20 @@ class Macro(object):
         for linenr, line_orig in enumerate(lines, start=1):
             line = line_orig.rstrip()
 
+            # Strip leading spaces, due to C indent. Skip first pragma line.
+            if macro and leading_spaces is None:
+                leading_spaces = len(line) - len(line.lstrip())
+
             # check for start of macro
             if not macro:
+                leading_spaces = None
                 if result := re.match(PATTERN_PRAGMA, line):
                     macro = Macro(linenr, type=result['pragma'])
                     line = result['rest'] # strip pragma prefix
 
             if macro:
+                if leading_spaces:
+                    line = re.sub(f'^\s{{1,{leading_spaces}}}', '', line)
                 if more_lines := line.endswith('\\'):
                     line = line[:-1]
                 if statement := Statement.parse(line, linenr=linenr):
