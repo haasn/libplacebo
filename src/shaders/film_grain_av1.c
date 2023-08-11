@@ -835,11 +835,13 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
 
     // Load the data vector which holds the offsets
     if (is_compute) {
-        GLSLH("shared uint data; \n");
+        ident_t id = sh_fresh(sh, "data");
+        GLSLH("shared uint "$"; \n", id);
         GLSL("if (gl_LocalInvocationIndex == 0u)    \n"
-             "    data = uint("$"(block_id));       \n"
-             "barrier();                            \n",
-             offsets);
+             "    "$" = uint("$"(block_id));        \n"
+             "barrier();                            \n"
+             "uint data = "$";                      \n",
+             id, offsets, id);
     } else {
         GLSL("uint data = uint("$"(block_id)); \n", offsets);
     }
