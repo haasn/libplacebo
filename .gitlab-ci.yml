@@ -46,6 +46,7 @@ win32:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Ddebug-abort=true
                       -Dd3d11=enabled
                       --cross-file /opt/crossfiles/i686-w64-mingw32.meson
         - ninja -C build
@@ -61,6 +62,7 @@ win64:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Ddebug-abort=true
                       -Dd3d11=enabled
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
@@ -86,6 +88,7 @@ macos:
         - meson build --buildtype release
                       -Ddefault_library=both
                       -Dtests=true
+                      -Ddebug-abort=true
                       -Dc_args='-mmacosx-version-min=10.11 -Wunguarded-availability'
                       --werror
         - ninja -C build
@@ -117,6 +120,7 @@ llvmpipe:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Ddebug-abort=true
                       -Dc_args='-DCI_ALLOW_SW -DCI_MAXGL'
                       -Dshaderc=enabled
                       -Dglslang=enabled
@@ -167,6 +171,7 @@ sanitize:
             meson build --buildtype debugoptimized
                         --werror
                         -Dtests=true
+                        -Ddebug-abort=true
                         -Dc_args='-DCI_MAXGL -Wno-deprecated-declarations'
                         -Db_sanitize=address,undefined
                         -Db_lundef=false
@@ -187,6 +192,7 @@ msan:
                         --werror
                         --default-library static
                         -Dtests=true
+                        -Ddebug-abort=true
                         -Dc_args='-DMSAN -DCI_MAXGL -Wno-deprecated-declarations'
                         -Dglslang=disabled
                         -Db_sanitize=memory
