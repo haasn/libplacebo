@@ -96,8 +96,8 @@ class FmtSpec(object):
 class Fmt(object):
     IDENT       = FmtSpec()
     INT_CONST   = FmtSpec(ctype='int',      fmtstr='%d')
-    UINT_CONST  = FmtSpec(ctype='unsigned', fmtstr='%u')
-    FLOAT_CONST = FmtSpec(ctype='float',    fmtstr='%f')
+    UINT_CONST  = FmtSpec(ctype='unsigned', fmtstr='%uu')
+    FLOAT_CONST = FmtSpec(ctype='float',    fmtstr='%ff')
     INT_VAR     = FmtSpec(wrap_expr=FmtSpec.wrap_var('int'))
     UINT_VAR    = FmtSpec(wrap_expr=FmtSpec.wrap_var('uint'))
     FLOAT_VAR   = FmtSpec(wrap_expr=FmtSpec.wrap_var('float'))
