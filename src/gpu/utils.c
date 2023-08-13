@@ -662,9 +662,10 @@ bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params
     assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
     GLSL("vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                        \n"
          "ivec3 pos = ivec3(gl_GlobalInvocationID);                     \n"
-         "ivec3 tex_pos = pos + ivec3(%d, %d, %d);                      \n"
-         "int base = %zu + pos.z * "$" + pos.y * "$" + pos.x * "$";     \n",
-         params->rc.x0, params->rc.y0, params->rc.z0, params->buf_offset,
+         "ivec3 tex_pos = pos + ivec3("$", "$", "$");                   \n"
+         "int base = "$" + pos.z * "$" + pos.y * "$" + pos.x * "$";     \n",
+         SH_INT_DYN(params->rc.x0), SH_INT_DYN(params->rc.y0), SH_INT_DYN(params->rc.z0),
+         SH_INT_DYN(params->buf_offset),
          SH_INT(params->depth_pitch / fmt->texel_align),
          SH_INT(params->row_pitch / fmt->texel_align),
          SH_INT(fmt->texel_size / fmt->texel_align));
@@ -741,10 +742,11 @@ bool pl_tex_download_texel(pl_gpu gpu, const struct pl_tex_transfer_params *para
 
     assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
     GLSL("ivec3 pos = ivec3(gl_GlobalInvocationID);                     \n"
-         "ivec3 tex_pos = pos + ivec3(%d, %d, %d);                      \n"
-         "int base = %zu + pos.z * "$" + pos.y * "$" + pos.x * "$";     \n"
+         "ivec3 tex_pos = pos + ivec3("$", "$", "$");                   \n"
+         "int base = "$" + pos.z * "$" + pos.y * "$" + pos.x * "$";     \n"
          "vec4 color = imageLoad("$", %s(tex_pos));                     \n",
-         params->rc.x0, params->rc.y0, params->rc.z0, params->buf_offset,
+         SH_INT_DYN(params->rc.x0), SH_INT_DYN(params->rc.y0), SH_INT_DYN(params->rc.z0),
+         SH_INT_DYN(params->buf_offset),
          SH_INT(params->depth_pitch / fmt->texel_align),
          SH_INT(params->row_pitch / fmt->texel_align),
          SH_INT(fmt->texel_size / fmt->texel_align),
