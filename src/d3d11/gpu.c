@@ -500,14 +500,8 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     }
 
     if (p->fl >= D3D_FEATURE_LEVEL_10_0) {
-        // Direct3D 11 runtime only guarantees that allocations within the
-        // maximum resource size are supported, but an app can try to allocate
-        // more memory for a resource than the maximum resource size specifies.
-        // That is, the Direct3D 11 runtime allows these memory allocation
-        // attempts in the event that the hardware might support them.
-        // Instead hardcoding limit here, allow it to be resolved during runtime.
-        gpu->limits.max_buffer_texels = UINT32_MAX;
-        // Use UINT32_MAX for parity with Vulkan.
+        gpu->limits.max_buffer_texels =
+            1 << D3D11_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP;
     }
 
     if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
