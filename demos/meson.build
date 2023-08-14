@@ -113,11 +113,15 @@ else
   # Graphical demo programs
   executable('colors', 'colors.c',
     dependencies: [ dep, pl_clock, libm ],
+    link_args: link_args,
+    link_depends: link_depends,
   )
 
   if sdl_image.found()
     executable('sdlimage', 'sdlimage.c',
       dependencies: [ dep, libm, sdl_image ],
+      link_args: link_args,
+      link_depends: link_depends,
     )
   endif
 
@@ -131,6 +135,8 @@ else
     endif
     executable('plplay', 'plplay.c',
       dependencies: plplay_deps,
+      link_args: link_args,
+      link_depends: link_depends,
       install: true,
     )
   endif
@@ -142,5 +148,7 @@ if components.get('vk-proc-addr')
   executable('video-filtering', 'video-filtering.c',
     dependencies: [ libplacebo, vulkan_loader ],
     c_args: '-O2',
+    link_args: link_args,
+    link_depends: link_depends,
   )
 endif

@@ -15,6 +15,9 @@ elif has_execinfo
   build_deps += libexecinfo
 endif
 
+link_args = []
+link_depends = []
+
 # Looks like meson in certain configuration returns ' ' instead of empty string
 mingw32 = cc.get_define('__MINGW32__').strip()
 if host_machine.system() == 'windows' and mingw32 != '' and host_machine.cpu() in ['aarch64', 'arm', 'x86_64']
@@ -28,7 +31,8 @@ if host_machine.system() == 'windows' and mingw32 != '' and host_machine.cpu() i
                             output : ['ucrt_math.lib'],
                             input : 'ucrt_math.def',
                             command : [dlltool, '-d', '@INPUT@', '-l', '@OUTPUT@'])
-  build_deps += declare_dependency(link_with: ucrt_math)
+  link_args += ucrt_math.full_path()
+  link_depends += ucrt_math
   # MinGW-w64 inlines functions like powf, rewriting them to pow. We want to use
   # the powf specialization from UCRT, so disable inlining.
   add_project_arguments(['-D__CRT__NO_INLINE'], language: ['c', 'cpp'])
@@ -221,6 +225,7 @@ lib = library('placebo', sources,
   soversion: apiver,
   include_directories: inc,
   link_args: link_args,
+  link_depends: link_depends,
   gnu_symbol_visibility: 'hidden',
   name_prefix: 'lib'
 )
@@ -290,7 +295,12 @@ if get_option('bench')
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 
-  bench = executable('bench', 'tests/bench.c', dependencies: [tdep_shared, vulkan_headers])
+  bench = executable('bench',
+    'tests/bench.c',
+    dependencies: [tdep_shared, vulkan_headers],
+    link_args: link_args,
+    link_depends: link_depends,
+  )
   test('benchmark', bench, is_parallel: false, timeout: 600)
 endif
 
@@ -299,6 +309,8 @@ if get_option('fuzz')
     executable('fuzz.' + f, 'tests/fuzz/' + f,
         objects: lib.extract_all_objects(recursive: false),
         dependencies: tdep_static,
+        link_args: link_args,
+        link_depends: link_depends,
     )
   endforeach
 endif
