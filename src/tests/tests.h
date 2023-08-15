@@ -129,18 +129,18 @@ static inline pl_log pl_test_logger(void)
     }                                                                           \
 } while (0)
 
-static inline void log_array(const uint8_t *a, const uint8_t *ref, size_t size)
+static inline void log_array(const uint8_t *a, const uint8_t *ref, size_t off, size_t size)
 {
     for (size_t n = 0; n < size; n++) {
         const char *prefix = "", *suffix = "";
         char terminator = ' ';
-        if (a[n] != ref[n]) {
+        if (a[n + off] != ref[n + off]) {
             prefix = "\033[31;1m";
             suffix = "\033[0m";
         }
         if (n+1 == size || n % 16 == 15)
             terminator = '\n';
-        fprintf(stderr, "%s%02"PRIx8"%s%c", prefix, a[n], suffix, terminator);
+        fprintf(stderr, "%s%02"PRIx8"%s%c", prefix, a[n + off], suffix, terminator);
     }
 }
 
@@ -157,11 +157,12 @@ static inline void require_memeq(const void *aptr, const void *bptr, size_t size
                         "at position %zu: 0x%02"PRIx8" != 0x%02"PRIx8"\n\n",
                 astr, bstr, sizestr, file, line, i, a[i], b[i]);
 
-        const size_t logsize = PL_MIN(size, PL_MAX(i+2, 512));
-        fprintf(stderr, "first %zu bytes of '%s':\n", logsize, astr);
-        log_array(a, b, logsize);
-        fprintf(stderr, "\nfirst %zu bytes of '%s':\n", logsize, bstr);
-        log_array(b, a, logsize);
+        size_t start = i >= 256 ? i - 256 : 0;
+        size_t end   = PL_MIN(size, i + 256);
+        fprintf(stderr, "%zu bytes of '%s' at offset %zu:\n", end - start, astr, start);
+        log_array(a, b, start, end - start);
+        fprintf(stderr, "\n%zu bytes of '%s' at offset %zu:\n", end - start, bstr, start);
+        log_array(b, a, start, end - start);
         exit(1);
     }
 }
