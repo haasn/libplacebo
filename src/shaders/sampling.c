@@ -986,7 +986,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     float fcoord = dot(fcoord2, dir);                                          \
     vec2 base = pos - fcoord * pt - pt * vec2(${const float:N / 2 - 1});       \
     vec4 ws;                                                                   \
-    $ftype c, ca;                                                              \
+    $ftype c, ca = $ftype(0.0);                                                \
     @if (use_ar) {                                                             \
         $ftype hi = $ftype(0.0);                                               \
         $ftype lo = $ftype(1e9);                                               \
