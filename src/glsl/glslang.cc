@@ -104,8 +104,18 @@ struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
         return res;
     }
 
+    SpvOptions options = {
+        .generateDebugInfo = false,
+        .stripDebugInfo = true,
+        .disableOptimizer = false,
+        .optimizeSize = true,
+        .disassemble = false,
+        .validate = true,
+        .emitNonSemanticShaderDebugInfo = false,
+        .emitNonSemanticShaderDebugSource = false,
+    };
     std::vector<unsigned int> spirv;
-    GlslangToSpv(*prog->getIntermediate(lang), spirv);
+    GlslangToSpv(*prog->getIntermediate(lang), spirv, &options);
 
     res->success = true;
     res->size = spirv.size() * sizeof(unsigned int);
