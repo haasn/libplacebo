@@ -107,9 +107,7 @@ struct pl_peak_detect_params {
     // the cutoff period (= 1 / cutoff frequency) in frames. Frequencies below
     // this length will be suppressed. This helps block out annoying
     // "sparkling" or "flickering" due to small variations in frame-to-frame
-    // brightness.
-    //
-    // If left unset, this defaults to 100.0.
+    // brightness. If left as 0.0, this smoothing is completely disabled.
     float smoothing_period;
 
     // In order to avoid reacting sluggishly on scene changes as a result of

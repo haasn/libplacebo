@@ -1160,7 +1160,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     }
 
     // Use an IIR low-pass filter to smooth out the detected values
-    const float coeff = iir_coeff(PL_DEF(params->smoothing_period, 100.0f));
+    const float coeff = iir_coeff(params->smoothing_period);
     obj->peak.avg_pq += coeff * (avg_pq - obj->peak.avg_pq);
     obj->peak.max_pq += coeff * (max_pq - obj->peak.max_pq);
 

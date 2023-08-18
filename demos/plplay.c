@@ -1293,7 +1293,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 *ppar = pl_peak_detect_default_params;
             nk_property_float(nk, "Threshold low", 0.0, &ppar->scene_threshold_low, 20.0, 0.5, 0.005);
             nk_property_float(nk, "Threshold high", 0.0, &ppar->scene_threshold_high, 20.0, 0.5, 0.005);
-            nk_property_float(nk, "Smoothing period", 1.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
+            nk_property_float(nk, "Smoothing period", 0.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
             nk_property_float(nk, "Minimum peak", 0.0, &ppar->minimum_peak, 10.0, 0.1, 0.01);
             nk_property_float(nk, "Peak percentile", 95.0, &ppar->percentile, 100.0, 0.01, 0.001);
             nk_checkbox_label(nk, "Allow 1-frame delay", &ppar->allow_delayed);
