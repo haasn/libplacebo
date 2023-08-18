@@ -1042,8 +1042,9 @@ static void sh_color_map_uninit(pl_gpu gpu, void *ptr)
 
 static inline float iir_coeff(float rate)
 {
-    float a = 1.0 - cos(1.0 / rate);
-    return sqrt(a*a + 2*a) - a;
+    if (!rate)
+        return 1.0f;
+    return 1.0f - expf(-1.0f / rate);
 }
 
 static float measure_peak(const struct peak_buf_data *data, float percentile)
