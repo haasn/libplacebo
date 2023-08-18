@@ -116,6 +116,15 @@ uint32_t pl_fmt_fourcc(pl_fmt fmt);
 // Compute the total size (in bytes) of a texture transfer operation
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par);
 
+// Split a tex transfer into slices. For emulated formats, `texel_fmt` gives
+// the format of the underlying texel buffer.
+//
+// Returns the number of slices, or 0 on error (e.g. no SSBOs available).
+// `out_slices` must be freed by caller (on success).
+int pl_tex_transfer_slices(pl_gpu gpu, pl_fmt texel_fmt,
+                           const struct pl_tex_transfer_params *params,
+                           struct pl_tex_transfer_params **out_slices);
+
 // Helper that wraps pl_tex_upload/download using texture upload buffers to
 // ensure that params->buf is always set.
 bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params);

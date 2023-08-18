@@ -460,6 +460,67 @@ size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
     return (d - 1) * par->depth_pitch + (h - 1) * par->row_pitch + w * pixel_pitch;
 }
 
+int pl_tex_transfer_slices(pl_gpu gpu, pl_fmt texel_fmt,
+                           const struct pl_tex_transfer_params *params,
+                           struct pl_tex_transfer_params **out_slices)
+{
+    PL_ARRAY(struct pl_tex_transfer_params) slices = {0};
+    size_t max_size = gpu->limits.max_ssbo_size;
+
+    pl_fmt fmt = params->tex->params.format;
+    if (fmt->emulated) {
+        pl_assert(texel_fmt);
+        size_t max_texel = gpu->limits.max_buffer_texels * texel_fmt->texel_size;
+        max_size = PL_MIN(max_size, max_texel);
+    }
+
+    if (max_size < fmt->texel_size)
+        return 0;
+
+    int slice_w = pl_rect_w(params->rc);
+    int slice_h = pl_rect_h(params->rc);
+    int slice_d = pl_rect_d(params->rc);
+
+    slice_d = PL_MIN(slice_d, max_size / params->depth_pitch);
+    if (!slice_d) {
+        slice_d = 1;
+        slice_h = PL_MIN(slice_h, max_size / params->row_pitch);
+        if (!slice_h) {
+            slice_h = 1;
+            slice_w = PL_MIN(slice_w, max_size / fmt->texel_size);
+            pl_assert(slice_w);
+        }
+    }
+
+    for (int z = 0; z < pl_rect_d(params->rc); z += slice_d) {
+        for (int y = 0; y < pl_rect_h(params->rc); y += slice_h) {
+            for (int x = 0; x < pl_rect_w(params->rc); x += slice_w) {
+                struct pl_tex_transfer_params slice = *params;
+                slice.rc.x0 = params->rc.x0 + x;
+                slice.rc.y0 = params->rc.y0 + y;
+                slice.rc.z0 = params->rc.z0 + z;
+                slice.rc.x1 = PL_MIN(slice.rc.x0 + slice_w, params->rc.x1);
+                slice.rc.y1 = PL_MIN(slice.rc.y0 + slice_h, params->rc.y1);
+                slice.rc.z1 = PL_MIN(slice.rc.z0 + slice_d, params->rc.z1);
+
+                const size_t offset = z * params->depth_pitch +
+                                      y * params->row_pitch +
+                                      x * fmt->texel_size;
+                if (slice.ptr) {
+                    slice.ptr = (uint8_t *) slice.ptr + offset;
+                } else {
+                    slice.buf_offset += offset;
+                }
+
+                PL_ARRAY_APPEND(NULL, slices, slice);
+            }
+        }
+    }
+
+    *out_slices = slices.elem;
+    return slices.num;
+}
+
 bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     if (params->buf)
