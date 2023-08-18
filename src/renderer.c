@@ -989,7 +989,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (!pass->fbofmt[4])
+    if (!pass->fbofmt[4] || !stage)
         return false;
 
     bool ret = false;
@@ -1374,6 +1374,14 @@ static const enum pl_hook_stage plane_hook_stages[] = {
     [PLANE_XYZ]     = PL_HOOK_XYZ_INPUT,
 };
 
+static const enum pl_hook_stage plane_scaled_hook_stages[] = {
+    [PLANE_ALPHA]   = PL_HOOK_ALPHA_SCALED,
+    [PLANE_CHROMA]  = PL_HOOK_CHROMA_SCALED,
+    [PLANE_LUMA]    = 0, // never hooked
+    [PLANE_RGB]     = 0,
+    [PLANE_XYZ]     = 0,
+};
+
 static enum pl_lut_type guess_frame_lut_type(const struct pl_frame *frame,
                                              bool reversed)
 {
@@ -1752,6 +1760,7 @@ static bool pass_read_image(struct pass_state *pass)
             st->img.h = st->img.rect.y1 = src.new_h;
         }
 
+        pass_hook(pass, &st->img, plane_scaled_hook_stages[st->type]);
         ident_t sub = sh_subpass(sh, img_sh(pass, &st->img));
         if (!sub) {
             if (!img_tex(pass, &st->img)) {
