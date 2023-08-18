@@ -47,10 +47,6 @@
 // small slabs. (Default: 256 KB)
 #define MINIMUM_SLAB_SIZE (1LLU << 18)
 
-// Controls the maximum slab size, to avoid ballooning memory requirements
-// due to overzealous allocation of extra pages. (Default: 256 MB)
-#define MAXIMUM_SLAB_SIZE (1LLU << 28)
-
 // How long to wait before garbage collecting empty slabs. Slabs older than
 // this many invocations of `vk_malloc_garbage_collect` will be released.
 #define MAXIMUM_SLAB_AGE 8
@@ -718,8 +714,11 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
     // Otherwise, allocate a new vk_slab and append it to the list.
     VkDeviceSize slab_size = slab_pages * pagesize;
     pl_static_assert(MINIMUM_SLAB_SIZE <= PAGE_SIZE_ALIGN * MAXIMUM_PAGE_COUNT);
-    slab_size = PL_CLAMP(slab_size, MINIMUM_SLAB_SIZE, MAXIMUM_SLAB_SIZE);
+    const VkDeviceSize max_slab_size = ma->maximum_page_size * MINIMUM_PAGE_COUNT;
+    pl_assert(pagesize <= ma->maximum_page_size);
+    slab_size = PL_CLAMP(slab_size, MINIMUM_SLAB_SIZE, max_slab_size);
     slab_pages = slab_size / pagesize;
+    slab_size = slab_pages * pagesize; // max_slab_size may be npot2, trim excess
 
     struct vk_malloc_params params = pool->params;
     params.reqs.size = slab_size;
