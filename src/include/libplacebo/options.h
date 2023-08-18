@@ -108,7 +108,7 @@ PL_API const char *pl_options_save(pl_options opts);
 
 // Parse a `pl_options` struct from a key/value string, in standard syntax
 // "key1=value1,key2=value2,...", and updates `opts` with the new values.
-// Valid separators include whitespace, commas (,) and semicolons (;).
+// Valid separators include whitespace, commas (,) and (semi)colons (:;).
 //
 // Returns true if no errors occurred.
 PL_API bool pl_options_load(pl_options opts, const char *str);

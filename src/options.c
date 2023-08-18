@@ -364,7 +364,7 @@ bool pl_options_load(pl_options opts, const char *str)
 
     pl_str rest = pl_str0(str);
     while (rest.len) {
-        pl_str kv = pl_str_strip(pl_str_split_chars(rest, " ,;\n", &rest));
+        pl_str kv = pl_str_strip(pl_str_split_chars(rest, " ,;:\n", &rest));
         if (!kv.len)
             continue;
         pl_str v, k = pl_str_split_char(kv, '=', &v);
