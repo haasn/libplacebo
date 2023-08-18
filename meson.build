@@ -4,7 +4,7 @@ project('libplacebo', ['c', 'cpp'],
     'buildtype=debugoptimized',
     'warning_level=2',
     'c_std=c11',
-    'cpp_std=c++20',
+    'cpp_std=c++11',
   ],
   meson_version: '>=0.63',
   version: '@0@.@1@.@2@'.format(
