@@ -246,6 +246,9 @@ struct img {
     pl_shader sh;
     pl_tex tex;
 
+    // If true, created shaders will be set to unique
+    bool unique;
+
     // Information about what to log/disable/fallback to if the shader fails
     const char *err_msg;
     enum pl_render_error err_enum;
@@ -542,7 +545,7 @@ static pl_shader img_sh(struct pass_state *pass, struct img *img)
     }
 
     pl_assert(img->tex);
-    img->sh = pl_dispatch_begin(pass->rr->dp);
+    img->sh = pl_dispatch_begin_ex(pass->rr->dp, img->unique);
     pl_shader_sample_direct(img->sh, pl_sample_src( .tex = img->tex ));
 
     img->tex = NULL;
@@ -1731,44 +1734,32 @@ static bool pass_read_image(struct pass_state *pass)
                  src.rect.x1, src.rect.y1,
                  plane->flipped ? " (flipped) " : "");
 
-        pl_shader psh;
+        st->img.unique = true;
         pl_rect2d unscaled = { .x1 = src.new_w, .y1 = src.new_h };
         if (st->img.sh && st->img.w == src.new_w && st->img.h == src.new_h &&
             pl_rect2d_eq(src.rect, unscaled))
         {
             // Image rects are already equal, no indirect scaling needed
-            psh = st->img.sh;
         } else {
             src.tex = img_tex(pass, &st->img);
-            psh = pl_dispatch_begin_ex(rr->dp, true);
-            dispatch_sampler(pass, psh, &rr->samplers_src[i], SAMPLER_PLANE,
-                             NULL, &src);
+            st->img.tex = NULL;
+            st->img.sh = pl_dispatch_begin_ex(rr->dp, true);
+            dispatch_sampler(pass, st->img.sh, &rr->samplers_src[i],
+                             SAMPLER_PLANE, NULL, &src);
+            st->img.err_enum |= PL_RENDER_ERR_SAMPLING;
+            st->img.rect.x0 = st->img.rect.y0 = 0.0f;
+            st->img.w = st->img.rect.x1 = src.new_w;
+            st->img.h = st->img.rect.y1 = src.new_h;
         }
 
-        ident_t sub = sh_subpass(sh, psh);
+        ident_t sub = sh_subpass(sh, img_sh(pass, &st->img));
         if (!sub) {
-            // Can't merge shaders, so instead force FBO indirection here
-            struct img inter_img = {
-                .sh = psh,
-                .w = src.new_w,
-                .h = src.new_h,
-                .comps = src.components,
-            };
-
-            pl_tex inter_tex = img_tex(pass, &inter_img);
-            if (!inter_tex) {
-                PL_ERR(rr, "Failed dispatching subpass for plane.. disabling "
-                       "all plane shaders");
-                rr->errors |= PL_RENDER_ERR_SAMPLING  |
-                              PL_RENDER_ERR_DEBANDING |
-                              PL_RENDER_ERR_FILM_GRAIN;
+            if (!img_tex(pass, &st->img)) {
                 pl_dispatch_abort(rr->dp, &sh);
                 return false;
             }
 
-            psh = pl_dispatch_begin_ex(rr->dp, true);
-            pl_shader_sample_direct(psh, pl_sample_src( .tex = inter_tex ));
-            sub = sh_subpass(sh, psh);
+            sub = sh_subpass(sh, img_sh(pass, &st->img));
             pl_assert(sub);
         }
 
@@ -1780,7 +1771,7 @@ static bool pass_read_image(struct pass_state *pass)
         }
 
         // we don't need it anymore
-        pl_dispatch_abort(rr->dp, &psh);
+        pl_dispatch_abort(rr->dp, &st->img.sh);
     }
 
     GLSL("}\n");
