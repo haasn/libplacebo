@@ -36,27 +36,16 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
          "// pl_shader_deinterlace      \n"
          "{                             \n");
 
-    char swiz[5] = {0};
-    uint8_t num_comps = 0u;
     uint8_t comp_mask = PL_DEF(src->component_mask, 0xFu);
     comp_mask &= (1u << texparams->format->num_components) - 1u;
-    for (uint8_t comps = comp_mask; comps;) {
-        uint8_t c = __builtin_ctz(comps);
-        assert(c < 4 && num_comps < 4);
-        swiz[num_comps++] = "xyzw"[c];
-        comps &= ~(1u << c);
-    }
-
-    if (!num_comps) {
+    if (!comp_mask) {
         SH_FAIL(sh, "pl_shader_deinterlace: empty component mask?");
         return;
     }
 
-    GLSL("#define T %s \n", pl_var_glsl_type_name((struct pl_var) {
-        .type = PL_VAR_FLOAT,
-        .dim_v = num_comps,
-        .dim_m = 1,
-    }));
+    const uint8_t num_comps = sh_num_comps(comp_mask);
+    const char *swiz = sh_swizzle(comp_mask);
+    GLSL("#define T %s \n", sh_float_type(num_comps));
 
     ident_t pos, pt;
     ident_t cur = sh_bind(sh, src->cur.top, PL_TEX_ADDRESS_MIRROR,
