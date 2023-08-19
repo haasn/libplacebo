@@ -1104,6 +1104,9 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
                 .w = res.sh->output_w,
                 .h = res.sh->output_h,
                 .unique = img->unique,
+                .err_enum = PL_RENDER_ERR_HOOKS,
+                .err_msg = "Failed applying user hook",
+                .err_tex = hparams.tex, // if any
             };
             break;
 
