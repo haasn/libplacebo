@@ -1080,6 +1080,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
                 .rect = res.rect,
                 .w = res.tex->params.w,
                 .h = res.tex->params.h,
+                .unique = img->unique,
             };
             break;
 
@@ -1102,6 +1103,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
                 .rect = res.rect,
                 .w = res.sh->output_w,
                 .h = res.sh->output_h,
+                .unique = img->unique,
             };
             break;
 
