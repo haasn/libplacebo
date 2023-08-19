@@ -357,16 +357,19 @@ static inline const char *sh_float_type(uint8_t num_comps)
     pl_unreachable();
 }
 
-static inline uint8_t sh_tex_swiz(char swiz[5], uint8_t comp_mask)
+static inline uint8_t sh_num_comps(uint8_t mask)
 {
-    uint8_t num_comps = 0;
-    for (uint8_t comps = comp_mask; comps;) {
-        uint8_t c = __builtin_ctz(comps);
-        assert(c < 4 && num_comps < 4);
-        swiz[num_comps++] = "xyzw"[c];
-        comps &= ~(1u << c);
-    }
+    pl_assert((mask & 0xF) == mask);
+    return __builtin_popcount(mask);
+}
 
-    swiz[num_comps] = '\0';
-    return num_comps;
+static inline const char *sh_swizzle(uint8_t mask)
+{
+    static const char * const swizzles[0x10] = {
+        NULL, "r",  "g",  "rg",  "b",  "rb",  "gb",  "rgb",
+        "a",  "ra", "ga", "rga", "ba", "rba", "gba", "rgba",
+    };
+
+    pl_assert(mask <= PL_ARRAY_SIZE(swizzles));
+    return swizzles[mask];
 }
