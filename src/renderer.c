@@ -1073,13 +1073,13 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
             }
 
             *img = (struct img) {
-                .tex = res.tex,
-                .repr = res.repr,
-                .color = res.color,
-                .comps = res.components,
-                .rect = res.rect,
-                .w = res.tex->params.w,
-                .h = res.tex->params.h,
+                .tex    = res.tex,
+                .repr   = res.repr,
+                .color  = res.color,
+                .comps  = res.components,
+                .rect   = res.rect,
+                .w      = res.tex->params.w,
+                .h      = res.tex->params.h,
                 .unique = img->unique,
             };
             break;
@@ -1096,17 +1096,17 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
             }
 
             *img = (struct img) {
-                .sh = res.sh,
-                .repr = res.repr,
-                .color = res.color,
-                .comps = res.components,
-                .rect = res.rect,
-                .w = res.sh->output_w,
-                .h = res.sh->output_h,
-                .unique = img->unique,
+                .sh       = res.sh,
+                .repr     = res.repr,
+                .color    = res.color,
+                .comps    = res.components,
+                .rect     = res.rect,
+                .w        = res.sh->output_w,
+                .h        = res.sh->output_h,
+                .unique   = img->unique,
                 .err_enum = PL_RENDER_ERR_HOOKS,
-                .err_msg = "Failed applying user hook",
-                .err_tex = hparams.tex, // if any
+                .err_msg  = "Failed applying user hook",
+                .err_tex  = hparams.tex, // if any
             };
             break;
 
