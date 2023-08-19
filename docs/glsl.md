@@ -380,6 +380,7 @@ the shader variable into the equivalent of `SH_FLOAT()` in the legacy API,
 that is, a generic float (specialization) constant. Other possible types are:
 
 ```glsl
+TYPE  i = ${ident: sh_desc(...)};
 float f = ${float: M_PI};
 int   i = ${int:   params->width};
 uint  u = ${uint:  sizeof(ssbo)};
@@ -393,6 +394,16 @@ etc.):
 ```glsl
 const float base = ${const float: M_LOG10E};
 int seed = ${dynamic int: rand()};
+```
+
+Finally, a special type, `const char`, allows embedding constant/literal
+strings. These are passed as pointers, and so should be either long-lived or
+point to static storage - failure to adhere to this may cause use-after-free or
+unnecessary shader recompilations:
+
+```glsl
+${const char: sh_float_type(num_comps)} tmp;
+tmp = color.${const char: sh_swizzle(comp_mask)};
 ```
 
 ### Macro directives
