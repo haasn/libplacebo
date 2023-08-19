@@ -12,10 +12,10 @@ class Var(object):
     CSIZES = {
         # This array doesn't have to be exact, it's only used for sorting
         # struct members to save a few bytes of memory here and there
-        'ident_t':  8,
         'int':      4,
         'unsigned': 4,
         'float':    4,
+        'ident_t':  2,
         'uint8_t':  1,
         'bool':     1,
     }
