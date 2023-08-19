@@ -8,7 +8,7 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
     \${ (?:\s*(?P<type>(?:              # optional type prefix
             ident                       # identifiers (always dynamic)
           | (?:(?:const|dynamic)\s+)?   # optional const/dynamic modifiers
-                (?:float|u?int)         # base type
+                (?:float|u?int|char)    # base type
         )):)?
         (?P<expr>[^{}]+)
       }
@@ -17,8 +17,9 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
 ''')
 
 VAR_TYPES = {
-    # identifiers: get mapped as-is
+    # identifiers and strings: get mapped as-is
     'ident':            Fmt.IDENT,
+    'const char':       Fmt.CONST_CHAR,
 
     # normal variables: get mapped as shader constants
     'int':              Fmt.INT_VAR,

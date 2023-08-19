@@ -12,12 +12,13 @@ class Var(object):
     CSIZES = {
         # This array doesn't have to be exact, it's only used for sorting
         # struct members to save a few bytes of memory here and there
-        'int':      4,
-        'unsigned': 4,
-        'float':    4,
-        'ident_t':  2,
-        'uint8_t':  1,
-        'bool':     1,
+        'const char *': 8,
+        'int':          4,
+        'unsigned':     4,
+        'float':        4,
+        'ident_t':      2,
+        'uint8_t':      1,
+        'bool':         1,
     }
 
     def __init__(self, ctype, expr, name, csize=0, linenr=0):
@@ -95,9 +96,10 @@ class FmtSpec(object):
 # Current list of format types
 class Fmt(object):
     IDENT       = FmtSpec()
-    INT_CONST   = FmtSpec(ctype='int',      fmtstr='%d')
-    UINT_CONST  = FmtSpec(ctype='unsigned', fmtstr='%uu')
-    FLOAT_CONST = FmtSpec(ctype='float',    fmtstr='%ff')
+    CONST_CHAR  = FmtSpec(ctype='const char *', fmtstr='%s')
+    INT_CONST   = FmtSpec(ctype='int',          fmtstr='%d')
+    UINT_CONST  = FmtSpec(ctype='unsigned',     fmtstr='%uu')
+    FLOAT_CONST = FmtSpec(ctype='float',        fmtstr='%ff')
     INT_VAR     = FmtSpec(wrap_expr=FmtSpec.wrap_var('int'))
     UINT_VAR    = FmtSpec(wrap_expr=FmtSpec.wrap_var('uint'))
     FLOAT_VAR   = FmtSpec(wrap_expr=FmtSpec.wrap_var('float'))
