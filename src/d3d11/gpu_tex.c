@@ -637,13 +637,10 @@ bool pl_d3d11_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params
             .format = tex_p->texel_fmt,
             .size = size,
             .initial_data = params->ptr,
+            .storable = true,
         };
 
-        if (size <= gpu->limits.max_ubo_size) {
-            tbuf_params.uniform = true;
-        } else if (size <= gpu->limits.max_ssbo_size) {
-            tbuf_params.storable = true;
-        } else {
+        if (size > gpu->limits.max_ssbo_size) {
             // TODO: Implement strided upload path if really necessary
             PL_ERR(gpu,
                    "Texel buffer size requirements exceed GPU "

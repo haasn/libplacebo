@@ -631,12 +631,11 @@ bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params
         return false;
     }
 
-    bool ubo = params->buf->params.uniform;
     ident_t buf = sh_desc(sh, (struct pl_shader_desc) {
         .binding.object = params->buf,
         .desc = {
             .name = "data",
-            .type = ubo ? PL_DESC_BUF_TEXEL_UNIFORM : PL_DESC_BUF_TEXEL_STORAGE,
+            .type = PL_DESC_BUF_TEXEL_STORAGE,
         },
     });
 
@@ -669,10 +668,8 @@ bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params
          SH_INT(params->row_pitch / fmt->texel_align),
          SH_INT(fmt->texel_size / fmt->texel_align));
 
-    for (int i = 0; i < fmt->num_components; i++) {
-        GLSL("color[%d] = %s("$", base + %d).r; \n",
-             i, ubo ? "texelFetch" : "imageLoad", buf, i);
-    }
+    for (int i = 0; i < fmt->num_components; i++)
+        GLSL("color[%d] = imageLoad("$", base + %d).r; \n", i, buf, i);
 
     int dims = pl_tex_params_dimension(tex->params);
     static const char *coord_types[] = {

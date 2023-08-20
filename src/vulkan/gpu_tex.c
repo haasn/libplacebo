@@ -896,19 +896,14 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
             .size = size,
+            .storable = fmt->emulated,
         };
 
-        if (fmt->emulated) {
-            if (size <= gpu->limits.max_ubo_size) {
-                tbuf_params.uniform = true;
-            } else if (size <= gpu->limits.max_ssbo_size) {
-                tbuf_params.storable = true;
-            } else {
-                // TODO: Implement strided upload path if really necessary
-                PL_ERR(gpu, "Texel buffer size requirements exceed GPU "
-                       "capabilities, failed uploading!");
-                goto error;
-            }
+        if (fmt->emulated && size > gpu->limits.max_ssbo_size) {
+            // TODO: Implement strided upload path if really necessary
+            PL_ERR(gpu, "Texel buffer size requirements exceed GPU "
+                   "capabilities, failed uploading!");
+            goto error;
         }
 
         pl_buf tbuf = pl_buf_create(gpu, &tbuf_params);
