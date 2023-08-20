@@ -460,6 +460,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
              (int) minfo.memoryTypeIndex, (int) mtype->heapIndex,
              PL_DEF(params->debug_tag, "unknown"));
 
+    pl_clock_t start = pl_clock_now();
+
     VkResult res = vk->AllocateMemory(vk->dev, &minfo, PL_VK_ALLOC, &slab->mem);
     switch (res) {
     case VK_ERROR_OUT_OF_DEVICE_MEMORY:
@@ -511,6 +513,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
                                        &slab->handle.handle));
     }
 #endif
+
+    pl_log_cpu_time(vk->log, start, pl_clock_now(), "allocating slab");
 
     // free space accounting is done by the caller
     return slab;
