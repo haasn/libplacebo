@@ -153,7 +153,7 @@ endif
 # Headless video filtering demo
 if components.get('vk-proc-addr')
   executable('video-filtering', 'video-filtering.c',
-    dependencies: [ libplacebo, vulkan_loader ],
+    dependencies: [ libplacebo, pl_clock, pl_thread, vulkan_loader ],
     c_args: '-O2',
     link_args: link_args,
     link_depends: link_depends,

@@ -37,9 +37,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "common.h"
+#include "pl_clock.h"
+#include "pl_thread.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -721,8 +722,7 @@ static void api1_example(void)
     dst.planes[0].data = dstbuf + OFFSET0;
     dst.planes[1].data = dstbuf + OFFSET1;
 
-    struct timespec start = {0}, stop = {0};
-    timespec_get(&start, TIME_UTC);
+    const pl_clock_t start = pl_clock_now();
 
     // Process this dummy frame a bunch of times
     unsigned frames = 0;
@@ -733,9 +733,8 @@ static void api1_example(void)
         }
     }
 
-    timespec_get(&stop, TIME_UTC);
-    float secs = (float) (stop.tv_sec - start.tv_sec) +
-                 1e-9 * (stop.tv_nsec - start.tv_nsec);
+    const pl_clock_t stop = pl_clock_now();
+    const float secs = pl_clock_diff(stop, start);
 
     printf("api1: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
            frames, secs, 1000 * secs / frames, frames / secs);
@@ -788,8 +787,7 @@ static void api2_example(void)
         images[i].planes[1].data = data + OFFSET1;
     }
 
-    struct timespec start = {0}, stop = {0};
-    timespec_get(&start, TIME_UTC);
+    const pl_clock_t start = pl_clock_now();
 
     // Just keep driving the event loop regardless of the return status
     // until we reach the critical number of frames. (Good enough for this PoC)
@@ -801,18 +799,12 @@ static void api2_example(void)
         }
 
         // Sleep a short time (100us) to prevent busy waiting the CPU
-    #ifdef _WIN32
-        Sleep(0);
-    #else
-        nanosleep(&(struct timespec) { .tv_nsec = 100000 }, NULL);
-    #endif
+        pl_thread_sleep(1e-4);
         check_timers(vf);
     }
 
-    timespec_get(&stop, TIME_UTC);
-    float secs = (float) (stop.tv_sec - start.tv_sec) +
-                 1e-9 * (stop.tv_nsec - start.tv_nsec);
-
+    const pl_clock_t stop = pl_clock_now();
+    const float secs = pl_clock_diff(stop, start);
     printf("api2: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
            api2_frames_out, secs, 1000 * secs / api2_frames_out,
            api2_frames_out / secs);
