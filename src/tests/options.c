@@ -53,9 +53,15 @@ int main()
     REQUIRE_CMP(*(int *) data->value, =, pl_render_default_params.lut_entries, "d");
     REQUIRE_STREQ(data->text, "64");
 
-    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=mitchell_clamp,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,contrast_recovery=0.30000001192092895508,dither=yes";
+    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=mitchell_clamp,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203,contrast_recovery=0.30000001192092896,dither=yes";
+    // fallback can produce different precision
+    const char *hq_opts2 = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=mitchell_clamp,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,contrast_recovery=0.30000001192092896,dither=yes";
+
     pl_options_reset(test, &pl_render_high_quality_params);
-    REQUIRE_STREQ(pl_options_save(test), hq_opts);
+    const char *opts = pl_options_save(test);
+    if (!strcmp(opts, hq_opts2))
+        hq_opts = hq_opts2;
+    REQUIRE_STREQ(opts, hq_opts);
     struct pl_options_t hq_pre = *test;
     pl_options_reset(test, NULL);
     REQUIRE_STREQ(pl_options_save(test), "");

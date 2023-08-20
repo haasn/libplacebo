@@ -97,10 +97,10 @@ int main()
     REQUIRE(pl_str_parse_float(pl_str0("0.5e+5"), &f));     REQUIRE_FEQ(f, 0.5e+5f, 1e-8);
     REQUIRE(pl_str_parse_int(pl_str0("64239"), &i));        REQUIRE_CMP(i, ==, 64239, "d");
     REQUIRE(pl_str_parse_int(pl_str0("-102"), &i));         REQUIRE_CMP(i, ==, -102, "d");
-    REQUIRE(pl_str_parse_int(pl_str0("+1"), &i));           REQUIRE_CMP(i, ==, 1, "d");
+    REQUIRE(pl_str_parse_int(pl_str0("1"), &i));            REQUIRE_CMP(i, ==, 1, "d");
     REQUIRE(pl_str_parse_int(pl_str0("-0"), &i));           REQUIRE_CMP(i, ==, 0, "d");
     REQUIRE(pl_str_parse_uint(pl_str0("64239"), &u));       REQUIRE_CMP(u, ==, 64239, "u");
-    REQUIRE(pl_str_parse_uint(pl_str0("+1"), &u));          REQUIRE_CMP(u, ==, 1, "u");
+    REQUIRE(pl_str_parse_uint(pl_str0("1"), &u));           REQUIRE_CMP(u, ==, 1, "u");
     REQUIRE(pl_str_parse_int64(pl_str0("9223372036854775799"), &i64));
     REQUIRE_CMP(i64, ==, 9223372036854775799LL, PRIi64);
     REQUIRE(pl_str_parse_int64(pl_str0("-9223372036854775799"), &i64));

@@ -61,24 +61,24 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             len = 1;
             break;
         case 'd':
-            len = ccStrPrintInt32(buf, va_arg(ap, int));
+            len = pl_str_print_int(buf, sizeof(buf), va_arg(ap, int));
             break;
         case 'h': ; // only used for %hx
             assert(c[1] == 'x');
-            len = print_hex(buf, (unsigned short) va_arg(ap, unsigned int));
+            len = pl_str_print_hex(buf, sizeof(buf), (unsigned short) va_arg(ap, unsigned int));
             c++;
             break;
         case 'u':
-            len = ccStrPrintUint32(buf, va_arg(ap, unsigned int));
+            len = pl_str_print_uint(buf, sizeof(buf), va_arg(ap, unsigned int));
             break;
         case 'l':
             assert(c[1] == 'l');
             switch (c[2]) {
             case 'u':
-                len = ccStrPrintUint64(buf, va_arg(ap, unsigned long long));
+                len = pl_str_print_uint64(buf, sizeof(buf), va_arg(ap, unsigned long long));
                 break;
             case 'd':
-                len = ccStrPrintInt64(buf, va_arg(ap, long long));
+                len = pl_str_print_int64(buf, sizeof(buf), va_arg(ap, long long));
                 break;
             default: pl_unreachable();
             }
@@ -86,11 +86,11 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             break;
         case 'z':
             assert(c[1] == 'u');
-            len = ccStrPrintUint64(buf, va_arg(ap, size_t));
+            len = pl_str_print_uint64(buf, sizeof(buf), va_arg(ap, size_t));
             c++;
             break;
         case 'f':
-            len = ccStrPrintDouble(buf, sizeof(buf), 20, va_arg(ap, double));
+            len = pl_str_print_double(buf, sizeof(buf), va_arg(ap, double));
             break;
         default:
             fprintf(stderr, "Invalid conversion character: '%c'!\n", c[0]);
@@ -148,19 +148,19 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
         case 'd': ;
             int d;
             LOAD(d);
-            len = ccStrPrintInt32(buf, d);
+            len = pl_str_print_int(buf, sizeof(buf), d);
             break;
         case 'h': ;
             assert(c[1] == 'x');
             unsigned short hx;
             LOAD(hx);
-            len = print_hex(buf, hx);
+            len = pl_str_print_hex(buf, sizeof(buf), hx);
             c++;
             break;
         case 'u': ;
             unsigned u;
             LOAD(u);
-            len = ccStrPrintUint32(buf, u);
+            len = pl_str_print_uint(buf, sizeof(buf), u);
             break;
         case 'l':
             assert(c[1] == 'l');
@@ -168,12 +168,12 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
             case 'u': ;
                 long long unsigned llu;
                 LOAD(llu);
-                len = ccStrPrintUint64(buf, llu);
+                len = pl_str_print_uint64(buf, sizeof(buf), llu);
                 break;
             case 'd': ;
                 long long int lld;
                 LOAD(lld);
-                len = ccStrPrintInt64(buf, lld);
+                len = pl_str_print_int64(buf, sizeof(buf), lld);
                 break;
             default: pl_unreachable();
             }
@@ -183,13 +183,13 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
             assert(c[1] == 'u');
             size_t zu;
             LOAD(zu);
-            len = ccStrPrintUint64(buf, zu);
+            len = pl_str_print_uint64(buf, sizeof(buf), zu);
             c++;
             break;
         case 'f': ;
             double f;
             LOAD(f);
-            len = ccStrPrintDouble(buf, sizeof(buf), 20, f);
+            len = pl_str_print_double(buf, sizeof(buf), f);
             break;
         default:
             fprintf(stderr, "Invalid conversion character: '%c'!\n", c[0]);
@@ -202,19 +202,4 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
 
     pl_str_append(alloc, str, pl_str0(fmt));
     return (uintptr_t) ptr - (uintptr_t) args;
-}
-
-bool pl_str_parse_double(pl_str str, double *out)
-{
-    return ccSeqParseDouble((char *) str.buf, str.len, out);
-}
-
-bool pl_str_parse_int64(pl_str str, int64_t *out)
-{
-    return ccSeqParseInt64((char *) str.buf, str.len, out);
-}
-
-bool pl_str_parse_uint64(pl_str str, uint64_t *out)
-{
-    return ccSeqParseUint64((char *) str.buf, str.len, out);
 }

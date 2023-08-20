@@ -96,46 +96,22 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
     PL_PRINTF(3, 0);
 
 // Locale-invariant number printing
-// int pl_str_print_hex(char *buf, size_t len, unsigned short n);
-// int pl_str_print_int(char *buf, size_t len, int n);
-// int pl_str_print_uint(char *buf, size_t len, unsigned int n);
-// int pl_str_print_int64(char *buf, size_t len, int64_t n);
-// int pl_str_print_uint64(char *buf, size_t len, uint64_t n);
-// int pl_str_print_float(char *buf, size_t len, float n);
-// int pl_str_print_double(char *buf, size_t len, double n);
+int pl_str_print_hex(char *buf, size_t len, unsigned short n);
+int pl_str_print_int(char *buf, size_t len, int n);
+int pl_str_print_uint(char *buf, size_t len, unsigned int n);
+int pl_str_print_int64(char *buf, size_t len, int64_t n);
+int pl_str_print_uint64(char *buf, size_t len, uint64_t n);
+int pl_str_print_float(char *buf, size_t len, float n);
+int pl_str_print_double(char *buf, size_t len, double n);
 
 // Locale-invariant number parsing
-// bool pl_str_parse_hex(pl_str str, unsigned short *out);
-// bool pl_str_parse_int(pl_str str, int *out);
-// bool pl_str_parse_uint(pl_str str, unsigned int *out);
+bool pl_str_parse_hex(pl_str str, unsigned short *out);
+bool pl_str_parse_int(pl_str str, int *out);
+bool pl_str_parse_uint(pl_str str, unsigned int *out);
 bool pl_str_parse_int64(pl_str str, int64_t *out);
 bool pl_str_parse_uint64(pl_str str, uint64_t *out);
-// bool pl_str_parse_float(pl_str str, float *out);
+bool pl_str_parse_float(pl_str str, float *out);
 bool pl_str_parse_double(pl_str str, double *out);
-
-static inline bool pl_str_parse_float(pl_str str, float *out)
-{
-    double dbl;
-    bool ret = pl_str_parse_double(str, &dbl);
-    *out = (float) dbl;
-    return ret;
-}
-
-static inline bool pl_str_parse_int(pl_str str, int *out)
-{
-    int64_t i64;
-    bool ret = pl_str_parse_int64(str, &i64);
-    *out = (int) i64;
-    return ret;
-}
-
-static inline bool pl_str_parse_uint(pl_str str, unsigned int *out)
-{
-    uint64_t u64;
-    bool ret = pl_str_parse_uint64(str, &u64);
-    *out = (unsigned int) u64;
-    return ret;
-}
 
 int print_hex(char *buf, unsigned int x);
 int ccStrPrintInt32( char *str, int32_t n );

@@ -88,13 +88,13 @@ static inline bool from_chars(pl_str str, T &n, Args ...args)
         return from_chars(str, *n __VA_OPT__(,) __VA_ARGS__);   \
     }
 
-// CHAR_CONVERT(hex, unsigned short, 16)
-// CHAR_CONVERT(int, int)
-// CHAR_CONVERT(uint, unsigned int)
-// CHAR_CONVERT(int64, int64_t)
-// CHAR_CONVERT(uint64, uint64_t)
-// CHAR_CONVERT(float, float)
-// CHAR_CONVERT(double, double)
+CHAR_CONVERT(hex, unsigned short, 16)
+CHAR_CONVERT(int, int)
+CHAR_CONVERT(uint, unsigned int)
+CHAR_CONVERT(int64, int64_t)
+CHAR_CONVERT(uint64, uint64_t)
+CHAR_CONVERT(float, float)
+CHAR_CONVERT(double, double)
 
 extern "C" int print_hex(char *buf, unsigned int x)
 {
@@ -453,20 +453,20 @@ extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double va
 
     if( value < 4294967296.0 )
     {
-        if( bufsize < CC_STR_PRINT_BUFSIZE_UINT32 )
-            goto error;
         u32 = (uint32_t)value;
-        offset = ccStrPrintUint32( str, u32 );
+        offset = pl_str_print_uint( str, bufsize, u32 );
+        if (!offset)
+            goto error;
         size += offset;
         bufsize -= size;
         value -= (double)u32;
     }
     else if( value < 18446744073709551616.0 )
     {
-        if( bufsize < CC_STR_PRINT_BUFSIZE_UINT64 )
-            goto error;
         u64 = (uint64_t)value;
-        offset = ccStrPrintUint64( str, u64 );
+        offset = pl_str_print_uint64( str, bufsize, u64 );
+        if (!offset)
+            goto error;
         size += offset;
         bufsize -= size;
         value -= (double)u64;
