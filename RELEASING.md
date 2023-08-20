@@ -11,6 +11,7 @@
 3. Force-push `release` branch (or fast-forward if possible)
 4. Update topic on IRC #libplacebo
 5. Bump 'X' version number in meson.build, for next release (optional)
+6. Tag release on github
 
 ## Bugfix release (vX.Y.Z)
 
@@ -19,3 +20,4 @@
 3. Tag `vX.Y.Z` on this branch
 4. Fast-forward `release` branch iff this is the latest major release
 5. Update topic on IRC #libplacebo
+6. Tag release on github
