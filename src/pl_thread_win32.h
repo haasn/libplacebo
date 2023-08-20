@@ -140,7 +140,6 @@ static inline int pl_thread_join(pl_thread thread)
     return 0;
 }
 
-// Returns true if slept the full time, false otherwise
 static inline bool pl_thread_sleep(double t)
 {
     // Time is expected in 100 nanosecond intervals.

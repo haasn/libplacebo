@@ -58,6 +58,9 @@ typedef void pl_thread;
 int pl_thread_create(pl_thread *thread, PL_THREAD_VOID (*fun)(void *), void *arg);
 int pl_thread_join(pl_thread thread);
 
+// Returns true if slept the full time, false otherwise
+bool pl_thread_sleep(double t);
+
 #endif
 
 // Actual platform-specific implementation
