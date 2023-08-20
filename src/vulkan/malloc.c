@@ -49,7 +49,7 @@
 
 // How long to wait before garbage collecting empty slabs. Slabs older than
 // this many invocations of `vk_malloc_garbage_collect` will be released.
-#define MAXIMUM_SLAB_AGE 8
+#define MAXIMUM_SLAB_AGE 32
 
 // A single slab represents a contiguous region of allocated memory. Actual
 // allocations are served as pages of this. Slabs are organized into pools,
