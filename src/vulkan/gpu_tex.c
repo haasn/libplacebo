@@ -269,20 +269,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             goto error;
         }
 
-        // Statically check to see if we'd even be able to upload it at all
-        // and refuse right away if not. In theory, uploading can still fail
-        // based on the size of pl_tex_transfer_params.row_pitch, but for now
-        // this should be enough.
-        uint64_t texels = params->w * PL_DEF(params->h, 1) * PL_DEF(params->d, 1) *
-                          fmt->num_components;
-
-        if (texels > gpu->limits.max_buffer_texels) {
-            PL_ERR(gpu, "Failed creating texture with emulated texture format: "
-                   "texture dimensions exceed maximum texel buffer size! Try "
-                   "again with a different (non-emulated) format?");
-            goto error;
-        }
-
         // Our format emulation requires storage image support. In order to
         // make a bunch of checks happy, just mark it off as storable (and also
         // enable VK_IMAGE_USAGE_STORAGE_BIT, which we do below)
@@ -874,6 +860,8 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    struct pl_tex_transfer_params *slices = NULL;
+    int num_slices = 0;
 
     if (!params->buf)
         return pl_tex_upload_pbo(gpu, params);
@@ -881,69 +869,80 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     pl_buf buf = params->buf;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_rect3d rc = params->rc;
-    size_t size = pl_tex_transfer_size(params);
-
-    size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
+    const size_t size = pl_tex_transfer_size(params);
+    const size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
     bool unaligned = buf_offset % fmt->texel_size;
     if (unaligned)
         PL_TRACE(gpu, "vk_tex_upload: unaligned transfer (slow path)");
 
     if (fmt->emulated || unaligned) {
 
-        // Copy the source data buffer into an intermediate buffer
-        struct pl_buf_params tbuf_params = {
-            .debug_tag = PL_DEBUG_TAG,
-            .memory_type = PL_BUF_MEM_DEVICE,
-            .format = tex_vk->texel_fmt,
-            .size = size,
-            .storable = fmt->emulated,
-        };
-
-        if (fmt->emulated && size > gpu->limits.max_ssbo_size) {
-            // TODO: Implement strided upload path if really necessary
-            PL_ERR(gpu, "Texel buffer size requirements exceed GPU "
-                   "capabilities, failed uploading!");
+        // Create all slice buffers first, to early-fail if OOM, and to avoid
+        // blocking unnecessarily on waiting for these buffers to get read from
+        num_slices = pl_tex_transfer_slices(gpu, tex_vk->texel_fmt, params, &slices);
+        if (!num_slices) {
+            PL_ERR(gpu, "Cannot split tex upload fallback into slices!");
             goto error;
         }
 
-        pl_buf tbuf = pl_buf_create(gpu, &tbuf_params);
-        if (!tbuf) {
-            PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
-            goto error;
+        for (int i = 0; i < num_slices; i++) {
+            slices[i].buf = pl_buf_create(gpu, pl_buf_params(
+                .memory_type = PL_BUF_MEM_DEVICE,
+                .format      = tex_vk->texel_fmt,
+                .size        = pl_tex_transfer_size(&slices[i]),
+                .storable    = fmt->emulated,
+            ));
+
+            if (!slices[i].buf) {
+                PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
+                num_slices = i; // only clean up buffers up to here
+                goto error;
+            }
         }
 
-        struct vk_cmd *cmd = CMD_BEGIN_TIMED(tex_vk->transfer_queue, params->timer);
+        // All temporary buffers successfully created, begin copying source data
+        struct vk_cmd *cmd = CMD_BEGIN_TIMED(tex_vk->transfer_queue,
+                                             params->timer);
         if (!cmd)
             goto error;
-
-        struct pl_buf_vk *tbuf_vk = PL_PRIV(tbuf);
-        VkBufferCopy region = {
-            .srcOffset = buf_offset,
-            .dstOffset = tbuf_vk->mem.offset,
-            .size = size,
-        };
 
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
                        VK_ACCESS_2_TRANSFER_READ_BIT, params->buf_offset, size,
                        false);
-        vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_2_COPY_BIT,
-                       VK_ACCESS_2_TRANSFER_WRITE_BIT, 0, size, false);
-        vk->CmdCopyBuffer(cmd->buf, buf_vk->mem.buf, tbuf_vk->mem.buf,
-                          1, &region);
+
+        for (int i = 0; i < num_slices; i++) {
+            pl_buf slice = slices[i].buf;
+            struct pl_buf_vk *slice_vk = PL_PRIV(slice);
+            vk_buf_barrier(gpu, cmd, slice, VK_PIPELINE_STAGE_2_COPY_BIT,
+                           VK_ACCESS_2_TRANSFER_WRITE_BIT, 0, slice->params.size,
+                           false);
+
+            vk->CmdCopyBuffer(cmd->buf, buf_vk->mem.buf, slice_vk->mem.buf, 1, &(VkBufferCopy) {
+                .srcOffset = buf_vk->mem.offset + slices[i].buf_offset,
+                .dstOffset = slice_vk->mem.offset,
+                .size      = slice->params.size,
+            });
+        }
 
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
         CMD_FINISH(&cmd);
 
-        struct pl_tex_transfer_params fixed = *params;
-        fixed.buf = tbuf;
-        fixed.buf_offset = 0;
+        // Finally, dispatch the (texel) upload asynchronously. We can fire
+        // the callback already at the completion of previous command because
+        // these temporary buffers already hold persistent copies of the data
+        bool ok = true;
+        for (int i = 0; i < num_slices; i++) {
+            if (ok) {
+                slices[i].buf_offset = 0;
+                ok = fmt->emulated ? pl_tex_upload_texel(gpu, &slices[i])
+                                   : pl_tex_upload(gpu, &slices[i]);
+            }
+            pl_buf_destroy(gpu, &slices[i].buf);
+        }
 
-        bool ok = fmt->emulated ? pl_tex_upload_texel(gpu, &fixed)
-                                : pl_tex_upload(gpu, &fixed);
-
-        pl_buf_destroy(gpu, &tbuf);
+        pl_free(slices);
         return ok;
 
     } else {
@@ -981,10 +980,12 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
         CMD_FINISH(&cmd);
     }
-
     return true;
 
 error:
+    for (int i = 0; i < num_slices; i++)
+        pl_buf_destroy(gpu, &slices[i].buf);
+    pl_free(slices);
     return false;
 }
 
@@ -995,6 +996,8 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    struct pl_tex_transfer_params *slices = NULL;
+    int num_slices = 0;
 
     if (!params->buf)
         return pl_tex_download_pbo(gpu, params);
@@ -1002,67 +1005,80 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     pl_buf buf = params->buf;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_rect3d rc = params->rc;
-    size_t size = pl_tex_transfer_size(params);
-
-    size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
+    const size_t size = pl_tex_transfer_size(params);
+    const size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
     bool unaligned = buf_offset % fmt->texel_size;
     if (unaligned)
         PL_TRACE(gpu, "vk_tex_download: unaligned transfer (slow path)");
 
     if (fmt->emulated || unaligned) {
 
-        // Download into an intermediate buffer first
-        pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
-            .storable = fmt->emulated,
-            .size = size,
-            .memory_type = PL_BUF_MEM_DEVICE,
-            .format = tex_vk->texel_fmt,
-        ));
-
-        if (!tbuf) {
-            PL_ERR(gpu, "Failed creating buffer for tex download fallback!");
+        num_slices = pl_tex_transfer_slices(gpu, tex_vk->texel_fmt, params, &slices);
+        if (!num_slices) {
+            PL_ERR(gpu, "Cannot split tex download fallback into slices!");
             goto error;
         }
 
-        struct pl_tex_transfer_params fixed = *params;
-        fixed.buf = tbuf;
-        fixed.buf_offset = 0;
+        for (int i = 0; i < num_slices; i++) {
+            slices[i].buf = pl_buf_create(gpu, pl_buf_params(
+                .memory_type = PL_BUF_MEM_DEVICE,
+                .format      = tex_vk->texel_fmt,
+                .size        = pl_tex_transfer_size(&slices[i]),
+                .storable    = fmt->emulated,
+            ));
 
-        bool ok = fmt->emulated ? pl_tex_download_texel(gpu, &fixed)
-                                : pl_tex_download(gpu, &fixed);
-        if (!ok) {
-            pl_buf_destroy(gpu, &tbuf);
-            goto error;
+            if (!slices[i].buf) {
+                PL_ERR(gpu, "Failed creating buffer for tex download fallback!");
+                num_slices = i;
+                goto error;
+            }
         }
 
+        for (int i = 0; i < num_slices; i++) {
+            // Restore buffer offset after downloading into temporary buffer,
+            // because we still need to copy the data from the temporary buffer
+            // into this offset in the original buffer
+            const size_t tmp_offset = slices[i].buf_offset;
+            slices[i].buf_offset = 0;
+            bool ok = fmt->emulated ? pl_tex_download_texel(gpu, &slices[i])
+                                    : pl_tex_download(gpu, &slices[i]);
+            slices[i].buf_offset = tmp_offset;
+            if (!ok)
+                goto error;
+        }
+
+        // Finally, download into the user buffer
         struct vk_cmd *cmd = CMD_BEGIN_TIMED(tex_vk->transfer_queue, params->timer);
-        if (!cmd) {
-            pl_buf_destroy(gpu, &tbuf);
+        if (!cmd)
             goto error;
-        }
 
-        struct pl_buf_vk *tbuf_vk = PL_PRIV(tbuf);
-        VkBufferCopy region = {
-            .srcOffset = tbuf_vk->mem.offset,
-            .dstOffset = buf_offset,
-            .size = size,
-        };
-
-        vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_2_COPY_BIT,
-                       VK_ACCESS_2_TRANSFER_READ_BIT, 0, size, false);
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
                        VK_ACCESS_2_TRANSFER_WRITE_BIT, params->buf_offset, size,
                        false);
-        vk->CmdCopyBuffer(cmd->buf, tbuf_vk->mem.buf, buf_vk->mem.buf,
-                          1, &region);
+
+        for (int i = 0; i < num_slices; i++) {
+            pl_buf slice = slices[i].buf;
+            struct pl_buf_vk *slice_vk = PL_PRIV(slice);
+            vk_buf_barrier(gpu, cmd, slice, VK_PIPELINE_STAGE_2_COPY_BIT,
+                           VK_ACCESS_2_TRANSFER_READ_BIT, 0, slice->params.size,
+                           false);
+
+            vk->CmdCopyBuffer(cmd->buf, slice_vk->mem.buf, buf_vk->mem.buf, 1, &(VkBufferCopy) {
+                .srcOffset = slice_vk->mem.offset,
+                .dstOffset = buf_vk->mem.offset + slices[i].buf_offset,
+                .size      = slice->params.size,
+            });
+
+            pl_buf_destroy(gpu, &slices[i].buf);
+        }
+
         vk_buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
-
-        CMD_FINISH(&cmd);
-        pl_buf_destroy(gpu, &tbuf);
+        pl_free(slices);
+        return CMD_FINISH(&cmd);
 
     } else {
 
@@ -1106,6 +1122,9 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     return true;
 
 error:
+    for (int i = 0; i < num_slices; i++)
+        pl_buf_destroy(gpu, &slices[i].buf);
+    pl_free(slices);
     return false;
 }
 
