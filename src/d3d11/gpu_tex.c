@@ -188,20 +188,6 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             goto error;
         }
 
-        // Statically check to see if we'd even be able to upload it at all
-        // and refuse right away if not. In theory, uploading can still fail
-        // based on the size of pl_tex_transfer_params.row_pitch, but for now
-        // this should be enough.
-        uint64_t texels = params->w * PL_DEF(params->h, 1) * PL_DEF(params->d, 1) *
-                          params->format->num_components;
-
-        if (texels > gpu->limits.max_buffer_texels) {
-            PL_ERR(gpu, "Failed creating texture with emulated texture format: "
-                   "texture dimensions exceed maximum texel buffer size! Try "
-                   "again with a different (non-emulated) format?");
-            goto error;
-        }
-
         tex->params.storable = true;
     }
 
@@ -623,51 +609,49 @@ bool pl_d3d11_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
+    struct pl_tex_transfer_params *slices = NULL;
     bool ret = false;
 
     pl_d3d11_timer_start(gpu, params->timer);
 
     if (fmt->emulated) {
-        size_t size = pl_tex_transfer_size(params);
 
-        // Copy the source data buffer into an intermediate buffer
-        struct pl_buf_params tbuf_params = {
-            .debug_tag = PL_DEBUG_TAG,
-            .memory_type = PL_BUF_MEM_DEVICE,
-            .format = tex_p->texel_fmt,
-            .size = size,
-            .initial_data = params->ptr,
-            .storable = true,
-        };
-
-        if (size > gpu->limits.max_ssbo_size) {
-            // TODO: Implement strided upload path if really necessary
-            PL_ERR(gpu,
-                   "Texel buffer size requirements exceed GPU "
-                   "capabilities, failed uploading!");
+        int num_slices = pl_tex_transfer_slices(gpu, tex_p->texel_fmt, params, &slices);
+        if (!num_slices) {
+            PL_ERR(gpu, "Cannot split tex upload fallback into slices!");
             goto error;
         }
 
-        pl_buf tbuf = pl_buf_create(gpu, &tbuf_params);
-        if (!tbuf) {
-            PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
-            goto error;
+        for (int i = 0; i < num_slices; i++) {
+            // Copy the source data buffer into an intermediate buffer
+            pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
+                .memory_type  = PL_BUF_MEM_DEVICE,
+                .format       = tex_p->texel_fmt,
+                .size         = pl_tex_transfer_size(&slices[i]),
+                .initial_data = slices[i].ptr,
+                .storable     = true,
+            ));
+
+            if (!tbuf) {
+                PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
+                goto error;
+            }
+
+            slices[i].ptr = NULL;
+            slices[i].buf = tbuf;
+            slices[i].buf_offset = 0;
+            bool ok = pl_tex_upload_texel(gpu, &slices[i]);
+            pl_buf_destroy(gpu, &tbuf);
+            if (!ok)
+                goto error;
         }
 
-        struct pl_tex_transfer_params fixed = *params;
-        fixed.buf = tbuf;
-        fixed.buf_offset = 0;
-
-        bool ok = pl_tex_upload_texel(gpu, &fixed);
-
-        pl_buf_destroy(gpu, &tbuf);
-
-        if (!ok)
-            goto error;
     } else {
+
         ID3D11DeviceContext_UpdateSubresource(p->imm, tex_p->res,
             tex_subresource(tex), &pl_rect3d_to_box(params->rc), params->ptr,
             params->row_pitch, params->depth_pitch);
+
     }
 
     ret = true;
@@ -676,6 +660,7 @@ error:
     pl_d3d11_timer_end(gpu, params->timer);
     pl_d3d11_flush_message_queue(ctx, "After texture upload");
 
+    pl_free(slices);
     return ret;
 }
 
@@ -686,6 +671,7 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
     const struct pl_tex_t *tex = params->tex;
     pl_fmt fmt = tex->params.format;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
+    struct pl_tex_transfer_params *slices = NULL;
     bool ret = false;
 
     if (!tex_p->staging)
@@ -694,35 +680,46 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
     pl_d3d11_timer_start(gpu, params->timer);
 
     if (fmt->emulated) {
-        size_t size = pl_tex_transfer_size(params);
 
-        // Download into an intermediate buffer first
-        pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
-            .storable = fmt->emulated,
-            .size = size,
-            .memory_type = PL_BUF_MEM_DEVICE,
-            .format = tex_p->texel_fmt,
-            .host_readable = true,
-        ));
-
-        if (!tbuf) {
-            PL_ERR(gpu, "Failed creating buffer for tex download fallback!");
+        pl_buf tbuf = NULL;
+        int num_slices = pl_tex_transfer_slices(gpu, tex_p->texel_fmt, params, &slices);
+        if (!num_slices) {
+            PL_ERR(gpu, "Cannot split tex download fallback into slices!");
             goto error;
         }
 
-        struct pl_tex_transfer_params fixed = *params;
-        fixed.buf = tbuf;
-        fixed.buf_offset = 0;
+        for (int i = 0; i < num_slices; i++) {
+            const size_t slice_size = pl_tex_transfer_size(&slices[i]);
+            bool ok = pl_buf_recreate(gpu, &tbuf, pl_buf_params(
+                .storable      = true,
+                .size          = slice_size,
+                .memory_type   = PL_BUF_MEM_DEVICE,
+                .format        = tex_p->texel_fmt,
+                .host_readable = true,
+            ));
 
-        bool ok = pl_tex_download_texel(gpu, &fixed);
+            if (!ok) {
+                PL_ERR(gpu, "Failed creating buffer for tex download fallback!");
+                goto error;
+            }
 
-        ok = ok && pl_buf_read(gpu, tbuf, 0, params->ptr, size);
+            void *ptr = slices[i].ptr;
+            slices[i].ptr = NULL;
+            slices[i].buf = tbuf;
+            slices[i].buf_offset = 0;
 
+            // Download into an intermediate buffer first
+            ok = pl_tex_download_texel(gpu, &slices[i]);
+            ok = ok && pl_buf_read(gpu, tbuf, 0, ptr, slice_size);
+            if (!ok) {
+                pl_buf_destroy(gpu, &tbuf);
+                goto error;
+            }
+        }
         pl_buf_destroy(gpu, &tbuf);
 
-        if (!ok)
-            goto error;
     } else {
+
         ID3D11DeviceContext_CopySubresourceRegion(p->imm,
             (ID3D11Resource *) tex_p->staging, 0, params->rc.x0, params->rc.y0,
             params->rc.z0, tex_p->res, tex_subresource(tex),
@@ -753,5 +750,6 @@ error:
     pl_d3d11_timer_end(gpu, params->timer);
     pl_d3d11_flush_message_queue(ctx, "After texture download");
 
+    pl_free(slices);
     return ret;
 }
