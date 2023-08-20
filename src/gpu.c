@@ -450,6 +450,8 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
     if (!params->depth_pitch || !tex->params.d)
         params->depth_pitch = pl_rect_h(rc) * params->row_pitch;
 
+    require(params->row_pitch);
+    require(params->depth_pitch);
     params->rc = rc;
 
     // Check the parameters for sanity
