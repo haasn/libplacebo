@@ -935,11 +935,11 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Color mapping
     OPT_ENABLE_PARAMS("color_map", "Enable color mapping", color_map_params),
-    OPT_NAMED("gamut_mapping", "Gamut mapping function", color_map_params.gamut_mapping,
-              pl_gamut_map_functions),
     OPT_PRESET("color_map_preset", "Color mapping preset", color_map_params,
                {"default",      &pl_color_map_default_params},
                {"high_quality", &pl_color_map_high_quality_params}),
+    OPT_NAMED("gamut_mapping", "Gamut mapping function", color_map_params.gamut_mapping,
+              pl_gamut_map_functions),
     OPT_INT("lut3d_size_I", "Gamut 3DLUT size I", color_map_params.lut3d_size[0], .max = 1024),
     OPT_INT("lut3d_size_C", "Gamut 3DLUT size C", color_map_params.lut3d_size[1], .max = 1024),
     OPT_INT("lut3d_size_h", "Gamut 3DLUT size h", color_map_params.lut3d_size[2], .max = 1024),
