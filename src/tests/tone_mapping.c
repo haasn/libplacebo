@@ -24,9 +24,10 @@ int main()
 
     static float lut[128];
     struct pl_tone_map_params params = {
-        .input_scaling = PL_HDR_PQ,
+        .constants      = { PL_TONE_MAP_CONSTANTS },
+        .input_scaling  = PL_HDR_PQ,
         .output_scaling = PL_HDR_PQ,
-        .lut_size = PL_ARRAY_SIZE(lut),
+        .lut_size       = PL_ARRAY_SIZE(lut),
     };
 
     // Test regular tone-mapping

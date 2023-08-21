@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '311': 'add pl_tone_map_constants, pl_tone_map_params.constants and pl_color_map_params.tone_constants',
       '310': 'add pl_gamut_map_constants, pl_gamut_map_params.constants and pl_color_map_params.gamut_constants',
       '309': 'add <libplacebo/options.h>',
       '308': 'add pl_hook_par.names',

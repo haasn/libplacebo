@@ -1646,6 +1646,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
     struct pl_tone_map_params tone = {
         .function       = PL_DEF(params->tone_mapping_function, &pl_tone_map_clip),
+        .constants      = params->tone_constants,
         .param          = params->tone_mapping_param,
         .input_scaling  = PL_HDR_PQ,
         .output_scaling = PL_HDR_PQ,
@@ -1830,7 +1831,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
         } else if (fun == &pl_tone_map_linear && can_fast) {
 
-            const float gain = PL_DEF(tone.param, 1.0f);
+            const float gain = tone.constants.exposure;
             const float scale = tone.input_max - tone.input_min;
 
             ident_t linfun = sh_fresh(sh, "linear_pq");

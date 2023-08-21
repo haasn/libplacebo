@@ -31,13 +31,6 @@ struct pl_tone_map_function {
     const char *name;        // Identifier
     const char *description; // Friendly / longer name
 
-    // If set, `pl_tone_map_params.param` can be adjusted to alter the
-    // characteristics of the tone mapping function in some way. (Optional)
-    const char *param_desc; // Name of parameter
-    float param_min;
-    float param_def;
-    float param_max;
-
     // This controls the type of values input/output to/from `map`
     enum pl_hdr_scaling scaling;
 
@@ -57,12 +50,89 @@ struct pl_tone_map_function {
 
     // Private data. Unused by libplacebo, but may be accessed by `map`.
     void *priv;
+
+    // --- Deprecated fields
+    const char *param_desc PL_DEPRECATED;
+    float param_min PL_DEPRECATED;
+    float param_def PL_DEPRECATED;
+    float param_max PL_DEPRECATED;
 };
+
+struct pl_tone_map_constants {
+    // Configures the knee point, as a ratio between the source average and
+    // target average (in PQ space). An adaptation of 1.0 always adapts the
+    // source scene average brightness to the (scaled) target average,
+    // while a value of 0.0 never modifies scene brightness. [0,1]
+    //
+    // Affects all methods that use the ST2094 knee point determination
+    // (currently ST2094-40, ST2094-10 and spline)
+    float knee_adaptation;
+
+    // Configures the knee point minimum and maximum, respectively, as
+    // a percentage of the PQ luminance range. Provides a hard limit on the
+    // knee point chosen by `knee_adaptation`.
+    float knee_minimum; // (0, 0.5)
+    float knee_maximum; // (0.5, 1.0)
+
+    // Default knee point to use in the absence of source scene average
+    // metadata. Normally, this is ignored in favor of picking the knee
+    // point as the (relative) source scene average brightness level.
+    float knee_default; // [knee_minimum, knee_maximum]
+
+    // Knee point offset (for BT.2390 only). Note that a value of 0.5 is
+    // the spec-defined default behavior, which differs from the libplacebo
+    // default of 1.0. [0.5, 2]
+    float knee_offset;
+
+    // For the single-pivot polynomial (spline) function, this controls the
+    // coefficients used to tune the slope of the curve. This tuning is designed
+    // to make the slope closer to 1.0 when the difference in peaks is low,
+    // and closer to linear when the difference between peaks is high.
+    float slope_tuning;   // [0,10]
+    float slope_offset;   // [0,1]
+
+    // Contrast setting for the spline function. Higher values make the curve
+    // steeper (closer to `clip`), preserving midtones at the cost of losing
+    // shadow/highlight details, while lower values make the curve shallowed
+    // (closer to `linear`), preserving highlights at the cost of losing midtone
+    // contrast. Values above 1.0 are possible, resulting in an output with more
+    // contrast than the input.
+    float spline_contrast; // [0,1.5]
+
+    // For the reinhard function, this specifies the local contrast coefficient
+    // at the display peak. Essentially, a value of 0.5 implies that the
+    // reference white will be about half as bright as when clipping. (0,1)
+    float reinhard_contrast;
+
+    // For legacy functions (mobius, gamma) which operate on linear light, this
+    // directly sets the corresponding knee point. (0,1)
+    float linear_knee;
+
+    // For linear methods (linear, linearlight), this controls the linear
+    // exposure/gain applied to the image. (0,10]
+    float exposure;
+};
+
+#define PL_TONE_MAP_CONSTANTS  \
+    .knee_adaptation   = 0.7f, \
+    .knee_minimum      = 0.1f, \
+    .knee_maximum      = 0.8f, \
+    .knee_default      = 0.4f, \
+    .knee_offset       = 1.0f, \
+    .slope_tuning      = 1.5f, \
+    .slope_offset      = 0.2f, \
+    .spline_contrast   = 0.5f, \
+    .reinhard_contrast = 0.5f, \
+    .linear_knee       = 0.3f, \
+    .exposure          = 1.0f,
 
 struct pl_tone_map_params {
     // If `function` is NULL, defaults to `pl_tone_map_clip`.
     const struct pl_tone_map_function *function;
-    float param; // or 0.0 for default
+
+    // Common constants, should be initialized to PL_TONE_MAP_CONSTANTS if
+    // not intending to override them further.
+    struct pl_tone_map_constants constants;
 
     // The desired input/output scaling of the tone map. If this differs from
     // `function->scaling`, any required conversion will be performed.
@@ -88,6 +158,9 @@ struct pl_tone_map_params {
     // The input HDR metadata. Only used by a select few tone-mapping
     // functions, currently only SMPTE ST2094. (Optional)
     struct pl_hdr_metadata hdr;
+
+    // --- Deprecated fields
+    float param PL_DEPRECATED; // see `constants`
 };
 
 #define pl_tone_map_params(...) (&(struct pl_tone_map_params) { __VA_ARGS__ });
@@ -127,17 +200,12 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_clip;
 
 // EETF from SMPTE ST 2094-40 Annex B, which uses the provided OOTF based on
 // Bezier curves to perform tone-mapping. The OOTF used is adjusted based on
-// the ratio between the targeted and actual display peak luminances.
-//
-// In the absence of HDR10+ metadata, falls back to a simple constant bezier
-// curve with tunable knee point. The parameter gives the target brightness
-// adaptation strength for the knee point, defaulting to 0.7.
+// the ratio between the targeted and actual display peak luminances. In the
+// absence of HDR10+ metadata, falls back to a simple constant bezier curve.
 PL_API extern const struct pl_tone_map_function pl_tone_map_st2094_40;
 
 // EETF from SMPTE ST 2094-10 Annex B.2, which takes into account the input
-// signal average luminance in addition to the maximum/minimum. The parameter
-// gives the target brightness adaptation strength for the knee point,
-// defaulting to 0.7.
+// signal average luminance in addition to the maximum/minimum.
 //
 // Note: This does *not* currently include the subjective gain/offset/gamma
 // controls defined in Annex B.3. (Open an issue with a valid sample file if
@@ -155,33 +223,16 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_bt2446a;
 
 // Simple spline consisting of two polynomials, joined by a single pivot point,
 // which is tuned based on the source scene average brightness (taking into
-// account HDR10+ metadata if available). The parameter can be used to tune the
-// desired subjective contrast characteristics. Higher values make the curve
-// steeper (closer to `clip`), preserving midtones at the cost of losing
-// shadow/highlight details, while lower values make the curve shallower
-// (closer to `linear`), preserving highlights at the cost of losing midtone
-// contrast. Values above 1.0 are possible, resulting in an output with more
-// contrast than the input. The default value is 0.5. This function can be used
+// account HDR10+ metadata if available). This function can be used
 // for both forward and inverse tone mapping.
 PL_API extern const struct pl_tone_map_function pl_tone_map_spline;
 
 // Simple non-linear, global tone mapping algorithm. Named after Erik Reinhard.
-// The parameter specifies the local contrast coefficient at the display peak.
-// Essentially, a value of param=0.5 implies that the reference white will be
-// about half as bright as when clipping. Defaults to 0.5, which results in the
-// simplest formulation of this function.
 PL_API extern const struct pl_tone_map_function pl_tone_map_reinhard;
 
 // Generalization of the reinhard tone mapping algorithm to support an
-// additional linear slope near black. The tone mapping parameter indicates the
-// trade-off between the linear section and the non-linear section.
-// Essentially, for param=0.5, every color value below 0.5 will be mapped
-// linearly, with the higher values being non-linearly tone mapped. Values near
-// 1.0 make this curve behave like pl_tone_map_clip, and values near 0.0 make
-// this curve behave like pl_tone_map_reinhard. The default value is 0.3, which
-// provides a good balance between colorimetric accuracy and preserving
-// out-of-gamut details. The name is derived from its function shape
-// (ax+b)/(cx+d), which is known as a Möbius transformation in mathematics.
+// additional linear slope near black. The name is derived from its function
+// shape (ax+b)/(cx+d), which is known as a Möbius transformation.
 PL_API extern const struct pl_tone_map_function pl_tone_map_mobius;
 
 // Piece-wise, filmic tone-mapping algorithm developed by John Hable for use in
@@ -195,15 +246,13 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_hable;
 // Fits a gamma (power) function to transfer between the source and target
 // color spaces, effectively resulting in a perceptual hard-knee joining two
 // roughly linear sections. This preserves details at all scales fairly
-// accurately, but can result in an image with a muted or dull appearance. The
-// parameter is used as the cutoff point, defaulting to 0.3.
+// accurately, but can result in an image with a muted or dull appearance.
 PL_API extern const struct pl_tone_map_function pl_tone_map_gamma;
 
 // Linearly stretches the input range to the output range, in PQ space. This
 // will preserve all details accurately, but results in a significantly
 // different average brightness. Can be used for inverse tone-mapping in
-// addition to regular tone-mapping. The parameter can be used as an additional
-// linear gain coefficient (defaulting to 1.0).
+// addition to regular tone-mapping.
 PL_API extern const struct pl_tone_map_function pl_tone_map_linear;
 
 // Like `pl_tone_map_linear`, but in linear light (instead of perceptually

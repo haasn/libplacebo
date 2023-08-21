@@ -256,15 +256,11 @@ struct pl_color_map_params {
 
     // --- Tone mapping options
 
-    // Function and configuration used for tone-mapping. For non-tunable
-    // functions, the `param` is ignored. If the tone mapping parameter is
-    // left as 0.0, the tone-mapping curve's preferred default parameter will
-    // be used. The default function is pl_tone_map_auto.
-    //
-    // Note: This pointer changing invalidates the LUT, so make sure to only
-    // use stable (or static) storage for the pl_tone_map_function.
+    // Tone mapping function to use to handle out-of-range colors.
     const struct pl_tone_map_function *tone_mapping_function;
-    float tone_mapping_param;
+
+    // Tone mapping constants, for expert tuning. Leave as default otherwise.
+    struct pl_tone_map_constants tone_constants;
 
     // If true, and supported by the given tone mapping function, libplacebo
     // will perform inverse tone mapping to expand the dynamic range of a
@@ -313,6 +309,7 @@ struct pl_color_map_params {
 
     // --- Deprecated fields
     enum pl_tone_map_mode tone_mapping_mode PL_DEPRECATED; // removed
+    float tone_mapping_param PL_DEPRECATED;         // see `tone_constants`
     float tone_mapping_crosstalk PL_DEPRECATED;     // now hard-coded as 0.04
     enum pl_rendering_intent intent PL_DEPRECATED;  // see `gamut_mapping`
     enum pl_gamut_mode gamut_mode PL_DEPRECATED;    // see `gamut_mapping`
@@ -321,8 +318,9 @@ struct pl_color_map_params {
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .gamut_mapping          = &pl_gamut_map_perceptual,         \
-    .gamut_constants        = { PL_GAMUT_MAP_CONSTANTS },       \
     .tone_mapping_function  = &pl_tone_map_auto,                \
+    .gamut_constants        = { PL_GAMUT_MAP_CONSTANTS },       \
+    .tone_constants         = { PL_TONE_MAP_CONSTANTS },        \
     .metadata               = PL_HDR_METADATA_ANY,              \
     .lut3d_size             = {48, 32, 256},                    \
     .lut_size               = 256,                              \
