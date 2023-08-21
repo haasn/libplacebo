@@ -460,10 +460,18 @@ static bool parse_float(opt_ctx p, pl_str str, void *out)
                PL_STR_FMT(str), opt->key);
         return false;
     }
-    if (!isnormal(val)) {
+
+    switch (fpclassify(val)) {
+    case FP_NAN:
+    case FP_INFINITE:
+    case FP_SUBNORMAL:
         PL_ERR(p, "Invalid value '%f' for option '%s', non-normal float",
                val, opt->key);
         return false;
+
+    case FP_ZERO:
+    case FP_NORMAL:
+        break;
     }
 
     if (opt->min != opt->max) {
