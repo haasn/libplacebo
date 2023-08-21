@@ -643,8 +643,12 @@ done:
 static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
                                          const struct pl_queue_params *params)
 {
+    if (!p->queue.num) {
+        *mix = (struct pl_frame_mix) {0};
+        return PL_QUEUE_MORE;
+    }
+
     // Find closest frame (nearest neighbour semantics)
-    pl_assert(p->queue.num);
     struct entry *entry = p->queue.elem[0];
     if (entry->pts > params->pts) { // first frame not visible yet
         *mix = (struct pl_frame_mix) {0};
@@ -697,7 +701,7 @@ static enum pl_queue_status nearest(pl_queue p, struct pl_frame_mix *mix,
         return ret;
     case PL_QUEUE_OK:
     case PL_QUEUE_MORE:
-        if (mix && point(p, mix, params) != PL_QUEUE_OK)
+        if (mix && point(p, mix, params) == PL_QUEUE_ERR)
             return PL_QUEUE_ERR;
         return ret;
     }
