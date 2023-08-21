@@ -137,7 +137,7 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_st2094_40;
 // EETF from SMPTE ST 2094-10 Annex B.2, which takes into account the input
 // signal average luminance in addition to the maximum/minimum. The parameter
 // gives the target brightness adaptation strength for the knee point,
-// defaulting to 0.5.
+// defaulting to 0.7.
 //
 // Note: This does *not* currently include the subjective gain/offset/gamma
 // controls defined in Annex B.3. (Open an issue with a valid sample file if
