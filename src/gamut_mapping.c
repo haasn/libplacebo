@@ -22,6 +22,22 @@
 
 #include <libplacebo/gamut_mapping.h>
 
+#define fclampf(x, lo, hi) fminf(fmaxf(x, lo), hi)
+static void fix_constants(struct pl_gamut_map_constants *c)
+{
+    c->perceptual_deadzone = fclampf(c->perceptual_deadzone, 0.0f, 1.0f);
+    c->colorimetric_gamma  = fclampf(c->colorimetric_gamma, 0.0f, 10.0f);
+    c->softclip_knee       = fclampf(c->softclip_knee, 0.0f, 1.0f);
+    c->softclip_desat      = fclampf(c->softclip_desat, 0.0f, 1.0f);
+}
+
+static inline bool constants_equal(const struct pl_gamut_map_constants *a,
+                                   const struct pl_gamut_map_constants *b)
+{
+    pl_static_assert(sizeof(*a) % sizeof(float) == 0);
+    return !memcmp(a, b, sizeof(*a));
+}
+
 bool pl_gamut_map_params_equal(const struct pl_gamut_map_params *a,
                                const struct pl_gamut_map_params *b)
 {
@@ -32,6 +48,7 @@ bool pl_gamut_map_params_equal(const struct pl_gamut_map_params *a,
            a->lut_size_C    == b->lut_size_C    &&
            a->lut_size_h    == b->lut_size_h    &&
            a->lut_stride    == b->lut_stride    &&
+           constants_equal(&a->constants, &b->constants) &&
            pl_raw_primaries_equal(&a->input_gamut,  &b->input_gamut) &&
            pl_raw_primaries_equal(&a->output_gamut, &b->output_gamut);
 }
@@ -390,6 +407,7 @@ static PL_THREAD_VOID generate(void *priv)
     }
 
     struct pl_gamut_map_params fixed = *params;
+    fix_constants(&fixed.constants);
     fixed.lut_size_h = args->count;
     FUN(params).map(args->out, &fixed);
     PL_THREAD_RETURN();
@@ -431,6 +449,7 @@ void pl_gamut_map_generate(float *out, const struct pl_gamut_map_params *params)
 void pl_gamut_map_sample(float x[3], const struct pl_gamut_map_params *params)
 {
     struct pl_gamut_map_params fixed = *params;
+    fix_constants(&fixed.constants);
     fixed.lut_size_I = fixed.lut_size_C = fixed.lut_size_h = 1;
     fixed.lut_stride = 3;
 
@@ -559,18 +578,14 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
     return ich2ipt(mix_exp(ich, x, gamma, peak.I));
 }
 
-static const float perceptual_gamma    = 1.80f;
-static const float perceptual_knee     = 0.70f;
-static const float perceptual_desat    = 0.35f;
-static const float perceptual_deadzone = 0.20f;
-
-static float softclip(float value, float source, float target)
+static float softclip(float value, float source, float target,
+                      const struct pl_gamut_map_constants *c)
 {
     if (!target)
         return 0.0f;
     const float peak = source / target;
     const float x = fminf(value / target, peak);
-    const float j = perceptual_knee;
+    const float j = c->softclip_knee;
     if (x <= j || peak <= 1.0)
         return value;
     // Apply simple mobius function
@@ -699,6 +714,7 @@ done:
 
 static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 {
+    const struct pl_gamut_map_constants *c = &params->constants;
     struct cache cache;
     struct gamut dst, src;
     get_gamuts(&dst, &src, &cache, params);
@@ -711,16 +727,16 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 
         // Protect in gamut region
         const float maxC = fmaxf(src_peak.C, dst_peak.C);
-        const float k = pl_smoothstep(perceptual_deadzone, 1.0f, ich.C / maxC);
+        const float k = pl_smoothstep(c->perceptual_deadzone, 1.0f, ich.C / maxC);
         ipt.I = PL_MIX(ipt.I, mapped.I, k);
         ipt.P = PL_MIX(ipt.P, mapped.P, k);
         ipt.T = PL_MIX(ipt.T, mapped.T, k);
 
         struct RGB rgb = ipt2rgb(ipt, dst);
         const float maxRGB = fmaxf(rgb.R, fmaxf(rgb.G, rgb.B));
-        rgb.R = fmaxf(softclip(rgb.R, maxRGB, dst.max_rgb), dst.min_rgb);
-        rgb.G = fmaxf(softclip(rgb.G, maxRGB, dst.max_rgb), dst.min_rgb);
-        rgb.B = fmaxf(softclip(rgb.B, maxRGB, dst.max_rgb), dst.min_rgb);
+        rgb.R = fmaxf(softclip(rgb.R, maxRGB, dst.max_rgb, c), dst.min_rgb);
+        rgb.G = fmaxf(softclip(rgb.G, maxRGB, dst.max_rgb, c), dst.min_rgb);
+        rgb.B = fmaxf(softclip(rgb.B, maxRGB, dst.max_rgb, c), dst.min_rgb);
         ipt = rgb2ipt(rgb, dst);
     }
 }
@@ -734,6 +750,8 @@ const struct pl_gamut_map_function pl_gamut_map_perceptual = {
 
 static void softclip_map(float *lut, const struct pl_gamut_map_params *params)
 {
+    const struct pl_gamut_map_constants *c = &params->constants;
+
     // Separate cache after hueshift, because this invalidates previous cache
     struct cache cache_pre, cache_post;
     struct gamut dst_pre, src_pre, src_post, dst_post;
@@ -760,7 +778,7 @@ static void softclip_map(float *lut, const struct pl_gamut_map_params *params)
         if (fabsf(shifted.h - ich.h) >= 1e-3f) {
             struct ICh src_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
             struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
-            const float k = pl_smoothstep(dst_border.C * perceptual_knee,
+            const float k = pl_smoothstep(dst_border.C * c->softclip_knee,
                                           src_border.C, ich.C);
             ich.h = PL_MIX(ich.h, shifted.h, k);
             src = src_post;
@@ -777,17 +795,17 @@ static void softclip_map(float *lut, const struct pl_gamut_map_params *params)
         struct ICh source = saturate(ich.h, src);
         struct ICh target = saturate(ich.h, dst);
         struct ICh border = desat_bounded(ich.I, ich.h, 0.0f, target.C, dst);
-        const float chromaticity = PL_MIX(target.C, border.C, perceptual_desat);
-        ich.C = softclip(ich.C, margin * source.C, chromaticity);
+        const float chromaticity = PL_MIX(target.C, border.C, c->softclip_desat);
+        ich.C = softclip(ich.C, margin * source.C, chromaticity, c);
 
         // Soft-clip the resulting RGB color. This will generally distort
         // hues slightly, but hopefully in an aesthetically pleasing way.
         struct ICh saturated = { ich.I, chromaticity, ich.h };
         struct RGB peak = ipt2rgb(ich2ipt(saturated), dst);
         struct RGB rgb = ipt2rgb(ich2ipt(ich), dst);
-        rgb.R = fmaxf(softclip(rgb.R, peak.R, dst.max_rgb), dst.min_rgb);
-        rgb.G = fmaxf(softclip(rgb.G, peak.G, dst.max_rgb), dst.min_rgb);
-        rgb.B = fmaxf(softclip(rgb.B, peak.B, dst.max_rgb), dst.min_rgb);
+        rgb.R = fmaxf(softclip(rgb.R, peak.R, dst.max_rgb, c), dst.min_rgb);
+        rgb.G = fmaxf(softclip(rgb.G, peak.G, dst.max_rgb, c), dst.min_rgb);
+        rgb.B = fmaxf(softclip(rgb.B, peak.B, dst.max_rgb, c), dst.min_rgb);
         ipt = rgb2ipt(rgb, dst);
     }
 }
@@ -800,12 +818,13 @@ const struct pl_gamut_map_function pl_gamut_map_softclip = {
 
 static void relative(float *lut, const struct pl_gamut_map_params *params)
 {
+    const struct pl_gamut_map_constants *c = &params->constants;
     struct cache cache;
     struct gamut dst;
     get_gamuts(&dst, NULL, &cache, params);
 
     FOREACH_LUT(lut, ipt)
-        ipt = clip_gamma(ipt, perceptual_gamma, dst);
+        ipt = clip_gamma(ipt, c->colorimetric_gamma, dst);
 }
 
 const struct pl_gamut_map_function pl_gamut_map_relative = {
@@ -849,6 +868,7 @@ const struct pl_gamut_map_function pl_gamut_map_saturation = {
 
 static void absolute(float *lut, const struct pl_gamut_map_params *params)
 {
+    const struct pl_gamut_map_constants *c = &params->constants;
     struct cache cache;
     struct gamut dst;
     get_gamuts(&dst, NULL, &cache, params);
@@ -859,7 +879,7 @@ static void absolute(float *lut, const struct pl_gamut_map_params *params)
         struct RGB rgb = ipt2rgb(ipt, dst);
         pl_matrix3x3_apply(&m, (float *) &rgb);
         ipt = rgb2ipt(rgb, dst);
-        ipt = clip_gamma(ipt, perceptual_gamma, dst);
+        ipt = clip_gamma(ipt, c->colorimetric_gamma, dst);
     }
 }
 
@@ -915,6 +935,7 @@ const struct pl_gamut_map_function pl_gamut_map_linear = {
 
 static void darken(float *lut, const struct pl_gamut_map_params *params)
 {
+    const struct pl_gamut_map_constants *c = &params->constants;
     struct cache cache;
     struct gamut dst, src;
     get_gamuts(&dst, &src, &cache, params);
@@ -937,7 +958,7 @@ static void darken(float *lut, const struct pl_gamut_map_params *params)
         rgb.G *= gain;
         rgb.B *= gain;
         ipt = rgb2ipt(rgb, dst);
-        ipt = clip_gamma(ipt, perceptual_gamma, dst);
+        ipt = clip_gamma(ipt, c->colorimetric_gamma, dst);
     }
 }
 

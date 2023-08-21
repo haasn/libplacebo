@@ -237,6 +237,9 @@ struct pl_color_map_params {
     // colors which are out-of-gamut as a consequence of tone mapping.
     const struct pl_gamut_map_function *gamut_mapping;
 
+    // Gamut mapping constants, for expert tuning. Leave as default otherwise.
+    struct pl_gamut_map_constants gamut_constants;
+
     // Gamut mapping 3DLUT size, for channels ICh. Defaults to {48, 32, 256}
     int lut3d_size[3];
 
@@ -318,6 +321,7 @@ struct pl_color_map_params {
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .gamut_mapping          = &pl_gamut_map_perceptual,         \
+    .gamut_constants        = { PL_GAMUT_MAP_CONSTANTS },       \
     .tone_mapping_function  = &pl_tone_map_auto,                \
     .metadata               = PL_HDR_METADATA_ANY,              \
     .lut3d_size             = {48, 32, 256},                    \

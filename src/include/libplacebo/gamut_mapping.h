@@ -41,6 +41,26 @@ struct pl_gamut_map_function {
     void *priv;
 };
 
+struct pl_gamut_map_constants {
+    // (Relative) chromaticity protection zone for perceptual mapping [0,1]
+    float perceptual_deadzone;
+
+    // I vs C curve gamma to use for colorimetric clipping [0,10]
+    float colorimetric_gamma;
+
+    // Knee point to use for softclipping methods (perceptual, softclip) [0,1]
+    float softclip_knee;
+
+    // Desaturation strength (for softclip only) [0,1]
+    float softclip_desat;
+};
+
+#define PL_GAMUT_MAP_CONSTANTS    \
+    .colorimetric_gamma  = 1.80f, \
+    .softclip_knee       = 0.70f, \
+    .softclip_desat      = 0.35f, \
+    .perceptual_deadzone = 0.20f,
+
 struct pl_gamut_map_params {
     // If `function` is NULL, defaults to `pl_gamut_map_clip`.
     const struct pl_gamut_map_function *function;
@@ -59,6 +79,10 @@ struct pl_gamut_map_params {
     float min_luma;
     float max_luma;
 
+    // Common constants, should be initialized to PL_GAMUT_MAP_CONSTANTS if
+    // not intending to override them further.
+    struct pl_gamut_map_constants constants;
+
     // -- LUT generation options (for `pl_gamut_map_generate` only)
 
     // The size of the resulting LUT, per channel.
@@ -75,7 +99,10 @@ struct pl_gamut_map_params {
     float chroma_margin PL_DEPRECATED; // non-functional
 };
 
-#define pl_gamut_map_params(...) (&(struct pl_gamut_map_params) { __VA_ARGS__ })
+#define pl_gamut_map_params(...) (&(struct pl_gamut_map_params) {   \
+    .constants = { PL_GAMUT_MAP_CONSTANTS },                        \
+    __VA_ARGS__                                                     \
+})
 
 // Note: Only does pointer equality testing on `function`
 PL_API bool pl_gamut_map_params_equal(const struct pl_gamut_map_params *a,

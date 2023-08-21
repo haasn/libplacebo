@@ -1687,6 +1687,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     const int *lut3d_size_def = pl_color_map_default_params.lut3d_size;
     struct pl_gamut_map_params gamut = {
         .function        = PL_DEF(params->gamut_mapping, &pl_gamut_map_clip),
+        .constants       = params->gamut_constants,
         .input_gamut     = src.hdr.prim,
         .output_gamut    = dst.hdr.prim,
         .lut_size_I      = PL_DEF(params->lut3d_size[0], lut3d_size_def[0]),
