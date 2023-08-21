@@ -196,7 +196,7 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_hable;
 // color spaces, effectively resulting in a perceptual hard-knee joining two
 // roughly linear sections. This preserves details at all scales fairly
 // accurately, but can result in an image with a muted or dull appearance. The
-// parameter is used as the cutoff point, defaulting to 0.5.
+// parameter is used as the cutoff point, defaulting to 0.3.
 PL_API extern const struct pl_tone_map_function pl_tone_map_gamma;
 
 // Linearly stretches the input range to the output range, in PQ space. This

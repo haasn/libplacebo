@@ -703,7 +703,7 @@ const struct pl_tone_map_function pl_tone_map_gamma = {
     .description = "Gamma function with knee",
     .param_desc = "Knee point",
     .param_min = 0.001,
-    .param_def = 0.50,
+    .param_def = 0.30,
     .param_max = 1.00,
     .map = gamma_map,
 };
