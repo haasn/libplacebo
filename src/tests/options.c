@@ -84,7 +84,7 @@ int main()
     REQUIRE_STREQ(pl_options_save(test), jinc4_opts);
     struct pl_options_t jinc4_pre = *test;
     pl_options_reset(test, NULL);
-    REQUIRE(pl_options_load(test, "upscaler=custom,upscaler_preset=ewa_lanczos,upscaler_radius=4.0"));
+    REQUIRE(pl_options_load(test, "upscaler=custom,upscaler_preset=ewa_lanczos,upscaler_radius=4.0,upscaler_clamp=0.0"));
     REQUIRE_STREQ(pl_options_save(test), jinc4_opts);
     REQUIRE_MEMEQ(test, &jinc4_pre, sizeof(*test));
 
