@@ -49,8 +49,8 @@ VAR_TYPES = {
 
     # constant variables: get printed directly into the source code
     'const int':        FmtSpec(ctype='int',          fmtstr='%d'),
-    'const uint':       FmtSpec(ctype='unsigned',     fmtstr='%uu'),
-    'const float':      FmtSpec(ctype='float',        fmtstr='%ff'),
+    'const uint':       FmtSpec(ctype='unsigned',     fmtstr='uint(%u)'),
+    'const float':      FmtSpec(ctype='float',        fmtstr='float(%f)'),
 
     # dynamic variables: get loaded as shader variables
     'dynamic int':      FmtSpec(wrap_expr=FmtSpec.wrap_var('int', dynamic=True)),
