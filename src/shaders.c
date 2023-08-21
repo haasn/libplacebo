@@ -427,10 +427,10 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
         GLSLH("const int "$" = %d; \n", id, *(int *) sc.data);
         return id;
     case PL_VAR_UINT:
-        GLSLH("const uint "$" = %uu; \n", id, *(unsigned int *) sc.data);
+        GLSLH("const uint "$" = uint(%u); \n", id, *(unsigned int *) sc.data);
         return id;
     case PL_VAR_FLOAT:
-        GLSLH("const float "$" = %f; \n", id, *(float *) sc.data);
+        GLSLH("const float "$" = float(%f); \n", id, *(float *) sc.data);
         return id;
     case PL_VAR_INVALID:
     case PL_VAR_TYPE_COUNT:
