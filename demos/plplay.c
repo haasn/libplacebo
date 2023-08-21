@@ -1329,23 +1329,10 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_layout_row_dynamic(nk, 16, 1);
                 for (int i = 0; i < pl_num_tone_map_functions; i++) {
                     const struct pl_tone_map_function *f = pl_tone_map_functions[i];
-                    if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT)) {
-                        if (f != cpar->tone_mapping_function)
-                            cpar->tone_mapping_param = f->param_def;
+                    if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
                         cpar->tone_mapping_function = f;
-                    }
                 }
                 nk_combo_end(nk);
-            }
-
-            nk_label(nk, "Algorithm parameter:", NK_TEXT_LEFT);
-            const struct pl_tone_map_function *fun = cpar->tone_mapping_function;
-            if (fun->param_desc) {
-                nk_property_float(nk, fun->param_desc, fmaxf(fun->param_min, 0.001),
-                                  &cpar->tone_mapping_param, fun->param_max,
-                                  0.01, 0.001);
-            } else {
-                nk_label(nk, "(N/A)", NK_TEXT_LEFT);
             }
 
             static const char *metadata_types[PL_HDR_METADATA_TYPE_COUNT] = {
