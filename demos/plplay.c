@@ -1372,6 +1372,28 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 cpar->visualize_hue = fmodf(cpar->visualize_hue + huerange, huerange);
             }
 
+            if (nk_tree_push(nk, NK_TREE_NODE, "Fine-tune constants (advanced)", NK_MINIMIZED)) {
+                struct pl_tone_map_constants  *tc = &cpar->tone_constants;
+                struct pl_gamut_map_constants *gc = &cpar->gamut_constants;
+                nk_layout_row_dynamic(nk, 20, 2);
+                nk_property_float(nk, "Perceptual deadzone", 0.0, &gc->perceptual_deadzone, 1.0, 0.05, 0.001);
+                nk_property_float(nk, "Colorimetric gamma", 0.0, &gc->colorimetric_gamma, 10.0, 0.05, 0.001);
+                nk_property_float(nk, "Softclip knee", 0.0, &gc->softclip_knee, 1.0, 0.05, 0.001);
+                nk_property_float(nk, "Softclip desaturation", 0.0, &gc->softclip_desat, 1.0, 0.05, 0.001);
+                nk_property_float(nk, "Knee adaptation", 0.0, &tc->knee_adaptation, 1.0, 0.05, 0.001);
+                nk_property_float(nk, "Knee minimum", 1e-6, &tc->knee_minimum, 0.5 - 1e-6, 0.05, 0.001);
+                nk_property_float(nk, "Knee maximum", 0.5 + 1e-6, &tc->knee_maximum, 1.0 - 1e-6, 0.05, 0.001);
+                nk_property_float(nk, "Knee default", tc->knee_minimum, &tc->knee_default, tc->knee_maximum, 0.05, 0.001);
+                nk_property_float(nk, "BT.2390 offset", 0.5, &tc->knee_offset, 2.0, 0.05, 0.001);
+                nk_property_float(nk, "Spline slope tuning", 0.0, &tc->slope_tuning, 10.0, 0.05, 0.001);
+                nk_property_float(nk, "Spline slope offset", 0.0, &tc->slope_offset, 1.0, 0.05, 0.001);
+                nk_property_float(nk, "Spline contrast", 0.0, &tc->spline_contrast, 1.5, 0.05, 0.001);
+                nk_property_float(nk, "Reinhard contrast", 1e-6, &tc->reinhard_contrast, 1.0 - 1e-6, 0.05, 0.001);
+                nk_property_float(nk, "Linear knee point", 1e-6, &tc->linear_knee, 1.0 - 1e-6, 0.05, 0.001);
+                nk_property_float(nk, "Linear exposure", 1e-6, &tc->exposure, 10.0, 0.05, 0.001);
+                nk_tree_pop(nk);
+            }
+
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop .cube file here...") && dropped_file) {
                 uint8_t *buf;
