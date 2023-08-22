@@ -149,7 +149,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
         bool changed = obj->method != method;
         obj->method = method;
 
-        lut_size = 1 << PL_DEF(params->lut_size, 6);
+        lut_size = 1 << PL_DEF(params->lut_size, pl_dither_default_params.lut_size);
         lut = sh_lut(sh, sh_lut_params(
             .object     = &obj->lut,
             .var_type   = PL_VAR_FLOAT,

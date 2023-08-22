@@ -897,8 +897,8 @@ void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
         return;
 
     params = PL_DEF(params, &pl_sigmoid_default_params);
-    float center = PL_DEF(params->center, 0.75);
-    float slope  = PL_DEF(params->slope, 6.5);
+    float center = PL_DEF(params->center, pl_sigmoid_default_params.center);
+    float slope  = PL_DEF(params->slope, pl_sigmoid_default_params.slope);
 
     // This function needs to go through (0,0) and (1,1), so we compute the
     // values at 1 and 0, and then scale/shift them, respectively.
@@ -921,8 +921,8 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
 
     // See: pl_shader_sigmoidize
     params = PL_DEF(params, &pl_sigmoid_default_params);
-    float center = PL_DEF(params->center, 0.75);
-    float slope  = PL_DEF(params->slope, 6.5);
+    float center = PL_DEF(params->center, pl_sigmoid_default_params.center);
+    float slope  = PL_DEF(params->slope, pl_sigmoid_default_params.slope);
     float offset = 1.0 / (1 + expf(slope * center));
     float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
 
@@ -1143,7 +1143,8 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     }
     float avg_pq = (float) frame_sum_pq / (frame_wg_count * PQ_MAX);
     float max_pq = measure_peak(&data, params->percentile);
-    const float min_peak = PL_DEF(params->minimum_peak, 1.0f);
+    const float min_peak = PL_DEF(params->minimum_peak,
+                                  pl_peak_detect_default_params.minimum_peak);
     max_pq = fmaxf(max_pq, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, min_peak));
 
     if (!obj->peak.avg_pq) {
@@ -1683,13 +1684,14 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
     pl_tone_map_params_infer(&tone);
 
+    const int *lut3d_size_def = pl_color_map_default_params.lut3d_size;
     struct pl_gamut_map_params gamut = {
         .function        = PL_DEF(params->gamut_mapping, &pl_gamut_map_clip),
         .input_gamut     = src.hdr.prim,
         .output_gamut    = dst.hdr.prim,
-        .lut_size_I      = PL_DEF(params->lut3d_size[0], 23),
-        .lut_size_C      = PL_DEF(params->lut3d_size[1], 32),
-        .lut_size_h      = PL_DEF(params->lut3d_size[2], 128),
+        .lut_size_I      = PL_DEF(params->lut3d_size[0], lut3d_size_def[0]),
+        .lut_size_C      = PL_DEF(params->lut3d_size[1], lut3d_size_def[1]),
+        .lut_size_h      = PL_DEF(params->lut3d_size[2], lut3d_size_def[2]),
         .lut_stride      = 4,
     };
 
