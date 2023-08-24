@@ -9,6 +9,8 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
             ident                       # identifiers (always dynamic)
           | (?:(?:const|dynamic)\s+)?   # optional const/dynamic modifiers
                 (?:float|u?int|char)    # base type
+          | swizzle                     # swizzle mask
+          | (?:i|u)?vecType             # vector type (for mask)
         )):)?
         (?P<expr>[^{}]+)
       }
@@ -32,6 +34,10 @@ class FmtSpec(object):
         else:
             return lambda name, expr: f'sh_const_{type}(sh, "{name}", {expr})'
 
+    @staticmethod
+    def wrap_fn(fn):
+        return lambda name: f'{fn}({name})'
+
 VAR_TYPES = {
     # identifiers and strings: get mapped as-is
     'ident':            FmtSpec(),
@@ -51,6 +57,12 @@ VAR_TYPES = {
     'dynamic int':      FmtSpec(wrap_expr=FmtSpec.wrap_var('int', dynamic=True)),
     'dynamic uint':     FmtSpec(wrap_expr=FmtSpec.wrap_var('uint', dynamic=True)),
     'dynamic float':    FmtSpec(wrap_expr=FmtSpec.wrap_var('float', dynamic=True)),
+
+    # component mask types
+    'swizzle':          FmtSpec(ctype='uint8_t', fmtstr='%s',     fmt_expr=FmtSpec.wrap_fn('sh_swizzle')),
+    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='ivec%d', fmt_expr=FmtSpec.wrap_fn('sh_num_comps')),
+    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='uvec%d', fmt_expr=FmtSpec.wrap_fn('sh_num_comps')),
+    'vecType':          FmtSpec(ctype='uint8_t', fmtstr='vec%d',  fmt_expr=FmtSpec.wrap_fn('sh_num_comps')),
 }
 
 def stringify(value, strip):

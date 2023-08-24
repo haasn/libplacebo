@@ -396,6 +396,14 @@ const float base = ${const float: M_LOG10E};
 int seed = ${dynamic int: rand()};
 ```
 
+For sampling from component masks, the special types `swizzle` and
+`(u|i)vecType` can be used to generate the appropriate texture swizzle and
+corresponding vector type:
+
+```glsl
+${vecType: comp_mask} tmp = color.${swizzle: comp_mask};
+```
+
 Finally, a special type, `const char`, allows embedding constant/literal
 strings. These are passed as pointers, and so should be either long-lived or
 point to static storage - failure to adhere to this may cause use-after-free or
