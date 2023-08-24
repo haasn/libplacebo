@@ -404,16 +404,6 @@ corresponding vector type:
 ${vecType: comp_mask} tmp = color.${swizzle: comp_mask};
 ```
 
-Finally, a special type, `const char`, allows embedding constant/literal
-strings. These are passed as pointers, and so should be either long-lived or
-point to static storage - failure to adhere to this may cause use-after-free or
-unnecessary shader recompilations:
-
-```glsl
-${const char: sh_float_type(num_comps)} tmp;
-tmp = color.${const char: sh_swizzle(comp_mask)};
-```
-
 ### Macro directives
 
 Lines beginning with `@` are not included in the GLSL as-is, but instead parsed
