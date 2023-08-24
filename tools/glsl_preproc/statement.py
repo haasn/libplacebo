@@ -8,7 +8,7 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
     \${ (?:\s*(?P<type>(?:              # optional type prefix
             ident                       # identifiers (always dynamic)
           | (?:(?:const|dynamic)\s+)?   # optional const/dynamic modifiers
-                (?:float|u?int|char)    # base type
+                (?:float|u?int)         # base type
           | swizzle                     # swizzle mask
           | (?:i|u)?vecType             # vector type (for mask)
         )):)?
@@ -39,9 +39,8 @@ class FmtSpec(object):
         return lambda name: f'{fn}({name})'
 
 VAR_TYPES = {
-    # identifiers and strings: get mapped as-is
+    # identifiers: get mapped as-is
     'ident':            FmtSpec(),
-    'const char':       FmtSpec(ctype='const char *', fmtstr='%s'),
 
     # normal variables: get mapped as shader constants
     'int':              FmtSpec(wrap_expr=FmtSpec.wrap_var('int')),
