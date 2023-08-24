@@ -1,7 +1,7 @@
 import re
 
 from templates import GLSL_BLOCK_TEMPLATE
-from variables import VarSet, Fmt, slugify
+from variables import VarSet, slugify
 
 VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
     # long form ${ ... } syntax
@@ -16,25 +16,38 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
 |   @(?P<var>\w+)   # reference to locally defined var
 ''')
 
+class FmtSpec(object):
+    def __init__(self, ctype='ident_t', fmtstr='_%hx', wrap_expr=lambda name, expr: expr):
+        self.ctype     = ctype
+        self.fmtstr    = fmtstr
+        self.wrap_expr = wrap_expr
+
+    @staticmethod
+    def wrap_var(type, dynamic=False):
+        if dynamic:
+            return lambda name, expr: f'sh_var_{type}(sh, "{name}", {expr}, true)'
+        else:
+            return lambda name, expr: f'sh_const_{type}(sh, "{name}", {expr})'
+
 VAR_TYPES = {
     # identifiers and strings: get mapped as-is
-    'ident':            Fmt.IDENT,
-    'const char':       Fmt.CONST_CHAR,
+    'ident':            FmtSpec(),
+    'const char':       FmtSpec(ctype='const char *', fmtstr='%s'),
 
     # normal variables: get mapped as shader constants
-    'int':              Fmt.INT_VAR,
-    'uint':             Fmt.UINT_VAR,
-    'float':            Fmt.FLOAT_VAR,
+    'int':              FmtSpec(wrap_expr=FmtSpec.wrap_var('int')),
+    'uint':             FmtSpec(wrap_expr=FmtSpec.wrap_var('uint')),
+    'float':            FmtSpec(wrap_expr=FmtSpec.wrap_var('float')),
 
     # constant variables: get printed directly into the source code
-    'const int':        Fmt.INT_CONST,
-    'const uint':       Fmt.UINT_CONST,
-    'const float':      Fmt.FLOAT_CONST,
+    'const int':        FmtSpec(ctype='int',          fmtstr='%d'),
+    'const uint':       FmtSpec(ctype='unsigned',     fmtstr='%uu'),
+    'const float':      FmtSpec(ctype='float',        fmtstr='%ff'),
 
     # dynamic variables: get loaded as shader variables
-    'dynamic int':      Fmt.INT_DYN,
-    'dynamic uint':     Fmt.UINT_DYN,
-    'dynamic float':    Fmt.FLOAT_DYN,
+    'dynamic int':      FmtSpec(wrap_expr=FmtSpec.wrap_var('int', dynamic=True)),
+    'dynamic uint':     FmtSpec(wrap_expr=FmtSpec.wrap_var('uint', dynamic=True)),
+    'dynamic float':    FmtSpec(wrap_expr=FmtSpec.wrap_var('float', dynamic=True)),
 }
 
 def stringify(value, strip):
@@ -95,7 +108,7 @@ class GLSLLine(Statement):
         expr = match['expr'] or name
         name = name or slugify(expr)
 
-        fmt = VAR_TYPES[type] if type else Fmt.IDENT
+        fmt = VAR_TYPES[type or 'ident']
         self.refs.append(self.add_var(
             ctype = fmt.ctype,
             expr  = fmt.wrap_expr(name, expr),

@@ -78,31 +78,3 @@ class VarSet(object):
     def merge(self, other):
         for var in other:
             self.add_var_raw(var)
-
-# Format specifier + corresponding C type and expression wrapper
-class FmtSpec(object):
-    def __init__(self, ctype='ident_t', fmtstr='_%hx', wrap_expr=lambda name, expr: expr):
-        self.ctype     = ctype
-        self.fmtstr    = fmtstr
-        self.wrap_expr = wrap_expr
-
-    @staticmethod
-    def wrap_var(type, dynamic=False):
-        if dynamic:
-            return lambda name, expr: f'sh_var_{type}(sh, "{name}", {expr}, true)'
-        else:
-            return lambda name, expr: f'sh_const_{type}(sh, "{name}", {expr})'
-
-# Current list of format types
-class Fmt(object):
-    IDENT       = FmtSpec()
-    CONST_CHAR  = FmtSpec(ctype='const char *', fmtstr='%s')
-    INT_CONST   = FmtSpec(ctype='int',          fmtstr='%d')
-    UINT_CONST  = FmtSpec(ctype='unsigned',     fmtstr='%uu')
-    FLOAT_CONST = FmtSpec(ctype='float',        fmtstr='%ff')
-    INT_VAR     = FmtSpec(wrap_expr=FmtSpec.wrap_var('int'))
-    UINT_VAR    = FmtSpec(wrap_expr=FmtSpec.wrap_var('uint'))
-    FLOAT_VAR   = FmtSpec(wrap_expr=FmtSpec.wrap_var('float'))
-    INT_DYN     = FmtSpec(wrap_expr=FmtSpec.wrap_var('int', dynamic=True))
-    UINT_DYN    = FmtSpec(wrap_expr=FmtSpec.wrap_var('uint', dynamic=True))
-    FLOAT_DYN   = FmtSpec(wrap_expr=FmtSpec.wrap_var('float', dynamic=True))
