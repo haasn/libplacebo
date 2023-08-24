@@ -17,10 +17,13 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
 ''')
 
 class FmtSpec(object):
-    def __init__(self, ctype='ident_t', fmtstr='_%hx', wrap_expr=lambda name, expr: expr):
+    def __init__(self, ctype='ident_t', fmtstr='_%hx',
+                 wrap_expr=lambda name, expr: expr,
+                 fmt_expr=lambda name: name):
         self.ctype     = ctype
         self.fmtstr    = fmtstr
         self.wrap_expr = wrap_expr
+        self.fmt_expr  = fmt_expr
 
     @staticmethod
     def wrap_var(type, dynamic=False):
@@ -109,11 +112,11 @@ class GLSLLine(Statement):
         name = name or slugify(expr)
 
         fmt = VAR_TYPES[type or 'ident']
-        self.refs.append(self.add_var(
+        self.refs.append(fmt.fmt_expr(self.add_var(
             ctype = fmt.ctype,
             expr  = fmt.wrap_expr(name, expr),
             name  = name,
-        ))
+        )))
 
         if fmt.ctype == 'ident_t':
             return commentify(name, self.strip) + fmt.fmtstr
