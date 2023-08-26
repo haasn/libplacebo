@@ -338,7 +338,7 @@ static bool option_set_raw(pl_options opts, pl_str k, pl_str v)
     return false;
 
 found:
-    PL_DEBUG(p, "Parsing option '%s' = '%.*s'", opt->key, PL_STR_FMT(v));
+    PL_TRACE(p, "Parsing option '%s' = '%.*s'", opt->key, PL_STR_FMT(v));
     if (opt->deprecated)
         PL_WARN(p, "Option '%s' is deprecated", opt->key);
 
