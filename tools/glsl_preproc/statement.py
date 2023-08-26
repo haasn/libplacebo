@@ -58,10 +58,10 @@ VAR_TYPES = {
     'dynamic float':    FmtSpec(wrap_expr=FmtSpec.wrap_var('float', dynamic=True)),
 
     # component mask types
-    'swizzle':          FmtSpec(ctype='uint8_t', fmtstr='%s',     fmt_expr=FmtSpec.wrap_fn('sh_swizzle')),
-    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='ivec%d', fmt_expr=FmtSpec.wrap_fn('sh_num_comps')),
-    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='uvec%d', fmt_expr=FmtSpec.wrap_fn('sh_num_comps')),
-    'vecType':          FmtSpec(ctype='uint8_t', fmtstr='vec%d',  fmt_expr=FmtSpec.wrap_fn('sh_num_comps')),
+    'swizzle':          FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_swizzle')),
+    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
+    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
+    'vecType':          FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
 }
 
 def stringify(value, strip):
