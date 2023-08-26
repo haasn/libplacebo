@@ -949,6 +949,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_NAMED("gamut_mapping", "Gamut mapping function", color_map_params.gamut_mapping,
               pl_gamut_map_functions),
     OPT_FLOAT("perceptual_deadzone", "Gamut mapping perceptual deadzone", color_map_params.gamut_constants.perceptual_deadzone, .max = 1.0f),
+    OPT_FLOAT("perceptual_strength", "Gamut mapping perceptual strength", color_map_params.gamut_constants.perceptual_strength, .max = 1.0f),
     OPT_FLOAT("colorimetric_gamma", "Gamut mapping colorimetric gamma", color_map_params.gamut_constants.colorimetric_gamma, .max = 10.0f),
     OPT_FLOAT("softclip_knee", "Gamut mapping softclip knee point", color_map_params.gamut_constants.softclip_knee, .max = 1.0f),
     OPT_FLOAT("softclip_desat", "Gamut mapping softclip desaturation strength", color_map_params.gamut_constants.softclip_desat, .max = 1.0f),

@@ -45,6 +45,9 @@ struct pl_gamut_map_constants {
     // (Relative) chromaticity protection zone for perceptual mapping [0,1]
     float perceptual_deadzone;
 
+    // Strength of the perceptual saturation mapping component [0,1]
+    float perceptual_strength;
+
     // I vs C curve gamma to use for colorimetric clipping [0,10]
     float colorimetric_gamma;
 
@@ -59,7 +62,8 @@ struct pl_gamut_map_constants {
     .colorimetric_gamma  = 1.80f, \
     .softclip_knee       = 0.70f, \
     .softclip_desat      = 0.35f, \
-    .perceptual_deadzone = 0.20f,
+    .perceptual_deadzone = 0.20f, \
+    .perceptual_strength = 1.00f,
 
 struct pl_gamut_map_params {
     // If `function` is NULL, defaults to `pl_gamut_map_clip`.

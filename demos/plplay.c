@@ -1377,6 +1377,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 struct pl_gamut_map_constants *gc = &cpar->gamut_constants;
                 nk_layout_row_dynamic(nk, 20, 2);
                 nk_property_float(nk, "Perceptual deadzone", 0.0, &gc->perceptual_deadzone, 1.0, 0.05, 0.001);
+                nk_property_float(nk, "Perceptual strength", 0.0, &gc->perceptual_strength, 1.0, 0.05, 0.001);
                 nk_property_float(nk, "Colorimetric gamma", 0.0, &gc->colorimetric_gamma, 10.0, 0.05, 0.001);
                 nk_property_float(nk, "Softclip knee", 0.0, &gc->softclip_knee, 1.0, 0.05, 0.001);
                 nk_property_float(nk, "Softclip desaturation", 0.0, &gc->softclip_desat, 1.0, 0.05, 0.001);

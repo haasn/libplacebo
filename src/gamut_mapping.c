@@ -26,6 +26,7 @@
 static void fix_constants(struct pl_gamut_map_constants *c)
 {
     c->perceptual_deadzone = fclampf(c->perceptual_deadzone, 0.0f, 1.0f);
+    c->perceptual_strength = fclampf(c->perceptual_strength, 0.0f, 1.0f);
     c->colorimetric_gamma  = fclampf(c->colorimetric_gamma, 0.0f, 10.0f);
     c->softclip_knee       = fclampf(c->softclip_knee, 0.0f, 1.0f);
     c->softclip_desat      = fclampf(c->softclip_desat, 0.0f, 1.0f);
@@ -727,7 +728,8 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 
         // Protect in gamut region
         const float maxC = fmaxf(src_peak.C, dst_peak.C);
-        const float k = pl_smoothstep(c->perceptual_deadzone, 1.0f, ich.C / maxC);
+        float k = pl_smoothstep(c->perceptual_deadzone, 1.0f, ich.C / maxC);
+        k *= c->perceptual_strength;
         ipt.I = PL_MIX(ipt.I, mapped.I, k);
         ipt.P = PL_MIX(ipt.P, mapped.P, k);
         ipt.T = PL_MIX(ipt.T, mapped.T, k);
