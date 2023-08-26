@@ -1659,7 +1659,7 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
             continue;
 
         if (out) {
-            PL_DEBUG(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
+            PL_TRACE(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
                      params->cached_program_len, pass->cache_hash);
         }
 
@@ -1678,7 +1678,7 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
             continue;
 
         if (out) {
-            PL_DEBUG(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
+            PL_TRACE(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
                      pass->cached_program_len, pass->hash);
         }
 
@@ -1688,8 +1688,11 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
         write_buf(out, &size, pass->cached_program, pass->cached_program_len);
     }
 
-    if (out)
+    if (out) {
         memcpy(out_num, &num_passes, sizeof(num_passes));
+        PL_DEBUG(dp, "Saved %d cached programs totalling %zu bytes",
+                 num_passes, size);
+    }
 
     pl_mutex_unlock(&dp->lock);
     return size;
@@ -1720,6 +1723,7 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
                 api_ver, PL_API_VER);
     }
 
+    size_t loaded_size = 0;
     pl_mutex_lock(&dp->lock);
     for (int i = 0; i < num; i++) {
         uint64_t hash, size;
@@ -1731,7 +1735,7 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
         // Skip passes that are already compiled
         for (int n = 0; n < dp->passes.num; n++) {
             if (dp->passes.elem[n]->cache_hash == hash) {
-                PL_DEBUG(dp, "Skipping already compiled pass with hash %"PRIx64, hash);
+                PL_TRACE(dp, "Skipping already compiled pass with hash %"PRIx64, hash);
                 cache += size;
                 continue;
             }
@@ -1756,13 +1760,17 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
             };
         }
 
-        PL_DEBUG(dp, "Loading %zu bytes of cached program with hash 0x%"PRIx64,
+        PL_TRACE(dp, "Loading %zu bytes of cached program with hash 0x%"PRIx64,
                  (size_t) size, hash);
 
         pl_free((void *) pass->cached_program);
         pass->cached_program = pl_memdup(dp, cache, size);
         pass->cached_program_len = size;
         cache += size;
+        loaded_size += size;
     }
     pl_mutex_unlock(&dp->lock);
+
+    PL_DEBUG(dp, "Loaded %d cached programs totalling %zu bytes",
+             num, loaded_size);
 }
