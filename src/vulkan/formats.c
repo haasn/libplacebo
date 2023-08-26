@@ -476,7 +476,7 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             PL_ARRAY(uint64_t) modlist = {0};
             for (int i = 0; i < drm_props.drmFormatModifierCount; i++) {
                 if (modifiers[i].drmFormatModifierPlaneCount > 1) {
-                    PL_DEBUG(gpu, "Ignoring format modifier %s of "
+                    PL_TRACE(gpu, "Ignoring format modifier %s of "
                              "format %s because its plane count %d > 1",
                              PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
                              fmt->name, modifiers[i].drmFormatModifierPlaneCount);
@@ -496,7 +496,7 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
                 VkFormatFeatureFlags flags = modifiers[i].drmFormatModifierTilingFeatures;
                 if ((flags & flag_mask) != (texflags & flag_mask)) {
-                    PL_INFO(gpu, "DRM format modifier %s of format %s "
+                    PL_DEBUG(gpu, "DRM format modifier %s of format %s "
                             "supports fewer caps (0x%"PRIx32") than optimal tiling "
                             "(0x%"PRIx32"), may result in limited capability!",
                             PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
