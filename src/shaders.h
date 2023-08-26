@@ -345,9 +345,15 @@ struct sh_lut_params {
 // gets interpolated and clamped as needed. Returns NULL on error.
 ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params);
 
-static inline const char *sh_float_type(uint8_t num_comps)
+static inline uint8_t sh_num_comps(uint8_t mask)
 {
-    switch (num_comps) {
+    pl_assert((mask & 0xF) == mask);
+    return __builtin_popcount(mask);
+}
+
+static inline const char *sh_float_type(uint8_t mask)
+{
+    switch (sh_num_comps(mask)) {
     case 1: return "float";
     case 2: return "vec2";
     case 3: return "vec3";
@@ -355,12 +361,6 @@ static inline const char *sh_float_type(uint8_t num_comps)
     }
 
     pl_unreachable();
-}
-
-static inline uint8_t sh_num_comps(uint8_t mask)
-{
-    pl_assert((mask & 0xF) == mask);
-    return __builtin_popcount(mask);
 }
 
 static inline const char *sh_swizzle(uint8_t mask)

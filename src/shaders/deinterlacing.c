@@ -45,7 +45,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
 
     const uint8_t num_comps = sh_num_comps(comp_mask);
     const char *swiz = sh_swizzle(comp_mask);
-    GLSL("#define T %s \n", sh_float_type(num_comps));
+    GLSL("#define T %s \n", sh_float_type(comp_mask));
 
     ident_t pos, pt;
     ident_t cur = sh_bind(sh, src->cur.top, PL_TEX_ADDRESS_MIRROR,

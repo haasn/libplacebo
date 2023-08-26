@@ -208,7 +208,7 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
     GLSL("#define GET(X, Y)                                   \\\n"
          "    (textureLod("$", pos + pt * vec2(X, Y), 0.0).%s)  \n"
          "#define T %s                                          \n",
-         tex, swiz, sh_float_type(num_comps));
+         tex, swiz, sh_float_type(mask));
 
     ident_t prng = sh_prng(sh, true, NULL);
     GLSL("T avg, diff, bound;   \n"
