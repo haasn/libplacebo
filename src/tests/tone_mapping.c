@@ -125,6 +125,10 @@ int main()
         .lut_size_C   = LUT3D_SIZE,
         .lut_size_h   = LUT3D_SIZE,
         .lut_stride   = 3,
+
+        // Set strength to maximum, because otherwise the saturation mapping
+        // code will not fully apply, invalidating the following test
+        .constants.perceptual_strength = 1.0f,
     };
 
     // Test that primaries round-trip for perceptual gamut mapping
