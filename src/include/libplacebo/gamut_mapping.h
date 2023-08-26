@@ -62,7 +62,7 @@ struct pl_gamut_map_constants {
     .colorimetric_gamma  = 1.80f, \
     .softclip_knee       = 0.70f, \
     .softclip_desat      = 0.35f, \
-    .perceptual_deadzone = 0.20f, \
+    .perceptual_deadzone = 0.30f, \
     .perceptual_strength = 0.60f,
 
 struct pl_gamut_map_params {
