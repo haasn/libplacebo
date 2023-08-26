@@ -63,7 +63,7 @@ struct pl_gamut_map_constants {
     .softclip_knee       = 0.70f, \
     .softclip_desat      = 0.35f, \
     .perceptual_deadzone = 0.20f, \
-    .perceptual_strength = 1.00f,
+    .perceptual_strength = 0.60f,
 
 struct pl_gamut_map_params {
     // If `function` is NULL, defaults to `pl_gamut_map_clip`.
