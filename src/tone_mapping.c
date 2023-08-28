@@ -137,11 +137,11 @@ static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *par
     const struct pl_tone_map_function *fun = params->function;
     fixed.input_scaling = fun->scaling;
     fixed.output_scaling = fun->scaling;
-    fixed.input_min = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_min);
-    fixed.input_max = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_max);
-    fixed.input_avg = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_avg);
-    fixed.output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_min);
-    fixed.output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_max);
+    fixed.input_min  = pl_hdr_rescale(params->input_scaling,  fun->scaling, fixed.input_min);
+    fixed.input_max  = pl_hdr_rescale(params->input_scaling,  fun->scaling, fixed.input_max);
+    fixed.input_avg  = pl_hdr_rescale(params->input_scaling,  fun->scaling, fixed.input_avg);
+    fixed.output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, fixed.output_min);
+    fixed.output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, fixed.output_max);
 
     // Constrain the output peak if function does not support inverse mapping
     if (!fun->map_inverse && fixed.output_max > fixed.input_max)
