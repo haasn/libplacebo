@@ -280,7 +280,12 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
     // Choose the destnation knee by picking the perceptual adaptation point
     // between the source knee and the desired target. This moves the knee
     // point, on the vertical axis, closer to the 1:1 (neutral) line.
-    float adaptation = params->constants.knee_adaptation;
+    //
+    // Adjust the adaptation strength towards 1 based on how close the knee
+    // point is to its extreme values (min/max knee)
+    float tuning = 1.0f - pl_smoothstep(max_knee, def_knee, target) *
+                          pl_smoothstep(min_knee, def_knee, target);
+    float adaptation = PL_MIX(params->constants.knee_adaptation, 1.0f, tuning);
     float dst_knee = PL_MIX(src_knee, adapted, adaptation);
     dst_knee = fclampf(dst_knee, dst_knee_min, dst_knee_max);
 
