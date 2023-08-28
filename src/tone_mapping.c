@@ -131,6 +131,10 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
     float sdr = pl_hdr_rescale(par->output_scaling, par->input_scaling, par->output_max);
     sdr = fminf(sdr, pl_hdr_rescale(PL_HDR_NITS, par->input_scaling, PL_COLOR_SDR_WHITE));
     par->input_max = fmaxf(par->input_max, sdr);
+
+    // Constrain the output peak if function does not support inverse mapping
+    if (!par->function->map_inverse)
+        par->output_max = fminf(par->output_max, par->input_max);
 }
 
 // Infer params and rescale to function scaling
@@ -147,10 +151,6 @@ static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *par
     fixed.input_avg  = pl_hdr_rescale(params->input_scaling,  fun->scaling, fixed.input_avg);
     fixed.output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, fixed.output_min);
     fixed.output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, fixed.output_max);
-
-    // Constrain the output peak if function does not support inverse mapping
-    if (!fun->map_inverse && fixed.output_max > fixed.input_max)
-        fixed.output_max = fixed.input_max;
 
     return fixed;
 }
