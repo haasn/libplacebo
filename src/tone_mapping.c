@@ -24,17 +24,18 @@
 #define fclampf(x, lo, hi) fminf(fmaxf(x, lo), hi)
 static void fix_constants(struct pl_tone_map_constants *c)
 {
+    const float eps = 1e-6f;
     c->knee_adaptation   = fclampf(c->knee_adaptation, 0.0f, 1.0f);
-    c->knee_minimum      = fclampf(c->knee_minimum, 1e-6f, 0.5f - 1e-6f);
-    c->knee_maximum      = fclampf(c->knee_maximum, 0.5f + 1e-6f, 1.0f - 1e-6f);
+    c->knee_minimum      = fclampf(c->knee_minimum, eps, 0.5f - eps);
+    c->knee_maximum      = fclampf(c->knee_maximum, 0.5f + eps, 1.0f - eps);
     c->knee_default      = fclampf(c->knee_default, c->knee_minimum, c->knee_maximum);
     c->knee_offset       = fclampf(c->knee_offset, 0.5f, 2.0f);
     c->slope_tuning      = fclampf(c->slope_tuning, 0.0f, 10.0f);
     c->slope_offset      = fclampf(c->slope_offset, 0.0f, 1.0f);
     c->spline_contrast   = fclampf(c->spline_contrast, 0.0f, 1.5f);
-    c->reinhard_contrast = fclampf(c->reinhard_contrast, 1e-6f, 1.0f - 1e-6f);
-    c->linear_knee       = fclampf(c->linear_knee, 1e-6f, 1.0f - 1e-6f);
-    c->exposure          = fclampf(c->exposure, 1e-6f, 10.0f);
+    c->reinhard_contrast = fclampf(c->reinhard_contrast, eps, 1.0f - eps);
+    c->linear_knee       = fclampf(c->linear_knee, eps, 1.0f - eps);
+    c->exposure          = fclampf(c->exposure, eps, 10.0f);
 }
 
 static inline bool constants_equal(const struct pl_tone_map_constants *a,
