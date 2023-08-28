@@ -170,7 +170,8 @@ PL_API bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
                                      const struct pl_tone_map_params *b);
 
 // Resolves `pl_tone_map_auto` to a specific tone-mapping function, based on
-// the tone mapping parameters, and also clamps/defaults the parameter.
+// the tone mapping parameters, and also clamps/defaults the parameters,
+// including input/output maximum.
 PL_API void pl_tone_map_params_infer(struct pl_tone_map_params *params);
 
 // Returns true if the given tone mapping configuration effectively represents
