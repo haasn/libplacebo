@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '314': 'add pl_renderer_get_hdr_metadata',
       '313': 'remove pl_peak_detect_params.minimum_peak',
       '312': 'add pl_gamut_map_constants.perceptual_strength',
       '311': 'add pl_tone_map_constants, pl_tone_map_params.constants and pl_color_map_params.tone_constants',

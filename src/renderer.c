@@ -1195,6 +1195,12 @@ cleanup:
     pl_reset_detected_peak(rr->tone_map_state);
 }
 
+bool pl_renderer_get_hdr_metadata(pl_renderer rr,
+                                  struct pl_hdr_metadata *metadata)
+{
+    return pl_get_detected_hdr_metadata(rr->tone_map_state, metadata);
+}
+
 struct plane_state {
     enum plane_type type;
     struct pl_plane plane;

@@ -711,6 +711,12 @@ PL_API bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
 // dramatically (e.g. when switching to a different file).
 PL_API void pl_renderer_flush_cache(pl_renderer rr);
 
+// Mirrors `pl_get_detected_hdr_metadata`, giving you the current internal peak
+// detection HDR metadata (when peak detection is active). Returns false if no
+// information is available (e.g. not HDR source, peak detection disabled).
+PL_API bool pl_renderer_get_hdr_metadata(pl_renderer rr,
+                                         struct pl_hdr_metadata *metadata);
+
 // Represents a mixture of input frames, distributed temporally.
 //
 // NOTE: Frames must be sorted by timestamp, i.e. `timestamps` must be
