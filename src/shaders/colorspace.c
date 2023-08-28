@@ -945,7 +945,6 @@ static bool peak_detect_params_eq(const struct pl_peak_detect_params *a,
     return a->smoothing_period     == b->smoothing_period     &&
            a->scene_threshold_low  == b->scene_threshold_low  &&
            a->scene_threshold_high == b->scene_threshold_high &&
-           a->minimum_peak         == b->minimum_peak         &&
            a->percentile           == b->percentile;
     // don't compare `allow_delayed` because it doesn't change measurement
 }
@@ -1143,9 +1142,6 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     }
     float avg_pq = (float) frame_sum_pq / (frame_wg_count * PQ_MAX);
     float max_pq = measure_peak(&data, params->percentile);
-    const float min_peak = PL_DEF(params->minimum_peak,
-                                  pl_peak_detect_default_params.minimum_peak);
-    max_pq = fmaxf(max_pq, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, min_peak));
 
     if (!obj->peak.avg_pq) {
         // Set the initial value accordingly if it contains no data

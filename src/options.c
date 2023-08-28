@@ -937,7 +937,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("peak_smoothing_period", "Peak detection smoothing coefficient", peak_detect_params.smoothing_period, .max = 1000.0),
     OPT_FLOAT("scene_threshold_low", "Scene change threshold low", peak_detect_params.scene_threshold_low, .max = 100.0),
     OPT_FLOAT("scene_threshold_high", "Scene change threshold high", peak_detect_params.scene_threshold_high, .max = 100.0),
-    OPT_FLOAT("minimum_peak", "Minimum detected peak", peak_detect_params.minimum_peak, .max = 100.0),
+    OPT_FLOAT("minimum_peak", "Minimum detected peak", peak_detect_params.minimum_peak, .max = 100.0, .deprecated = true),
     OPT_FLOAT("peak_percentile", "Peak detection percentile", peak_detect_params.percentile, .max = 100.0),
     OPT_BOOL("allow_delayed_peak", "Allow delayed peak detection", peak_detect_params.allow_delayed),
 

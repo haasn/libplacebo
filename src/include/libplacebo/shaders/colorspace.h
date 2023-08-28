@@ -123,11 +123,6 @@ struct pl_peak_detect_params {
     float scene_threshold_low;
     float scene_threshold_high;
 
-    // To avoid over-tone-mapping very dark scenes (or black frames), this
-    // imposes a hard lower bound on the detected peak. If left as 0.0, it
-    // instead defaults to a value of 1.0.
-    float minimum_peak;
-
     // Which percentile of the input image brightness histogram to consider as
     // the true peak of the scene. If this is set to 100 (or 0), the brightest
     // pixel is measured. Otherwise, the top of the frequency distribution is
@@ -143,15 +138,15 @@ struct pl_peak_detect_params {
     // which can sometimes improve thoughpout. Disabled by default.
     bool allow_delayed;
 
-    // --- Deprecated fields
+    // --- Deprecated / removed fields
     float overshoot_margin PL_DEPRECATED;
+    float minimum_peak PL_DEPRECATED;
 };
 
 #define PL_PEAK_DETECT_DEFAULTS         \
     .smoothing_period       = 100.0f,   \
     .scene_threshold_low    = 5.5f,     \
     .scene_threshold_high   = 10.0f,    \
-    .minimum_peak           = 1.0f,     \
     .percentile             = 100.0f,
 
 #define PL_PEAK_DETECT_HQ_DEFAULTS      \
