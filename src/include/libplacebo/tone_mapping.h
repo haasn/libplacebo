@@ -190,7 +190,7 @@ PL_API void pl_tone_map_generate(float *out, const struct pl_tone_map_params *pa
 PL_API float pl_tone_map_sample(float x, const struct pl_tone_map_params *params);
 
 // Special tone mapping function that means "automatically pick a good function
-// based on the HDR levels". This is an opaque tone map function with no
+// based on the available metadata". This is an opaque tone map function with no
 // meaningful internal representation. (Besides `name` and `description`)
 PL_API extern const struct pl_tone_map_function pl_tone_map_auto;
 

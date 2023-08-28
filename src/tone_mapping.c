@@ -101,29 +101,12 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
     if (par->function == &pl_tone_map_auto) {
         float src_max = pl_hdr_rescale(par->input_scaling, PL_HDR_NORM, par->input_max);
         float dst_max = pl_hdr_rescale(par->output_scaling, PL_HDR_NORM, par->output_max);
-        float ratio = src_max / dst_max;
-        if (par->hdr.ootf.num_anchors && ratio >= 1) {
+        if (par->hdr.ootf.num_anchors && src_max > dst_max) {
             // HDR10+ OOTF available: Pick SMPTE ST2094-40
             par->function = &pl_tone_map_st2094_40;
-        } else if (par->input_avg || ratio > 10) {
-            // Scene-average metadata available, or extreme reduction: Pick
-            // spline for its good tunable properties and quasi-linear behavior
-            par->function = &pl_tone_map_spline;
-        } else if (src_max < 1 + 1e-3 && dst_max < 1 + 1e-3) {
-            // SDR<->SDR range conversion, use linear light stretching
-            par->function = &pl_tone_map_linear;
-        } else if (fmaxf(ratio, 1 / ratio) > 2 && fminf(src_max, dst_max) < 1.5f) {
-            // Reasonably ranged HDR<->SDR conversion, pick BT.2446a since it
-            // was designed for this task
-            par->function = &pl_tone_map_bt2446a;
-        } else if (ratio < 1) {
-            // Small range inverse tone mapping, pick spline since BT.2446a
-            // distorts colors too much
-            par->function = &pl_tone_map_spline;
         } else {
-            // Small range conversion (nearly no-op), pick BT.2390 because it
-            // has the best asymptotic behavior (approximately linear).
-            par->function = &pl_tone_map_bt2390;
+            // Fallback to spline in all other cases
+            par->function = &pl_tone_map_spline;
         }
     }
 
