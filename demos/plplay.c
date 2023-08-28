@@ -1296,6 +1296,20 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_property_float(nk, "Smoothing period", 0.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
             nk_property_float(nk, "Peak percentile", 95.0, &ppar->percentile, 100.0, 0.01, 0.001);
             nk_checkbox_label(nk, "Allow 1-frame delay", &ppar->allow_delayed);
+
+            struct pl_hdr_metadata metadata;
+            if (pl_renderer_get_hdr_metadata(p->renderer, &metadata)) {
+                nk_layout_row_dynamic(nk, 24, 2);
+                nk_label(nk, "Detected max luminance:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%.2f cd/m² (%.2f%% PQ)",
+                          pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, metadata.max_pq_y),
+                          100.0f * metadata.max_pq_y);
+                nk_label(nk, "Detected avg luminance:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%.2f cd/m² (%.2f%% PQ)",
+                          pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, metadata.avg_pq_y),
+                          100.0f * metadata.avg_pq_y);
+            }
+
             nk_tree_pop(nk);
         }
 
