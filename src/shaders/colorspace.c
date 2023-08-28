@@ -1671,11 +1671,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .out_max    = &tone.output_max,
     ));
 
-    if (!params->inverse_tone_mapping) {
-        // Never exceed the source unless requested, but still allow
-        // black point adaptation
-        tone.output_max = PL_MIN(tone.output_max, tone.input_max);
-    }
+    pl_tone_map_params_infer(&tone);
 
     // Round sufficiently similar values
     if (fabs(tone.input_max - tone.output_max) < 1e-6)
@@ -1683,7 +1679,11 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     if (fabs(tone.input_min - tone.output_min) < 1e-6)
         tone.output_min = tone.input_min;
 
-    pl_tone_map_params_infer(&tone);
+    if (!params->inverse_tone_mapping) {
+        // Never exceed the source unless requested, but still allow
+        // black point adaptation
+        tone.output_max = PL_MIN(tone.output_max, tone.input_max);
+    }
 
     const int *lut3d_size_def = pl_color_map_default_params.lut3d_size;
     struct pl_gamut_map_params gamut = {
