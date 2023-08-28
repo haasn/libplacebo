@@ -255,40 +255,37 @@ const struct pl_tone_map_function pl_tone_map_clip = {
 static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
                              const struct pl_tone_map_params *params)
 {
+    const float src_min = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_min);
+    const float src_max = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_max);
+    const float src_avg = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_avg);
+    const float dst_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_min);
+    const float dst_max = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_max);
+
     const float min_knee = params->constants.knee_minimum;
     const float max_knee = params->constants.knee_maximum;
     const float def_knee = params->constants.knee_default;
-
-    float src_min = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_min);
-    float src_max = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_max);
-    float src_avg = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_avg);
-    float dst_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_min);
-    float dst_max = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_max);
-    float dst_avg;
-
-    // Choose default scene average brightness to be a fixed percentage of the
-    // value range, override with (clamped) dynamic metadata if available
-    float target_avg = def_knee;
-    if (src_avg) {
-        target_avg = (src_avg - src_min) / (src_max - src_min);
-        target_avg = PL_CLAMP(target_avg, min_knee, max_knee);
-    }
-
-    src_avg = PL_MIX(src_min, src_max, target_avg);
-    dst_avg = PL_MIX(dst_min, dst_max, target_avg);
-
-    // Adjust the destination adaptation point by picking the perceptual
-    // adaptation point between the source average and the desired average.
-    // This moves the knee point, on the vertical axis, closer to the 1:1
-    // (neutral) line.
-    dst_avg = PL_MIX(src_avg, dst_avg, params->constants.knee_adaptation);
-
+    const float src_knee_min = PL_MIX(src_min, src_max, min_knee);
+    const float src_knee_max = PL_MIX(src_min, src_max, max_knee);
     const float dst_knee_min = PL_MIX(dst_min, dst_max, min_knee);
     const float dst_knee_max = PL_MIX(dst_min, dst_max, max_knee);
-    dst_avg = PL_CLAMP(dst_avg, dst_knee_min, dst_knee_max);
 
-    *out_src_knee = pl_hdr_rescale(PL_HDR_PQ, params->input_scaling, src_avg);
-    *out_dst_knee = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, dst_avg);
+    // Choose source knee based on source scene brightness
+    float src_knee = PL_DEF(src_avg, PL_MIX(src_min, src_max, def_knee));
+    src_knee = fclampf(src_knee, src_knee_min, src_knee_max);
+
+    // Choose target adaptation point based on linearly re-scaling source knee
+    float target = (src_knee - src_min) / (src_max - src_min);
+    float adapted = PL_MIX(dst_min, dst_max, target);
+
+    // Choose the destnation knee by picking the perceptual adaptation point
+    // between the source knee and the desired target. This moves the knee
+    // point, on the vertical axis, closer to the 1:1 (neutral) line.
+    float adaptation = params->constants.knee_adaptation;
+    float dst_knee = PL_MIX(src_knee, adapted, adaptation);
+    dst_knee = fclampf(dst_knee, dst_knee_min, dst_knee_max);
+
+    *out_src_knee = pl_hdr_rescale(PL_HDR_PQ, params->input_scaling, src_knee);
+    *out_dst_knee = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, dst_knee);
 }
 
 // Pascal's triangle
