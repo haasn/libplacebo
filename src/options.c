@@ -554,11 +554,24 @@ static bool parse_preset(opt_ctx p, pl_str str, void *out)
     opt_priv priv = opt->priv;
     for (int i = 0; priv->presets[i].name; i++) {
         if (pl_str_equals0(str, priv->presets[i].name)) {
-            memcpy(out, priv->presets[i].val, priv->size);
-            // As a special case, when loading the pl_render_params we need
-            // to load/redirect params into our internal struct
-            if (priv->offset == offsetof(struct pl_options_t, params))
+            if (priv->offset == offsetof(struct pl_options_t, params)) {
+                const struct pl_render_params *preset = priv->presets[i].val;
+                pl_assert(priv->size == sizeof(*preset));
+
+                // Redirect params structs into internal system after loading
+                struct pl_render_params *params = out, prev = *params;
+                *params = *preset;
                 redirect_params(p->opts);
+
+                // Re-apply excluded options
+                params->lut = prev.lut;
+                params->hooks = prev.hooks;
+                params->num_hooks = prev.num_hooks;
+                params->info_callback = prev.info_callback;
+                params->info_priv = prev.info_priv;
+            } else {
+                memcpy(out, priv->presets[i].val, priv->size);
+            }
             return true;
         }
     }
