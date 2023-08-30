@@ -1186,7 +1186,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     }
 
     const bool use_histogram = params->percentile > 0 && params->percentile < 100;
-    size_t shmem_req = 2 * sizeof(uint32_t);
+    size_t shmem_req = 3 * sizeof(uint32_t);
     if (use_histogram)
         shmem_req += sizeof(uint32_t[HIST_BINS]);
 
@@ -1270,10 +1270,11 @@ retry_ssbo:
 
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.
-    ident_t wg_sum = sh_fresh(sh, "wg_sum"),
-            wg_max = sh_fresh(sh, "wg_max"),
-            wg_hist = NULL_IDENT;
-    GLSLH("shared uint "$", "$"; \n", wg_sum, wg_max);
+    ident_t wg_sum   = sh_fresh(sh, "wg_sum"),
+            wg_max   = sh_fresh(sh, "wg_max"),
+            wg_black = sh_fresh(sh, "wg_black"),
+            wg_hist  = NULL_IDENT;
+    GLSLH("shared uint "$", "$", "$"; \n", wg_sum, wg_max, wg_black);
     if (use_histogram) {
         wg_hist = sh_fresh(sh, "wg_hist");
         GLSLH("shared uint "$"[%u]; \n", wg_hist, HIST_BINS);
@@ -1281,9 +1282,9 @@ retry_ssbo:
              "    "$"[i] = 0u;                                              \n",
              HIST_BINS, wg_hist);
     }
-    GLSL($" = 0u; "$" = 0u; \n"
-         "barrier();        \n",
-         wg_sum, wg_max);
+    GLSL($" = 0u; "$" = 0u; "$" = 0u; \n"
+         "barrier();                  \n",
+         wg_sum, wg_max, wg_black);
 
     // Decode color into linear light representation
     pl_color_space_infer(&csp);
@@ -1323,36 +1324,45 @@ retry_ssbo:
     }
 
     if (has_subgroups) {
-        GLSL("uint group_sum = subgroupAdd(y_pq);   \n"
-             "uint group_max = subgroupMax(y_pq);   \n"
-             "if (subgroupElect()) {                \n"
-             "    atomicAdd("$", group_sum);        \n"
-             "    atomicMax("$", group_max);        \n"
-             "}                                     \n"
-             "barrier();                            \n",
-             wg_sum, wg_max);
+        GLSL("uint group_sum = subgroupAdd(y_pq);           \n"
+             "uint group_max = subgroupMax(y_pq);           \n"
+             "uvec4 b = subgroupBallot(y_pq == 0u);         \n"
+             "if (subgroupElect()) {                        \n"
+             "    atomicAdd("$", group_sum);                \n"
+             "    atomicMax("$", group_max);                \n"
+             "    atomicAdd("$", subgroupBallotBitCount(b));\n"
+             "}                                             \n"
+             "barrier();                                    \n",
+             wg_sum, wg_max, wg_black);
     } else {
-        GLSL("atomicAdd("$", y_pq); \n"
-             "atomicMax("$", y_pq); \n"
-             "barrier();            \n",
-             wg_sum, wg_max);
+        GLSL("atomicAdd("$", y_pq);     \n"
+             "atomicMax("$", y_pq);     \n"
+             "if (y_pq == 0u)           \n"
+             "    atomicAdd("$", 1u);   \n"
+             "barrier();                \n",
+             wg_sum, wg_max, wg_black);
     }
 
     if (use_histogram) {
-        GLSL("for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
+        GLSL("if (gl_LocalInvocationIndex == 0u)                            \n"
+             "    "$"[0] -= "$";                                            \n"
+             "for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
              "    atomicAdd(frame_hist[slice * %du + i], "$"[i]);           \n",
-             HIST_BINS, HIST_BINS, wg_hist);
+             wg_hist, wg_black,
+             HIST_BINS,
+             HIST_BINS, wg_hist);
     }
 
     // Have one thread per work group update the global atomics
-    GLSL("if (gl_LocalInvocationIndex == 0u) {              \n"
-         "    atomicAdd(frame_wg_count[slice], 1u);         \n"
-         "    atomicAdd(frame_sum_pq[slice], "$" / wg_size);\n"
-         "    atomicMax(frame_max_pq[slice], "$");          \n"
-         "}                                                 \n"
-         "color = color_orig;                               \n"
-         "}                                                 \n",
-          wg_sum, wg_max);
+    GLSL("if (gl_LocalInvocationIndex == 0u && "$" < wg_size) { \n"
+         "    uint num = wg_size - "$";                         \n"
+         "    atomicAdd(frame_wg_count[slice], 1u);             \n"
+         "    atomicAdd(frame_sum_pq[slice], "$" / num);        \n"
+         "    atomicMax(frame_max_pq[slice], "$");              \n"
+         "}                                                     \n"
+         "color = color_orig;                                   \n"
+         "}                                                     \n",
+          wg_black, wg_black, wg_sum, wg_max);
 
     return true;
 }
