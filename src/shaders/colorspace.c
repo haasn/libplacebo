@@ -601,10 +601,10 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
     GLSL("}\n");
 }
 
-static ident_t sh_luma_coeffs(pl_shader sh, const struct pl_raw_primaries *prim)
+static ident_t sh_luma_coeffs(pl_shader sh, const struct pl_color_space *csp)
 {
     pl_matrix3x3 rgb2xyz;
-    rgb2xyz = pl_get_rgb2xyz_matrix(prim);
+    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
 
     // FIXME: Cannot use `const vec3` due to glslang bug #2025
     ident_t coeffs = sh_fresh(sh, "luma_coeffs");
@@ -707,9 +707,7 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         // OOTF
         GLSL("color.rgb *= 1.0 / 12.0;                                      \n"
              "color.rgb *= "$" * pow(max(dot("$", color.rgb), 0.0), "$");   \n",
-             SH_FLOAT(csp_max),
-             sh_luma_coeffs(sh, pl_raw_primaries_get(csp->primaries)),
-             SH_FLOAT(y - 1));
+             SH_FLOAT(csp_max), sh_luma_coeffs(sh, csp), SH_FLOAT(y - 1));
         return;
     }
     case PL_COLOR_TRC_V_LOG:
@@ -851,9 +849,7 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         // OOTF^-1
         GLSL("color.rgb *= 1.0 / "$";                                       \n"
              "color.rgb *= 12.0 * max(1e-6, pow(dot("$", color.rgb), "$")); \n",
-             SH_FLOAT(csp_max),
-             sh_luma_coeffs(sh, pl_raw_primaries_get(csp->primaries)),
-             SH_FLOAT((1 - y) / y));
+             SH_FLOAT(csp_max), sh_luma_coeffs(sh, csp), SH_FLOAT((1 - y) / y));
         // OETF
         GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                      \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f),  \n"
@@ -1300,7 +1296,7 @@ retry_ssbo:
          "luma = (%f + %f * luma) / (1.0 + %f * luma);  \n"
          "luma = pow(luma, %f);                         \n"
          "uint y_pq = uint(%d.0 * luma);                \n",
-         sh_luma_coeffs(sh, pl_raw_primaries_get(csp.primaries)),
+         sh_luma_coeffs(sh, &csp),
          PL_COLOR_SDR_WHITE / 10000.0,
          PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
          PQ_MAX);
