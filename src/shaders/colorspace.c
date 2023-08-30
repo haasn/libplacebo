@@ -1300,7 +1300,7 @@ retry_ssbo:
          "luma = (%f + %f * luma) / (1.0 + %f * luma);  \n"
          "luma = pow(luma, %f);                         \n"
          "uint y_pq = uint(%d.0 * luma);                \n",
-         sh_luma_coeffs(sh, &csp.hdr.prim),
+         sh_luma_coeffs(sh, pl_raw_primaries_get(csp.primaries)),
          PL_COLOR_SDR_WHITE / 10000.0,
          PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
          PQ_MAX);
