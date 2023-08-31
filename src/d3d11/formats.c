@@ -277,6 +277,8 @@ void pl_d3d11_setup_formats(struct pl_gpu_t *gpu)
         if (fmt->caps & (PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE))
             fmt->glsl_format = pl_fmt_glsl_format(fmt, fmt->num_components);
 
+        fmt->fourcc = pl_fmt_fourcc(fmt);
+
         // If no caps, D3D11 only supports this for things we don't care about
         if (!fmt->caps) {
             pl_free(fmt);
