@@ -203,7 +203,7 @@ const struct pl_render_params pl_render_default_params = {
 
 const struct pl_render_params pl_render_high_quality_params = {
     PL_RENDER_DEFAULTS
-    .upscaler           = &pl_filter_ewa_lanczos,
+    .upscaler           = &pl_filter_ewa_lanczossharp,
     .downscaler         = &pl_filter_mitchell,
     .frame_mixer        = &pl_filter_mitchell_clamp,
     .sigmoid_params     = &pl_sigmoid_default_params,
