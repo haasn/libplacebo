@@ -143,7 +143,7 @@ struct pl_peak_detect_params {
 };
 
 #define PL_PEAK_DETECT_DEFAULTS         \
-    .smoothing_period       = 100.0f,   \
+    .smoothing_period       = 20.0f,    \
     .scene_threshold_low    = 1.0f,     \
     .scene_threshold_high   = 3.0f,     \
     .percentile             = 100.0f,
