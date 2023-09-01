@@ -1164,10 +1164,8 @@ static void hdr_update_peak(struct pass_state *pass)
     if (metadata && metadata != PL_HDR_METADATA_CIE_Y)
         goto cleanup; // metadata will be unused
 
-    const struct pl_tone_map_function *fun = &pl_tone_map_auto;
-    if (params->color_map_params)
-        fun = params->color_map_params->tone_mapping_function;
-    bool uses_ootf = fun == &pl_tone_map_auto || fun == &pl_tone_map_st2094_40;
+    const struct pl_color_map_params *cpars = params->color_map_params;
+    bool uses_ootf = cpars && cpars->tone_mapping_function == &pl_tone_map_st2094_40;
     if (uses_ootf && pass->img.color.hdr.ootf.num_anchors)
         goto cleanup; // HDR10+ OOTF is being used
 

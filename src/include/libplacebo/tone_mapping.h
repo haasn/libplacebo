@@ -169,9 +169,7 @@ struct pl_tone_map_params {
 PL_API bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
                                      const struct pl_tone_map_params *b);
 
-// Resolves `pl_tone_map_auto` to a specific tone-mapping function, based on
-// the tone mapping parameters, and also clamps/defaults the parameters,
-// including input/output maximum.
+// Clamps/defaults the parameters, including input/output maximum.
 PL_API void pl_tone_map_params_infer(struct pl_tone_map_params *params);
 
 // Returns true if the given tone mapping configuration effectively represents
@@ -188,11 +186,6 @@ PL_API void pl_tone_map_generate(float *out, const struct pl_tone_map_params *pa
 //
 // Ignores `params->lut_size`.
 PL_API float pl_tone_map_sample(float x, const struct pl_tone_map_params *params);
-
-// Special tone mapping function that means "automatically pick a good function
-// based on the available metadata". This is an opaque tone map function with no
-// meaningful internal representation. (Besides `name` and `description`)
-PL_API extern const struct pl_tone_map_function pl_tone_map_auto;
 
 // Performs no tone-mapping, just clips out-of-range colors. Retains perfect
 // color accuracy for in-range colors but completely destroys out-of-range
@@ -267,6 +260,9 @@ PL_API extern const int pl_num_tone_map_functions; // excluding trailing NULL
 
 // Find the tone mapping function with the given name, or NULL on failure.
 PL_API const struct pl_tone_map_function *pl_find_tone_map_function(const char *name);
+
+// Deprecated alias, do not use
+#define pl_tone_map_auto pl_tone_map_spline
 
 PL_API_END
 

@@ -68,7 +68,7 @@ bool pl_tone_map_params_noop(const struct pl_tone_map_params *p)
     float in_max = pl_hdr_rescale(p->input_scaling, PL_HDR_NITS, p->input_max);
     float out_min = pl_hdr_rescale(p->output_scaling, PL_HDR_NITS, p->output_min);
     float out_max = pl_hdr_rescale(p->output_scaling, PL_HDR_NITS, p->output_max);
-    bool can_inverse = p->function == &pl_tone_map_auto || p->function->map_inverse;
+    bool can_inverse = p->function->map_inverse;
 
     return fabs(in_min - out_min) < 1e-4 && // no BPC
            in_max < out_max + 1e-2 && // no range reduction
@@ -97,18 +97,6 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
     }
 
     fix_constants(&par->constants);
-
-    if (par->function == &pl_tone_map_auto) {
-        float src_max = pl_hdr_rescale(par->input_scaling, PL_HDR_NORM, par->input_max);
-        float dst_max = pl_hdr_rescale(par->output_scaling, PL_HDR_NORM, par->output_max);
-        if (par->hdr.ootf.num_anchors && src_max > dst_max) {
-            // HDR10+ OOTF available: Pick SMPTE ST2094-40
-            par->function = &pl_tone_map_st2094_40;
-        } else {
-            // Fallback to spline in all other cases
-            par->function = &pl_tone_map_spline;
-        }
-    }
 
     // Constrain the input peak to be no less than target SDR white
     float sdr = pl_hdr_rescale(par->output_scaling, par->input_scaling, par->output_max);
@@ -218,11 +206,6 @@ static inline float bt1886_oetf(float x, float min, float max)
     const float lw = powf(max, 1/2.4f);
     return (powf(x, 1/2.4f) - lb) / (lw - lb);
 }
-
-const struct pl_tone_map_function pl_tone_map_auto = {
-    .name = "auto",
-    .description = "Automatic selection",
-};
 
 static void noop(float *lut, const struct pl_tone_map_params *params)
 {
@@ -764,7 +747,6 @@ const struct pl_tone_map_function pl_tone_map_linear_light = {
 };
 
 const struct pl_tone_map_function * const pl_tone_map_functions[] = {
-    &pl_tone_map_auto,
     &pl_tone_map_clip,
     &pl_tone_map_st2094_40,
     &pl_tone_map_st2094_10,

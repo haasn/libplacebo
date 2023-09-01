@@ -45,9 +45,6 @@ int main()
     // Generate example tone mapping curves, forward and inverse
     for (int i = 0; i < pl_num_tone_map_functions; i++) {
         const struct pl_tone_map_function *fun = pl_tone_map_functions[i];
-        if (fun == &pl_tone_map_auto)
-            continue;
-
         printf("Testing tone-mapping function %s\n", fun->name);
         params.function = params_inv.function = fun;
         pl_clock_t start = pl_clock_now();
@@ -77,10 +74,10 @@ int main()
         }
     }
 
-    // Test that `auto` is a no-op for 1:1 tone mapping
+    // Test that `spline` is a no-op for 1:1 tone mapping
     params.output_min = params.input_min;
     params.output_max = params.input_max;
-    params.function = &pl_tone_map_auto;
+    params.function = &pl_tone_map_spline;
     pl_tone_map_generate(lut, &params);
     for (int j = 0; j < PL_ARRAY_SIZE(lut); j++) {
         float x = j / (PL_ARRAY_SIZE(lut) - 1.0f);
