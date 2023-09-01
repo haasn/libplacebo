@@ -118,8 +118,7 @@ struct pl_peak_detect_params {
     // over a small window of brightness ranges. These parameters control the
     // lower and upper bounds of this window, in units of 1% PQ.
     //
-    // The default values are 5.5 and 10.0, respectively. To disable this logic
-    // entirely, set either one to 0.
+    // Setting either one of these to 0.0 disables this logic.
     float scene_threshold_low;
     float scene_threshold_high;
 
@@ -145,8 +144,8 @@ struct pl_peak_detect_params {
 
 #define PL_PEAK_DETECT_DEFAULTS         \
     .smoothing_period       = 100.0f,   \
-    .scene_threshold_low    = 5.5f,     \
-    .scene_threshold_high   = 10.0f,    \
+    .scene_threshold_low    = 1.0f,     \
+    .scene_threshold_high   = 3.0f,     \
     .percentile             = 100.0f,
 
 #define PL_PEAK_DETECT_HQ_DEFAULTS      \
