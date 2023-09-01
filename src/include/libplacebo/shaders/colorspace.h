@@ -313,7 +313,7 @@ struct pl_color_map_params {
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .gamut_mapping          = &pl_gamut_map_perceptual,         \
-    .tone_mapping_function  = &pl_tone_map_auto,                \
+    .tone_mapping_function  = &pl_tone_map_spline,              \
     .gamut_constants        = { PL_GAMUT_MAP_CONSTANTS },       \
     .tone_constants         = { PL_TONE_MAP_CONSTANTS },        \
     .metadata               = PL_HDR_METADATA_ANY,              \
