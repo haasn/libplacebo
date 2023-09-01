@@ -26,6 +26,8 @@
     {"bicubic",             &pl_filter_bicubic,     "Bicubic"},                 \
     {"lanczos",             &pl_filter_lanczos,     "Lanczos"},                 \
     {"ewa_lanczos",         &pl_filter_ewa_lanczos, "Jinc (EWA Lanczos)"},      \
+    {"ewa_lanczossharp",    &pl_filter_ewa_lanczossharp,     "Sharpened Jinc (EWA Lanczos)"},   \
+    {"ewa_lanczos4sharpest",&pl_filter_ewa_lanczos4sharpest, "Sharpened Jinc-4 (EWA Lanczos)"}, \
     {"gaussian",            &pl_filter_gaussian,    "Gaussian"},                \
     {"spline16",            &pl_filter_spline16,    "Spline (2 taps)"},         \
     {"spline36",            &pl_filter_spline36,    "Spline (3 taps)"},         \

@@ -733,6 +733,7 @@ const struct pl_filter_config pl_filter_ginseng = {
 };
 
 #define JINC_ZERO3 3.2383154841662362
+#define JINC_ZERO4 4.2410628637960699
 
 const struct pl_filter_config pl_filter_ewa_jinc = {
     .name        = "ewa_jinc",
@@ -749,6 +750,31 @@ const struct pl_filter_config pl_filter_ewa_lanczos = {
     .kernel      = &pl_filter_function_jinc,
     .window      = &pl_filter_function_jinc,
     .radius      = JINC_ZERO3,
+    .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+    .recommended = PL_FILTER_UPSCALING,
+};
+
+const struct pl_filter_config pl_filter_ewa_lanczossharp = {
+    .name        = "ewa_lanczossharp",
+    .description = "Sharpened Jinc",
+    .kernel      = &pl_filter_function_jinc,
+    .window      = &pl_filter_function_jinc,
+    .radius      = JINC_ZERO3,
+    .blur        = 0.9812505644269356,
+    .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+    .recommended = PL_FILTER_UPSCALING,
+};
+
+const struct pl_filter_config pl_filter_ewa_lanczos4sharpest = {
+    .name        = "ewa_lanczos4sharpest",
+    .description = "Sharpened Jinc-AR, 4 taps",
+    .kernel      = &pl_filter_function_jinc,
+    .window      = &pl_filter_function_jinc,
+    .radius      = JINC_ZERO4,
+    .blur        = 0.88451002338585141,
+    .antiring    = 0.8,
     .polar       = true,
     .allowed     = PL_FILTER_SCALING,
     .recommended = PL_FILTER_UPSCALING,
@@ -873,6 +899,8 @@ const struct pl_filter_config * const pl_filter_configs[] = {
     &pl_filter_spline64,
     &pl_filter_lanczos,
     &pl_filter_ewa_lanczos,
+    &pl_filter_ewa_lanczossharp,
+    &pl_filter_ewa_lanczos4sharpest,
     &pl_filter_bicubic,
     &pl_filter_gaussian,
     &pl_filter_oversample,
