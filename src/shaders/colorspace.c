@@ -1138,14 +1138,14 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         frame_sum_pq    += data.frame_sum_pq[k];
         frame_wg_active += data.frame_wg_active[k];
     }
-    if (!frame_wg_active) {
+    float avg_pq, max_pq;
+    if (frame_wg_active) {
+        avg_pq = (float) frame_sum_pq / (frame_wg_active * PQ_MAX);
+        max_pq = measure_peak(&data, params->percentile);
+    } else {
         // Solid black frame
-        obj->peak.avg_pq = obj->peak.max_pq = PL_COLOR_HDR_BLACK;
-        return;
+        avg_pq = max_pq = PL_COLOR_HDR_BLACK;
     }
-
-    float avg_pq = (float) frame_sum_pq / (frame_wg_active * PQ_MAX);
-    float max_pq = measure_peak(&data, params->percentile);
 
     if (!obj->peak.avg_pq) {
         // Set the initial value accordingly if it contains no data
