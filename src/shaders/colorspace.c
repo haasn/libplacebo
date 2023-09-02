@@ -1133,9 +1133,10 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         return;
     }
 
-    uint64_t frame_sum_pq = 0u, frame_wg_active = 0u;
+    uint64_t frame_sum_pq = 0u, frame_wg_count = 0u, frame_wg_active = 0u;
     for (int k = 0; k < SLICES; k++) {
         frame_sum_pq    += data.frame_sum_pq[k];
+        frame_wg_count  += data.frame_wg_count[k];
         frame_wg_active += data.frame_wg_active[k];
     }
     float avg_pq, max_pq;
@@ -1170,7 +1171,8 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         const float log10_pq = 1e-2f; // experimentally determined approximate
         const float thresh_low = params->scene_threshold_low * log10_pq;
         const float thresh_high = params->scene_threshold_high * log10_pq;
-        const float delta = fabsf(avg_pq - obj->peak.avg_pq);
+        const float bias = (float) frame_wg_active / frame_wg_count;
+        const float delta = bias * fabsf(avg_pq - obj->peak.avg_pq);
         const float mix_coeff = pl_smoothstep(thresh_low, thresh_high, delta);
         obj->peak.avg_pq = PL_MIX(obj->peak.avg_pq, avg_pq, mix_coeff);
         obj->peak.max_pq = PL_MIX(obj->peak.max_pq, max_pq, mix_coeff);
