@@ -1118,17 +1118,17 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         pl_buf_destroy(gpu, &obj->peak.buf);
     } else {
         // No data read? Possibly this peak obj has not been executed yet
-        if (params->allow_delayed) {
-            PL_TRACE(gpu, "Peak detection buffer seems empty, ignoring..");
-        } else if (ok) {
+        if (!ok) {
+            PL_ERR(gpu, "Failed reading peak detection buffer!");
+        } else if (params->allow_delayed) {
+            PL_TRACE(gpu, "Peak detection buffer not yet ready, ignoring..");
+        } else {
             PL_WARN(gpu, "Peak detection usage error: attempted detecting peak "
                     "and using detected peak in the same shader program, "
                     "but `params->allow_delayed` is false! Ignoring, but "
                     "expect incorrect output.");
-        } else {
-            PL_ERR(gpu, "Failed reading peak detection buffer!");
         }
-        if (force)
+        if (force || !ok)
             pl_buf_destroy(gpu, &obj->peak.buf);
         return;
     }
