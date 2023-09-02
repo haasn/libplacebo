@@ -973,8 +973,8 @@ enum {
 pl_static_assert(PQ_BITS >= HIST_BITS);
 
 struct peak_buf_data {
-    unsigned frame_ready;
     unsigned frame_wg_count[SLICES]; // number of work groups processed
+    unsigned frame_wg_active[SLICES];// number of active (nonzero) work groups
     unsigned frame_sum_pq[SLICES];   // sum of PQ Y values over all WGs (PQ_BITS)
     unsigned frame_max_pq[SLICES];   // maximum PQ Y value among these WGs (PQ_BITS)
     unsigned frame_hist[SLICES][HIST_BINS]; // always allocated, conditionally used
@@ -996,8 +996,8 @@ static const struct pl_buffer_var peak_buf_vars[] = {
         .stride = sizeof(unsigned),                                             \
     },                                                                          \
 }
-    VAR(frame_ready),
     VAR(frame_wg_count),
+    VAR(frame_wg_active),
     VAR(frame_sum_pq),
     VAR(frame_max_pq),
     VAR(frame_hist),
@@ -1113,7 +1113,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     } else {
         ok = pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
     }
-    if (ok && data.frame_ready) {
+    if (ok && data.frame_wg_count[0] > 0) {
         // Peak detection completed successfully
         pl_buf_destroy(gpu, &obj->peak.buf);
     } else {
@@ -1133,18 +1133,18 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         return;
     }
 
-    uint64_t frame_sum_pq = 0u, frame_wg_count = 0u;
+    uint64_t frame_sum_pq = 0u, frame_wg_active = 0u;
     for (int k = 0; k < SLICES; k++) {
-        frame_sum_pq   += data.frame_sum_pq[k];
-        frame_wg_count += data.frame_wg_count[k];
+        frame_sum_pq    += data.frame_sum_pq[k];
+        frame_wg_active += data.frame_wg_active[k];
     }
-    if (!frame_wg_count) {
+    if (!frame_wg_active) {
         // Solid black frame
         obj->peak.avg_pq = obj->peak.max_pq = PL_COLOR_HDR_BLACK;
         return;
     }
 
-    float avg_pq = (float) frame_sum_pq / (frame_wg_count * PQ_MAX);
+    float avg_pq = (float) frame_sum_pq / (frame_wg_active * PQ_MAX);
     float max_pq = measure_peak(&data, params->percentile);
 
     if (!obj->peak.avg_pq) {
@@ -1362,17 +1362,18 @@ retry_ssbo:
     }
 
     // Have one thread per work group update the global atomics
-    GLSL("if (gl_LocalInvocationIndex == 0u && "$" < wg_size) { \n"
+    GLSL("if (gl_LocalInvocationIndex == 0u) {                  \n"
          "    uint num = wg_size - "$";                         \n"
          "    atomicAdd(frame_wg_count[slice], 1u);             \n"
-         "    atomicAdd(frame_sum_pq[slice], "$" / num);        \n"
-         "    atomicMax(frame_max_pq[slice], "$");              \n"
+         "    atomicAdd(frame_wg_active[slice], min(num, 1u));  \n"
+         "    if (num > 0u) {                                   \n"
+         "        atomicAdd(frame_sum_pq[slice], "$" / num);    \n"
+         "        atomicMax(frame_max_pq[slice], "$");          \n"
+         "    }                                                 \n"
          "}                                                     \n"
-         "if (gl_GlobalInvocationID == vec3(0u))                \n"
-         "    frame_ready = 1u;                                 \n"
          "color = color_orig;                                   \n"
          "}                                                     \n",
-          wg_black, wg_black, wg_sum, wg_max);
+         wg_black, wg_sum, wg_max);
 
     return true;
 }
