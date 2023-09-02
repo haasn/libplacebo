@@ -973,6 +973,7 @@ enum {
 pl_static_assert(PQ_BITS >= HIST_BITS);
 
 struct peak_buf_data {
+    unsigned frame_ready;
     unsigned frame_wg_count[SLICES]; // number of work groups processed
     unsigned frame_sum_pq[SLICES];   // sum of PQ Y values over all WGs (PQ_BITS)
     unsigned frame_max_pq[SLICES];   // maximum PQ Y value among these WGs (PQ_BITS)
@@ -995,6 +996,7 @@ static const struct pl_buffer_var peak_buf_vars[] = {
         .stride = sizeof(unsigned),                                             \
     },                                                                          \
 }
+    VAR(frame_ready),
     VAR(frame_wg_count),
     VAR(frame_sum_pq),
     VAR(frame_max_pq),
@@ -1111,7 +1113,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     } else {
         ok = pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
     }
-    if (ok && data.frame_wg_count[0] > 0) {
+    if (ok && data.frame_ready) {
         // Peak detection completed successfully
         pl_buf_destroy(gpu, &obj->peak.buf);
     } else {
@@ -1136,6 +1138,12 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         frame_sum_pq   += data.frame_sum_pq[k];
         frame_wg_count += data.frame_wg_count[k];
     }
+    if (!frame_wg_count) {
+        // Solid black frame
+        obj->peak.avg_pq = obj->peak.max_pq = PL_COLOR_HDR_BLACK;
+        return;
+    }
+
     float avg_pq = (float) frame_sum_pq / (frame_wg_count * PQ_MAX);
     float max_pq = measure_peak(&data, params->percentile);
 
@@ -1360,6 +1368,8 @@ retry_ssbo:
          "    atomicAdd(frame_sum_pq[slice], "$" / num);        \n"
          "    atomicMax(frame_max_pq[slice], "$");              \n"
          "}                                                     \n"
+         "if (gl_GlobalInvocationID == vec3(0u))                \n"
+         "    frame_ready = 1u;                                 \n"
          "color = color_orig;                                   \n"
          "}                                                     \n",
           wg_black, wg_black, wg_sum, wg_max);
