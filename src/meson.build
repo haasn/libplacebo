@@ -90,6 +90,7 @@ headers = [
 sources = [
   'colorspace.c',
   'common.c',
+  'convert.c',
   'dither.c',
   'dispatch.c',
   'dummy.c',
