@@ -409,8 +409,9 @@ if host_machine.system() == 'windows'
     subdir('win32')
 endif
 
-add_project_arguments(build_opts + c_opts, language: 'c')
-add_project_link_arguments(link_args, language: 'c')
+add_project_arguments(build_opts + c_opts, language: ['c'])
+add_project_arguments(build_opts, language: ['c', 'cpp'])
+add_project_link_arguments(link_args, language: ['c', 'cpp'])
 
 
 # Global dependencies
