@@ -900,6 +900,7 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
     OPT_FLOAT(PREFIX"_clamp", NAME" clamping", FIELD.clamp, .max = 1.0),              \
     OPT_FLOAT(PREFIX"_blur", NAME" blur factor", FIELD.blur, .max = 100.0),           \
     OPT_FLOAT(PREFIX"_taper", NAME" taper factor", FIELD.taper, .max = 1.0),          \
+    OPT_FLOAT(PREFIX"_antiring", NAME" antiringing", FIELD.antiring, .max = 1.0),     \
     OPT_FLOAT(PREFIX"_param1", NAME" parameter 1", FIELD.params[0]),                  \
     OPT_FLOAT(PREFIX"_param2", NAME" parameter 2", FIELD.params[1]),                  \
     OPT_FLOAT(PREFIX"_wparam1", NAME" window parameter 1", FIELD.wparams[0]),         \
