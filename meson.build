@@ -405,6 +405,8 @@ endif
 if host_machine.system() == 'windows'
     build_opts += ['-D_WIN32_WINNT=0x0601',
                    '-D_USE_MATH_DEFINES',
+                   '-DWIN32_LEAN_AND_MEAN',
+                   '-DNOMINMAX',
                    '-D_CRT_SECURE_NO_WARNINGS']
     subdir('win32')
 endif

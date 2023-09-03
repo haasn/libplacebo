@@ -7,6 +7,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <timeapi.h>
 #endif
 
 extern const struct window_impl win_impl_glfw_vk;
