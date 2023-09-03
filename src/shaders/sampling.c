@@ -422,15 +422,12 @@ static void describe_filter(pl_shader sh, const struct pl_filter_config *cfg,
     }
 }
 
-static bool filter_compat(pl_filter filter, float inv_scale,
-                          int lut_entries, float cutoff,
+static bool filter_compat(pl_filter filter, int lut_entries, float cutoff,
                           const struct pl_filter_config *params)
 {
     if (!filter)
         return false;
     if (filter->params.lut_entries != lut_entries)
-        return false;
-    if (fabs(filter->params.filter_scale - inv_scale) > 1e-3)
         return false;
     if (filter->params.cutoff != cutoff)
         return false;
@@ -546,21 +543,19 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
     float inv_scale = 1.0 / PL_MIN(rx, ry);
     inv_scale = PL_MAX(inv_scale, 1.0);
-
     if (params->no_widening)
         inv_scale = 1.0;
 
     int lut_entries = PL_DEF(params->lut_entries, 64);
     float cutoff = PL_DEF(params->cutoff, 0.001);
-    bool update = !filter_compat(obj->filter, inv_scale, lut_entries, cutoff,
-                                 &params->filter);
-
+    struct pl_filter_config cfg = params->filter;
+    cfg.blur = PL_DEF(cfg.blur, 1.0f) * inv_scale;
+    bool update = !filter_compat(obj->filter, lut_entries, cutoff, &cfg);
     if (update) {
         pl_filter_free(&obj->filter);
         obj->filter = pl_filter_generate(sh->log, pl_filter_params(
-            .config         = params->filter,
+            .config         = cfg,
             .lut_entries    = lut_entries,
-            .filter_scale   = inv_scale,
             .cutoff         = cutoff,
         ));
 
@@ -571,7 +566,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
     }
 
-    describe_filter(sh, &params->filter, "polar", rx, ry);
+    describe_filter(sh, &cfg, "polar", rx, ry);
     GLSL("// pl_shader_sample_polar                     \n"
          "vec4 color = vec4(0.0);                       \n"
          "{                                             \n"
@@ -910,20 +905,19 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
 
     float inv_scale = 1.0 / ratio[pass];
     inv_scale = PL_MAX(inv_scale, 1.0);
-
     if (params->no_widening)
         inv_scale = 1.0;
 
     int lut_entries = PL_DEF(params->lut_entries, 64);
-    bool update = !filter_compat(obj->filter, inv_scale, lut_entries, 0.0,
-                                 &params->filter);
+    struct pl_filter_config cfg = params->filter;
+    cfg.blur = PL_DEF(cfg.blur, 1.0f) * inv_scale;
+    bool update = !filter_compat(obj->filter, lut_entries, 0.0, &cfg);
 
     if (update) {
         pl_filter_free(&obj->filter);
         obj->filter = pl_filter_generate(sh->log, pl_filter_params(
-            .config             = params->filter,
+            .config             = cfg,
             .lut_entries        = lut_entries,
-            .filter_scale       = inv_scale,
             .max_row_size       = gpu->limits.max_tex_2d_dim / 4,
             .row_stride_align   = 4,
         ));
@@ -963,7 +957,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         [SEP_VERT]  = "ortho (vert)",
     };
 
-    describe_filter(sh, &params->filter, names[pass], ratio[pass], ratio[pass]);
+    describe_filter(sh, &cfg, names[pass], ratio[pass], ratio[pass]);
 
     float denom = PL_MAX(1, width - 1); // avoid division by zero
     bool use_ar = params->antiring > 0 && ratio[pass] > 1.0;
