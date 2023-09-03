@@ -131,6 +131,7 @@ endforeach
 subdir('shaders')
 
 tests = [
+  'cache.c',
   'colorspace.c',
   'common.c',
   'dither.c',
