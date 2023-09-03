@@ -53,7 +53,7 @@ int main()
     REQUIRE_CMP(*(int *) data->value, =, pl_render_default_params.lut_entries, "d");
     REQUIRE_STREQ(data->text, "64");
 
-    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=mitchell_clamp,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125000,contrast_recovery=0.30000001192092895507,dither=yes";
+    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=mitchell_clamp,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,contrast_recovery=0.30000001192092895508,dither=yes";
     pl_options_reset(test, &pl_render_high_quality_params);
     REQUIRE_STREQ(pl_options_save(test), hq_opts);
     struct pl_options_t hq_pre = *test;
@@ -80,7 +80,7 @@ int main()
             .polar  = true,
         },
     ));
-    const char *jinc4_opts = "upscaler=custom,upscaler_kernel=jinc,upscaler_window=jinc,upscaler_radius=4.00000000000000000000,upscaler_polar=yes";
+    const char *jinc4_opts = "upscaler=custom,upscaler_kernel=jinc,upscaler_window=jinc,upscaler_radius=4,upscaler_polar=yes";
     REQUIRE_STREQ(pl_options_save(test), jinc4_opts);
     struct pl_options_t jinc4_pre = *test;
     pl_options_reset(test, NULL);
@@ -91,7 +91,7 @@ int main()
     // Test params presets
     pl_options_reset(test, NULL);
     REQUIRE(pl_options_load(test, "cone=yes,cone_preset=deuteranomaly"));
-    REQUIRE_STREQ(pl_options_save(test), "cone=yes,cones=m,cone_strength=0.50000000000000000000");
+    REQUIRE_STREQ(pl_options_save(test), "cone=yes,cones=m,cone_strength=0.5");
 
     // Test error paths
     pl_options bad = pl_options_alloc(NULL);

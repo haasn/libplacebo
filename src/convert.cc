@@ -451,16 +451,11 @@ extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double va
         value = -value;
     }
 
-    /* Add bias matching the count of desired decimals in order to round the right way */
-    if( decimals > CC_STR_PRINT_DOUBLE_MAX_DECIMAL )
-        decimals = CC_STR_PRINT_DOUBLE_MAX_DECIMAL;
-    value += ccStrPrintBiasTable[decimals];
-
     if( value < 4294967296.0 )
     {
         if( bufsize < CC_STR_PRINT_BUFSIZE_UINT32 )
             goto error;
-        u32 = (int32_t)value;
+        u32 = (uint32_t)value;
         offset = ccStrPrintUint32( str, u32 );
         size += offset;
         bufsize -= size;
@@ -470,7 +465,7 @@ extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double va
     {
         if( bufsize < CC_STR_PRINT_BUFSIZE_UINT64 )
             goto error;
-        u64 = (int64_t)value;
+        u64 = (uint64_t)value;
         offset = ccStrPrintUint64( str, u64 );
         size += offset;
         bufsize -= size;
@@ -484,13 +479,19 @@ extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double va
     if( decimals <= 0 )
         return size;
 
-    str[offset] = '.';
     muldec = 10.0;
     accumsub = 0;
-    str += offset + 1;
+    str += offset;
 
     for( index = 0 ; index < decimals ; index++ )
     {
+        // Skip printing insignificant decimal digits
+        if (value * muldec - accumsub <= std::numeric_limits<double>::epsilon())
+            break;
+        if (index == 0) {
+            size += 1;
+            *str++ = '.';
+        }
         frac = (int32_t)( value * muldec ) - accumsub;
         frac = PL_CLAMP(frac, 0, 9); // FIXME: why is this needed?
         str[index] = '0' + (char)frac;
@@ -506,8 +507,11 @@ extern "C" int ccStrPrintDouble( char *str, int bufsize, int decimals, double va
             accumsub = 0;
         }
     }
+    // Round up the last decimal digit
+    if ( str[ index - 1 ] < '9' && (int32_t)( value * muldec ) - accumsub >= 5 )
+        str[ index - 1 ]++;
     str[ index ] = 0;
-    size += index + 1;
+    size += index;
     return size;
 
 error:
