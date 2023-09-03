@@ -218,8 +218,7 @@ sources += version_h
 
 if host_machine.system() == 'windows'
   windows = import('windows')
-  sources += windows.compile_resources(libplacebo_rc, args: '--codepage=65001',
-                                       depends: version_h,
+  sources += windows.compile_resources(libplacebo_rc, depends: version_h,
                                        include_directories: meson.project_source_root()/'win32')
 endif
 

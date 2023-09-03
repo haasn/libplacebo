@@ -136,8 +136,7 @@ else
     plplay_sources = ['plplay.c']
     if host_machine.system() == 'windows'
       windows = import('windows')
-      plplay_sources += windows.compile_resources(demos_rc, args: '--codepage=65001',
-                          depends: version_h,
+      plplay_sources += windows.compile_resources(demos_rc, depends: version_h,
                           include_directories: meson.project_source_root()/'win32')
     endif
     executable('plplay', plplay_sources,
