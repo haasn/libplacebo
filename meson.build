@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '319': 'add <libplacebo/cache.h>',
       '318': 'add pl_filter_ewa_lanczossharp and pl_filter_ewa_lanczos4sharpest',
       '317': 'add pl_filter_config.antiring',
       '316': 'remove pl_filter_config.filter_scale',

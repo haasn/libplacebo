@@ -98,6 +98,8 @@ libplacebo to take care of everything.
 
 ### Tier 0 (logging, raw math primitives)
 
+- `cache.h`: Caching subsystem. Used to cache large or computationally heavy
+  binary blobs, such as compiled shaders, 3DLUTs, and so on.
 - `colorspace.h`: A collection of enums and structs for describing color
   spaces, as well as a collection of helper functions for computing various
   color space transformation matrices.

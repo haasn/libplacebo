@@ -53,6 +53,7 @@ endif
 
 ### Common source files
 headers = [
+  'cache.h',
   'colorspace.h',
   'common.h',
   'd3d11.h',
@@ -88,6 +89,7 @@ headers = [
 ]
 
 sources = [
+  'cache.c',
   'colorspace.c',
   'common.c',
   'convert.cc',
