@@ -13,3 +13,6 @@
 [submodule "3rdparty/Vulkan-Headers"]
 	path = 3rdparty/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers
+[submodule "3rdparty/fast_float"]
+	path = 3rdparty/fast_float
+	url = https://github.com/fastfloat/fast_float.git

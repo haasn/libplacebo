@@ -223,6 +223,8 @@ if host_machine.system() == 'windows'
                                        include_directories: meson.project_source_root()/'win32')
 endif
 
+fast_float_inc = include_directories('../3rdparty/fast_float/include')
+
 ### Main library build process
 inc = include_directories('./include')
 lib = library('placebo', sources,
@@ -230,7 +232,7 @@ lib = library('placebo', sources,
   install: true,
   dependencies: build_deps + glad_dep,
   soversion: apiver,
-  include_directories: [ inc, vulkan_headers_inc ],
+  include_directories: [ inc, vulkan_headers_inc, fast_float_inc ],
   link_args: link_args,
   link_depends: link_depends,
   gnu_symbol_visibility: 'hidden',
