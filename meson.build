@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '316': 'remove pl_filter_config.filter_scale',
       '315': 'remove pl_tone_map_auto',
       '314': 'add pl_renderer_get_hdr_metadata',
       '313': 'remove pl_peak_detect_params.minimum_peak',

@@ -325,20 +325,14 @@ struct pl_filter_params {
     // depending on the use case. This value must be set to something > 0.
     int lut_entries;
 
-    // When set to values above 1.0, the filter will be computed at a size
-    // larger than the radius would otherwise require, in order to prevent
-    // aliasing when downscaling. In practice, this should be set to the
-    // inverse of the scaling ratio, i.e. src_size / dst_size.
-    float filter_scale;
-
-    // --- polar filers only (config.polar)
+    // --- Polar filers only (config.polar)
 
     // As a micro-optimization, all samples below this cutoff value will be
     // ignored when updating the cutoff radius. Setting it to a value of 0.0
     // disables this optimization.
     float cutoff;
 
-    // --- separable filters only (!config.polar)
+    // --- Separable filters only (!config.polar)
 
     // Indicates the maximum row size that is supported by the calling code, or
     // 0 for no limit.
@@ -349,6 +343,9 @@ struct pl_filter_params {
     // each row. The chosen row_size will always be a multiple of this value.
     // Specifying 0 indicates no alignment requirements.
     int row_stride_align;
+
+    // --- Deprecated options
+    float filter_scale PL_DEPRECATED; // no effect, use `config.blur` instead
 };
 
 #define pl_filter_params(...) (&(struct pl_filter_params) { __VA_ARGS__ })

@@ -181,11 +181,7 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
     f->params = *params;
     f->params.config.kernel = dupfilter(f, params->config.kernel);
     f->params.config.window = dupfilter(f, params->config.window);
-
-    // Compute the required filter radius
-    float radius = f->radius = filter_radius(&params->config);
-    if (params->filter_scale > 1.0)
-        f->radius *= params->filter_scale;
+    f->radius = filter_radius(&params->config);
 
     float *weights;
     if (params->config.polar) {
@@ -193,12 +189,12 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
         weights = pl_alloc(f, params->lut_entries * sizeof(float));
         f->radius_cutoff = f->radius_zero = 0.0;
         for (int i = 0; i < params->lut_entries; i++) {
-            double x = radius * i / (params->lut_entries - 1);
+            double x = f->radius * i / (params->lut_entries - 1);
             weights[i] = pl_filter_sample(&params->config, x);
             if (fabsf(weights[i]) > params->cutoff)
-                f->radius_cutoff = x * params->filter_scale;
+                f->radius_cutoff = x;
             if (weights[i] < params->cutoff && !f->radius_zero)
-                f->radius_zero = x * params->filter_scale;
+                f->radius_zero = x;
         }
     } else {
         // Pick the most appropriate row size
