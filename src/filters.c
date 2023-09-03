@@ -76,11 +76,10 @@ bool pl_filter_config_eq(const struct pl_filter_config *a,
 
 static inline float filter_radius(const struct pl_filter_config *c)
 {
-    if (c->radius && c->kernel->resizable) {
-        return c->radius;
-    } else {
-        return c->kernel->radius;
-    }
+    float radius = c->radius && c->kernel->resizable ? c->radius : c->kernel->radius;
+    if (c->blur > 0.0)
+        radius *= c->blur;
+    return radius;
 }
 
 double pl_filter_sample(const struct pl_filter_config *c, double x)
@@ -91,15 +90,16 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
     // for [0, radius].
     x = fabs(x);
 
-    // Apply the blur and taper coefficients as needed
-    double kx = c->blur > 0.0 ? x / c->blur : x;
-    kx = kx <= c->taper ? 0.0 : (kx - c->taper) / (1.0 - c->taper / radius);
-
     // Return early for values outside of the kernel radius, since the functions
     // are not necessarily valid outside of this interval. No such check is
     // needed for the window, because it's always stretched to fit.
-    if (kx > radius)
+    if (x > radius)
         return 0.0;
+
+    // Apply the blur and taper coefficients as needed
+    double kx = x <= c->taper ? 0.0 : (x - c->taper) / (1.0 - c->taper / radius);
+    if (c->blur > 0.0)
+        kx /= c->blur;
 
     pl_assert(!c->kernel->opaque);
     double k = c->kernel->weight(&(const struct pl_filter_ctx) {
