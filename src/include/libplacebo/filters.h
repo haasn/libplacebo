@@ -245,6 +245,15 @@ struct pl_filter_config {
     // instead of a separable/1D filter. Does not affect the actual sampling,
     // but provides information about how the results are to be interpreted.
     bool polar;
+
+    // Antiringing strength. A value of 0.0 disables antiringing, and a value
+    // of 1.0 enables full-strength antiringing. Defaults to 0.0 if
+    // unspecified.
+    //
+    // Note: This is only included in `pl_filter_config` for convenience. Does
+    // not affect the actual filter sampling, but provides information to the
+    // downstream consumer of the `pl_filter`.
+    float antiring;
 };
 
 PL_API bool pl_filter_config_eq(const struct pl_filter_config *a,

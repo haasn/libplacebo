@@ -58,11 +58,12 @@ bool pl_filter_config_eq(const struct pl_filter_config *a,
 
     bool eq = pl_filter_function_eq(a->kernel, b->kernel) &&
               pl_filter_function_eq(a->window, b->window) &&
-              a->radius == b->radius &&
-              a->clamp  == b->clamp  &&
-              a->blur   == b->blur   &&
-              a->taper  == b->taper  &&
-              a->polar  == b->polar;
+              a->radius   == b->radius &&
+              a->clamp    == b->clamp  &&
+              a->blur     == b->blur   &&
+              a->taper    == b->taper  &&
+              a->polar    == b->polar  &&
+              a->antiring == b->antiring;
 
     for (int i = 0; i < PL_FILTER_MAX_PARAMS; i++) {
         if (a->kernel->tunable[i])

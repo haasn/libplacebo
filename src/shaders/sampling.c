@@ -549,6 +549,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     int lut_entries = PL_DEF(params->lut_entries, 64);
     float cutoff = PL_DEF(params->cutoff, 0.001);
     struct pl_filter_config cfg = params->filter;
+    cfg.antiring = PL_DEF(cfg.antiring, params->antiring);
     cfg.blur = PL_DEF(cfg.blur, 1.0f) * inv_scale;
     bool update = !filter_compat(obj->filter, lut_entries, cutoff, &cfg);
     if (update) {
@@ -581,7 +582,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
          "vec4 c;                                       \n",
          pos, pt, src_tex);
 
-    bool use_ar = params->antiring > 0;
+    bool use_ar = cfg.antiring > 0;
     if (use_ar) {
 #pragma GLSL                                                                    \
         vec2 ww, cc;                                                            \
@@ -823,7 +824,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
             ww.x = 1.0 - ww.x;                                                  \
             w = clamp(color[@c], ww.x, ww.y);                                   \
             w = mix(w, dot(ww, vec2(0.5)), ww.x > ww.y);                        \
-            color[@c] = mix(color[@c], w, ${float:params->antiring});           \
+            color[@c] = mix(color[@c], w, ${float:cfg.antiring});               \
         @}                                                                      \
     @}                                                                          \
     @if (!(cmask & (1 << PL_CHANNEL_A)))                                        \
@@ -910,6 +911,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
 
     int lut_entries = PL_DEF(params->lut_entries, 64);
     struct pl_filter_config cfg = params->filter;
+    cfg.antiring = PL_DEF(cfg.antiring, params->antiring);
     cfg.blur = PL_DEF(cfg.blur, 1.0f) * inv_scale;
     bool update = !filter_compat(obj->filter, lut_entries, 0.0, &cfg);
 
@@ -960,7 +962,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     describe_filter(sh, &cfg, names[pass], ratio[pass], ratio[pass]);
 
     float denom = PL_MAX(1, width - 1); // avoid division by zero
-    bool use_ar = params->antiring > 0 && ratio[pass] > 1.0;
+    bool use_ar = cfg.antiring > 0 && ratio[pass] > 1.0;
 
 #pragma GLSL /* pl_shader_sample_ortho */                                       \
     vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                                      \
@@ -993,7 +995,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         @}                                                                      \
     @}                                                                          \
     @if (use_ar)                                                                \
-        ca = mix(ca, clamp(ca, lo, hi), ${const float:params->antiring});       \
+        ca = mix(ca, clamp(ca, lo, hi), ${const float:cfg.antiring});           \
     color.${swizzle: comps} = ${const float:scale} * ca;                        \
     }
 

@@ -161,6 +161,8 @@ struct pl_sample_filter_params {
     // Antiringing strength. A value of 0.0 disables antiringing, and a value
     // of 1.0 enables full-strength antiringing. Defaults to 0.0 if
     // unspecified.
+    //
+    // Note: Ignored if `filter.antiring` is already set to something nonzero.
     float antiring;
     // Disable the use of compute shaders (e.g. if rendering to non-storable tex)
     bool no_compute;
