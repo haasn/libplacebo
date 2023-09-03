@@ -113,16 +113,6 @@ bool pl_str_parse_uint64(pl_str str, uint64_t *out);
 bool pl_str_parse_float(pl_str str, float *out);
 bool pl_str_parse_double(pl_str str, double *out);
 
-int print_hex(char *buf, unsigned int x);
-int ccStrPrintInt32( char *str, int32_t n );
-int ccStrPrintUint32( char *str, uint32_t n );
-int ccStrPrintInt64( char *str, int64_t n );
-int ccStrPrintUint64( char *str, uint64_t n );
-int ccStrPrintDouble( char *str, int bufsize, int decimals, double value );
-int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint );
-int ccSeqParseUint64( char *seq, int seqlength, uint64_t *retint );
-int ccSeqParseDouble( char *seq, int seqlength, double *retdouble );
-
 // Variants of string.h functions
 int pl_strchr(pl_str str, int c);
 size_t pl_strspn(pl_str str, const char *accept);
