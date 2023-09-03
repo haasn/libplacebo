@@ -407,6 +407,20 @@ static void generate_shaders(pl_dispatch dp,
         ADD(pre, "precision highp int; \n");
     }
 
+    // textureLod() doesn't work on external/rect samplers, simply disable
+    // LOD sampling in this case. We don't currently support mipmaps anyway.
+    for (int i = 0; i < sh->descs.num; i++) {
+        if (pass_params->descriptors[i].type != PL_DESC_SAMPLED_TEX)
+            continue;
+        pl_tex tex = sh->descs.elem[i].binding.object;
+        if (tex->sampler_type != PL_SAMPLER_NORMAL) {
+            ADD(pre, "#define textureLod(t, p, b) texture(t, p) \n"
+                     "#define textureLodOffset(t, p, b, o)    \\\n"
+                     "        textureOffset(t, p, o)            \n");
+            break;
+        }
+    }
+
     // Add all of the push constants as their own element
     if (pass_params->push_constants_size) {
         // We re-use add_buffer_vars to make sure variables are sorted, this
