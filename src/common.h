@@ -40,14 +40,15 @@
 #include "os.h"
 
 #include "config_internal.h"
-#include "pl_assert.h"
-#include "pl_alloc.h"
-#include "pl_clock.h"
-#include "pl_string.h"
 
 #define PL_DEPRECATED
 
 #include <libplacebo/config.h>
+
+#include "pl_assert.h"
+#include "pl_alloc.h"
+#include "pl_clock.h"
+#include "pl_string.h"
 
 #if PL_API_VER != BUILD_API_VER
 #error Header mismatch? <libplacebo/config.h> pulled from elsewhere!
