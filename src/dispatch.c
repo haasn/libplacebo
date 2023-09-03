@@ -23,7 +23,7 @@
 #include "pl_thread.h"
 
 // Maximum number of passes to keep around at once. If full, passes older than
-// MIN_AGE are evicted to make room. (Failing that, the cache size doubles)
+// MIN_AGE are evicted to make room. (Failing that, the passes array doubles)
 #define MAX_PASSES 100
 #define MIN_AGE 10
 
@@ -49,7 +49,6 @@ struct pl_dispatch_t {
 
     PL_ARRAY(pl_shader) shaders;                // to avoid re-allocations
     PL_ARRAY(struct pass *) passes;             // compiled passes
-    PL_ARRAY(struct cached_pass) cached_passes; // not-yet-compiled passes
 
     // temporary buffers to help avoid re_allocations during pass creation
     PL_ARRAY(const struct pl_buffer_var *) buf_tmp;
@@ -73,8 +72,7 @@ struct pass_var {
 };
 
 struct pass {
-    uint64_t signature;  // hash of string builders, not stable
-    uint64_t cache_hash; // hash of actual shader body, stable
+    uint64_t signature;
     pl_pass pass;
     int last_index;
 
@@ -99,13 +97,6 @@ struct pass {
     uint64_t ts_sum;
     uint64_t samples[PL_ARRAY_SIZE(((struct pl_dispatch_info *) NULL)->samples)];
     int ts_idx;
-};
-
-struct cached_pass {
-    uint64_t hash;
-    const uint8_t *cached_program;
-    size_t cached_program_len;
-    bool stale;
 };
 
 static void pass_destroy(pl_dispatch dp, struct pass *pass)
@@ -896,7 +887,6 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
 
     // Finalize the shader and look it up in the pass cache
     pl_str_builder vert_builder = NULL, glsl_builder = NULL;
-    pass->cache_hash = pass->signature; // don't depend on pl_str_builder_hash
     generate_shaders(dp, &gen_params, &vert_builder, &glsl_builder);
     for (int i = 0; i < dp->passes.num; i++) {
         struct pass *p = dp->passes.elem[i];
@@ -917,23 +907,9 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
     if (vert_builder) {
         pl_str vert = pl_str_builder_exec(vert_builder);
         params.vertex_shader = (char *) vert.buf;
-        pl_hash_merge(&pass->cache_hash, pl_str_hash(vert));
     }
     pl_str glsl = pl_str_builder_exec(glsl_builder);
     params.glsl_shader = (char *) glsl.buf;
-    pl_hash_merge(&pass->cache_hash, pl_str_hash(glsl));
-
-    // Find and attach the cached program, if any
-    for (int i = 0; i < dp->cached_passes.num; i++) {
-        if (dp->cached_passes.elem[i].hash == pass->cache_hash) {
-            PL_DEBUG(dp, "Re-using cached program with hash 0x%"PRIx64,
-                     pass->cache_hash);
-            params.cached_program = dp->cached_passes.elem[i].cached_program;
-            params.cached_program_len = dp->cached_passes.elem[i].cached_program_len;
-            PL_ARRAY_REMOVE_AT(dp->cached_passes, i);
-            break;
-        }
-    }
 
     // Turn all shader identifiers into actual strings before passing it
     // to the `pl_gpu`
@@ -1628,163 +1604,12 @@ void pl_dispatch_reset_frame(pl_dispatch dp)
     pl_mutex_unlock(&dp->lock);
 }
 
-// Stuff related to caching
-static const char cache_magic[] = {'P', 'L', 'D', 'P'};
-static const uint32_t cache_version = 2;
-
-static void write_buf(uint8_t *buf, size_t *pos, const void *src, size_t size)
-{
-    assert(size);
-    if (buf)
-        memcpy(&buf[*pos], src, size);
-    *pos += size;
-}
-
-#define WRITE(type, var) write_buf(out, &size, &(type){ var }, sizeof(type))
-#define LOAD(var)                           \
-  do {                                      \
-      memcpy(&(var), cache, sizeof(var));   \
-      cache += sizeof(var);                 \
-  } while (0)
-
 size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
 {
-    size_t size = 0;
-    pl_mutex_lock(&dp->lock);
-
-    write_buf(out, &size, cache_magic, sizeof(cache_magic));
-    WRITE(uint32_t, cache_version);
-    WRITE(uint32_t, PL_API_VER);
-
-    // Remember this position so we can go back and write the actual number of
-    // cached programs
-    uint32_t num_passes = 0;
-    void *out_num = out ? &out[size] : NULL;
-    size += sizeof(num_passes);
-
-    // Save the cached programs for all compiled passes
-    for (int i = 0; i < dp->passes.num; i++) {
-        const struct pass *pass = dp->passes.elem[i];
-        if (!pass->pass)
-            continue;
-
-        const struct pl_pass_params *params = &pass->pass->params;
-        if (!params->cached_program_len)
-            continue;
-
-        if (out) {
-            PL_TRACE(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
-                     params->cached_program_len, pass->cache_hash);
-        }
-
-        num_passes++;
-        WRITE(uint64_t, pass->cache_hash);
-        WRITE(uint64_t, params->cached_program_len);
-        write_buf(out, &size, params->cached_program, params->cached_program_len);
-    }
-
-    // Re-save the cached programs for all previously loaded (but not yet
-    // compiled) passes. This is simply to make `pl_dispatch_load` followed
-    // by `pl_dispatch_save` return the same cache as was previously loaded.
-    for (int i = 0; i < dp->cached_passes.num; i++) {
-        const struct cached_pass *pass = &dp->cached_passes.elem[i];
-        if (!pass->cached_program_len || pass->stale)
-            continue;
-
-        if (out) {
-            PL_TRACE(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
-                     pass->cached_program_len, pass->hash);
-        }
-
-        num_passes++;
-        WRITE(uint64_t, pass->hash);
-        WRITE(uint64_t, pass->cached_program_len);
-        write_buf(out, &size, pass->cached_program, pass->cached_program_len);
-    }
-
-    if (out) {
-        memcpy(out_num, &num_passes, sizeof(num_passes));
-        PL_DEBUG(dp, "Saved %d cached programs totalling %zu bytes",
-                 num_passes, size);
-    }
-
-    pl_mutex_unlock(&dp->lock);
-    return size;
+    return pl_cache_save(pl_gpu_cache(dp->gpu), out, out ? SIZE_MAX : 0);
 }
 
 void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
 {
-    char magic[4];
-    LOAD(magic);
-    if (memcmp(magic, cache_magic, sizeof(magic)) != 0) {
-        PL_ERR(dp, "Failed loading dispatch cache: invalid magic bytes");
-        return;
-    }
-
-    uint32_t version, api_ver, num;
-    LOAD(version);
-    if (version != cache_version) {
-        PL_INFO(dp, "Failed loading dispatch cache: wrong version... skipping");
-        return;
-    }
-
-    LOAD(api_ver);
-    LOAD(num);
-
-    if (api_ver < PL_API_VER) {
-        PL_INFO(dp, "Loaded dispatch cache is stale (PL_API_VER %"PRIu32" < %d), "
-                "will flush stale passes",
-                api_ver, PL_API_VER);
-    }
-
-    size_t loaded_size = 0;
-    pl_mutex_lock(&dp->lock);
-    for (int i = 0; i < num; i++) {
-        uint64_t hash, size;
-        LOAD(hash);
-        LOAD(size);
-        if (!size)
-            continue;
-
-        // Skip passes that are already compiled
-        for (int n = 0; n < dp->passes.num; n++) {
-            if (dp->passes.elem[n]->cache_hash == hash) {
-                PL_TRACE(dp, "Skipping already compiled pass with hash %"PRIx64, hash);
-                cache += size;
-                continue;
-            }
-        }
-
-        // Find a cached_pass entry with this hash, if any
-        struct cached_pass *pass = NULL;
-        for (int n = 0; n < dp->cached_passes.num; n++) {
-            if (dp->cached_passes.elem[n].hash == hash) {
-                pass = &dp->cached_passes.elem[n];
-                break;
-            }
-        }
-
-        if (!pass) {
-            // None found, add a new entry
-            PL_ARRAY_GROW(dp, dp->cached_passes);
-            pass = &dp->cached_passes.elem[dp->cached_passes.num++];
-            *pass = (struct cached_pass) {
-                .hash = hash,
-                .stale = api_ver < PL_API_VER,
-            };
-        }
-
-        PL_TRACE(dp, "Loading %zu bytes of cached program with hash 0x%"PRIx64,
-                 (size_t) size, hash);
-
-        pl_free((void *) pass->cached_program);
-        pass->cached_program = pl_memdup(dp, cache, size);
-        pass->cached_program_len = size;
-        cache += size;
-        loaded_size += size;
-    }
-    pl_mutex_unlock(&dp->lock);
-
-    PL_DEBUG(dp, "Loaded %d cached programs totalling %zu bytes",
-             num, loaded_size);
+    pl_cache_load(pl_gpu_cache(dp->gpu), cache, SIZE_MAX);
 }

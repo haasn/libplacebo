@@ -229,21 +229,10 @@ PL_API bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_p
 // if the shader was instead merged into a different shader.
 PL_API void pl_dispatch_abort(pl_dispatch dp, pl_shader *sh);
 
-// Serialize the internal state of a `pl_dispatch` into an abstract cache
-// object that can be e.g. saved to disk and loaded again later. This function
-// will not truncate, so the buffer provided by the user must be large enough
-// to contain the entire output. Returns the number of bytes written to
-// `out_cache`, or the number of bytes that *would* have been written to
-// `out_cache` if it's NULL.
-PL_API size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out_cache);
-
-// Load the result of a previous `pl_dispatch_save` call. This function will
-// never fail. It doesn't forget about any existing shaders, but merely
-// initializes an internal state cache needed to more efficiently compile
-// shaders that are not yet present in the `pl_dispatch`.
-//
-// Note: See the security warnings on `pl_pass_params.cached_program`.
-PL_API void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache);
+// Deprecated in favor of `pl_cache_save/pl_cache_load` on the `pl_cache`
+// associated with the `pl_gpu` this dispatch is using.
+PL_DEPRECATED PL_API size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out_cache);
+PL_DEPRECATED PL_API void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache);
 
 PL_API_END
 

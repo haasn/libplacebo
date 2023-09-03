@@ -171,14 +171,14 @@ void pl_renderer_destroy(pl_renderer *p_rr)
     pl_free_ptr(p_rr);
 }
 
-size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache)
+size_t pl_renderer_save(pl_renderer rr, uint8_t *out)
 {
-    return pl_dispatch_save(rr->dp, out_cache);
+    return pl_cache_save(pl_gpu_cache(rr->gpu), out, out ? SIZE_MAX : 0);
 }
 
 void pl_renderer_load(pl_renderer rr, const uint8_t *cache)
 {
-    pl_dispatch_load(rr->dp, cache);
+    pl_cache_load(pl_gpu_cache(rr->gpu), cache, SIZE_MAX);
 }
 
 void pl_renderer_flush_cache(pl_renderer rr)

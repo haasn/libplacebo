@@ -69,17 +69,6 @@ struct pl_render_errors {
 PL_API pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu);
 PL_API void pl_renderer_destroy(pl_renderer *rr);
 
-// Saves the internal shader cache of this renderer into an abstract cache
-// object that can be saved to disk and later re-loaded to speed up
-// recompilation of shaders. See `pl_dispatch_save` for more information.
-PL_API size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
-
-// Load the result of a previous `pl_renderer_save` call. See
-// `pl_dispatch_load` for more information.
-//
-// Note: See the security warnings on `pl_pass_params.cached_program`.
-PL_API void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
-
 // Returns current renderer state, see pl_render_errors.
 PL_API struct pl_render_errors pl_renderer_get_errors(pl_renderer rr);
 
@@ -820,6 +809,11 @@ PL_API extern const int pl_num_frame_mixers; // excluding trailing {0}
 // built-in filters that don't map to the `pl_filter` architecture.
 PL_API extern const struct pl_filter_preset pl_scale_filters[];
 PL_API extern const int pl_num_scale_filters; // excluding trailing {0}
+
+// Deprecated in favor of `pl_cache_save/pl_cache_load` on the `pl_cache`
+// associated with the `pl_gpu` this renderer is using.
+PL_DEPRECATED PL_API size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
+PL_DEPRECATED PL_API void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
 
 PL_API_END
 
