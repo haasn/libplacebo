@@ -451,13 +451,24 @@ static void print_float(opt_ctx p, pl_str *out, const void *ptr)
     pl_str_append_asprintf_c(p->alloc, out, "%f", *val);
 }
 
+static bool parse_fraction(pl_str str, float *val)
+{
+    pl_str denom, num = pl_str_split_char(str, '/', &denom);
+    float n, d;
+    bool ok = denom.buf && denom.len && pl_str_parse_float(num, &n) &&
+                                        pl_str_parse_float(denom, &d);
+    if (ok)
+        *val = n / d;
+    return ok;
+}
+
 static bool parse_float(opt_ctx p, pl_str str, void *out)
 {
     pl_opt opt = p->opt;
     float val;
-    if (!pl_str_parse_float(str, &val)) {
-        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating point",
-               PL_STR_FMT(str), opt->key);
+    if (!parse_fraction(str, &val) && !pl_str_parse_float(str, &val)) {
+        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating point "
+                  "or fraction", PL_STR_FMT(str), opt->key);
         return false;
     }
 
