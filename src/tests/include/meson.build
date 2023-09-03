@@ -28,8 +28,8 @@ endforeach
 
 static_library('test_include', test_include_sources,
     dependencies: [tdep_static, lavu, lavc, lavf],
-    include_directories: inc,
+    include_directories: [inc, vulkan_headers_inc],
     implicit_include_directories: false,
     c_args: ['-Wall', '-Wextra', '-Wpedantic'],
-    cpp_args: ['-Wall', '-Wextra', '-Wpedantic']
+    cpp_args: ['-Wall', '-Wextra', '-Wpedantic'],
 )

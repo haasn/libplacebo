@@ -7,16 +7,16 @@ registry_xml = get_option('vulkan-registry')
 # Prefer our Vulkan headers for portability
 vulkan_headers_dir = thirdparty/'Vulkan-Headers'
 if fs.is_dir(vulkan_headers_dir/'include')
-  # `include_directories` doesn't currently work for `has_header_symbol` checks
-  # It will be fixed by https://github.com/mesonbuild/meson/pull/10122
-  # For now workaround the issue with `compile_args`
-  vulkan_headers = declare_dependency(compile_args: '-isystem' + vulkan_headers_dir/'include')
+  vulkan_headers = declare_dependency()
+  vulkan_headers_inc = include_directories('../../3rdparty/Vulkan-Headers/include')
   # Force the use of this vk.xml because it has to be in sync with the headers
   registry_xml = vulkan_headers_dir/'registry/vk.xml'
 endif
 
 vulkan_build = vulkan_build.require(
-  cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_3', dependencies: vulkan_headers),
+  cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_3',
+                       include_directories: vulkan_headers_inc,
+                       dependencies: vulkan_headers),
   error_message: 'vulkan.h was not found on the system, nor inside ' +
                  '`3rdparty/Vulkan-Headers`. Please run `git submodule update --init` ' +
                  'followed by `meson --wipe`.')

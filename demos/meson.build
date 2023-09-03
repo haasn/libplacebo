@@ -45,7 +45,8 @@ if glfw.found()
     apis += static_library('glfw-vk',
       dependencies: [libplacebo, libm, glfw, vulkan_headers],
       sources: 'window_glfw.c',
-      c_args: '-DUSE_VK',
+      c_args: ['-DUSE_VK'],
+      include_directories: vulkan_headers_inc,
     )
   endif
 
@@ -74,7 +75,8 @@ if sdl.found()
     apis += static_library('sdl-vk',
       dependencies: [libplacebo, sdl, vulkan_headers],
       sources: 'window_sdl.c',
-      c_args: '-DUSE_VK',
+      c_args: ['-DUSE_VK'],
+      include_directories: vulkan_headers_inc,
     )
   endif
 
@@ -107,6 +109,7 @@ else
   dep = declare_dependency(
     dependencies: [ libplacebo, build_deps ] + additional_dep,
     sources: ['window.c'],
+    include_directories: vulkan_headers_inc,
     link_with: apis,
   )
 
