@@ -24,6 +24,7 @@
 #include <spirv_cross_c.h>
 
 #include "../gpu.h"
+#include "../glsl/spirv.h"
 
 #include "common.h"
 #include "utils.h"
@@ -56,7 +57,7 @@ struct pl_gpu_d3d11 {
     // The Direct3D 11 minor version number
     int minor;
 
-    struct spirv_compiler *spirv;
+    pl_spirv spirv;
 
     pD3DCompile D3DCompile;
     struct dll_version d3d_compiler_ver;

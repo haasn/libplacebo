@@ -38,63 +38,56 @@
 #define GLSLANG_SPV_MAX PL_SPV_VERSION(1, 0)
 #endif
 
-const struct spirv_compiler_impl pl_spirv_glslang;
+const struct spirv_compiler pl_spirv_glslang;
 
-struct priv {
-    struct pl_spirv_version spirv_ver;
-};
-
-static void glslang_destroy(struct spirv_compiler *spirv)
+static void glslang_destroy(pl_spirv spirv)
 {
     pl_glslang_uninit();
-    pl_free(spirv);
+    pl_free((void *) spirv);
 }
 
-static struct spirv_compiler *glslang_create(pl_log log,
-                                             const struct pl_spirv_version *spirv_ver)
+static pl_spirv glslang_create(pl_log log, struct pl_spirv_version spirv_ver)
 {
     if (!pl_glslang_init()) {
         pl_fatal(log, "Failed initializing glslang SPIR-V compiler!");
         return NULL;
     }
 
-    struct spirv_compiler *spirv = pl_alloc_obj(NULL, spirv, struct priv);
-    *spirv = (struct spirv_compiler) {
+    struct pl_spirv_t *spirv = pl_alloc_ptr(NULL, spirv);
+    *spirv = (struct pl_spirv_t) {
         .signature = pl_str0_hash(pl_spirv_glslang.name),
-        .impl = &pl_spirv_glslang,
-        .log = log,
+        .impl      = &pl_spirv_glslang,
+        .version   = spirv_ver,
+        .log       = log,
     };
 
-    struct priv *p = PL_PRIV(spirv);
-    p->spirv_ver = *spirv_ver;
-
-    pl_info(log, "glslang version: %d.%d.%d",
+    PL_INFO(spirv, "glslang version: %d.%d.%d",
             GLSLANG_VERSION_MAJOR,
             GLSLANG_VERSION_MINOR,
             GLSLANG_VERSION_PATCH);
 
     // Clamp to supported version by glslang
-    if (GLSLANG_SPV_MAX < p->spirv_ver.spv_version) {
-        p->spirv_ver.spv_version = GLSLANG_SPV_MAX;
-        p->spirv_ver.env_version = pl_spirv_version_to_vulkan(GLSLANG_SPV_MAX);
+    if (GLSLANG_SPV_MAX < spirv->version.spv_version) {
+        spirv->version.spv_version = GLSLANG_SPV_MAX;
+        spirv->version.env_version = pl_spirv_version_to_vulkan(GLSLANG_SPV_MAX);
     }
 
-    pl_hash_merge(&spirv->signature, (uint64_t) p->spirv_ver.spv_version << 32 |
-                                                p->spirv_ver.env_version);
+    pl_hash_merge(&spirv->signature, (uint64_t) spirv->version.spv_version << 32 |
+                                                spirv->version.env_version);
     pl_hash_merge(&spirv->signature, (GLSLANG_VERSION_MAJOR & 0xFF) << 24 |
                                      (GLSLANG_VERSION_MINOR & 0xFF) << 16 |
                                      (GLSLANG_VERSION_PATCH & 0xFFFF));
     return spirv;
 }
 
-static pl_str glslang_compile(struct spirv_compiler *spirv, void *alloc,
-                              const struct pl_glsl_version *glsl,
+static pl_str glslang_compile(pl_spirv spirv, void *alloc,
+                              struct pl_glsl_version glsl_ver,
                               enum glsl_shader_stage stage,
                               const char *shader)
 {
-    const struct priv *p = PL_PRIV(spirv);
+    struct pl_glslang_res *res;
 
-    struct pl_glslang_res *res = pl_glslang_compile(glsl, &p->spirv_ver, stage, shader);
+    res = pl_glslang_compile(glsl_ver, spirv->version, stage, shader);
     if (!res || !res->success) {
         PL_ERR(spirv, "glslang failed: %s", res ? res->error_msg : "(null)");
         pl_free(res);
@@ -110,7 +103,7 @@ static pl_str glslang_compile(struct spirv_compiler *spirv, void *alloc,
     return ret;
 }
 
-const struct spirv_compiler_impl pl_spirv_glslang = {
+const struct spirv_compiler pl_spirv_glslang = {
     .name       = "glslang",
     .destroy    = glslang_destroy,
     .create     = glslang_create,

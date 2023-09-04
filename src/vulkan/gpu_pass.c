@@ -112,7 +112,6 @@ static uint64_t cache_signature(pl_gpu gpu, const struct pl_pass_params *params)
 }
 
 static bool vk_use_cached_program(const struct pl_pass_params *params,
-                                  const struct spirv_compiler *spirv,
                                   pl_str *vert_spirv, pl_str *frag_spirv,
                                   pl_str *comp_spirv, pl_str *pipecache,
                                   uint64_t signature)
@@ -156,7 +155,7 @@ static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
     struct pl_vk *p = PL_PRIV(gpu);
 
     pl_clock_t start = pl_clock_now();
-    *out_spirv = spirv_compile_glsl(p->spirv, alloc, &gpu->glsl, stage, shader);
+    *out_spirv = pl_spirv_compile_glsl(p->spirv, alloc, gpu->glsl, stage, shader);
     pl_log_cpu_time(gpu->log, start, pl_clock_now(), "translating SPIR-V");
 
     return out_spirv->len ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
@@ -500,7 +499,7 @@ no_descriptors: ;
 
     pl_str vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
     uint64_t sig = cache_signature(gpu, params);
-    if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache, sig)) {
+    if (vk_use_cached_program(params, &vert, &frag, &comp, &pipecache, sig)) {
         PL_DEBUG(gpu, "Using cached SPIR-V and VkPipeline");
     } else {
         pipecache.len = 0;

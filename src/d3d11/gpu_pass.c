@@ -351,7 +351,7 @@ static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
     HRESULT hr;
 
     pl_clock_t start = pl_clock_now();
-    pl_str spirv = spirv_compile_glsl(p->spirv, tmp, &gpu->glsl, stage, glsl);
+    pl_str spirv = pl_spirv_compile_glsl(p->spirv, tmp, gpu->glsl, stage, glsl);
     if (!spirv.len)
         goto error;
 

@@ -17,10 +17,10 @@
 
 #include "spirv.h"
 
-extern const struct spirv_compiler_impl pl_spirv_shaderc;
-extern const struct spirv_compiler_impl pl_spirv_glslang;
+extern const struct spirv_compiler pl_spirv_shaderc;
+extern const struct spirv_compiler pl_spirv_glslang;
 
-static const struct spirv_compiler_impl *compilers[] = {
+static const struct spirv_compiler *compilers[] = {
 #ifdef PL_HAVE_SHADERC
     &pl_spirv_shaderc,
 #endif
@@ -29,11 +29,10 @@ static const struct spirv_compiler_impl *compilers[] = {
 #endif
 };
 
-struct spirv_compiler *spirv_compiler_create(pl_log log,
-                                             const struct pl_spirv_version *spirv_ver)
+pl_spirv pl_spirv_create(pl_log log, struct pl_spirv_version spirv_ver)
 {
     for (int i = 0; i < PL_ARRAY_SIZE(compilers); i++) {
-        struct spirv_compiler *spirv = compilers[i]->create(log, spirv_ver);
+        pl_spirv spirv = compilers[i]->create(log, spirv_ver);
         if (!spirv)
             continue;
 
@@ -46,18 +45,20 @@ struct spirv_compiler *spirv_compiler_create(pl_log log,
     return NULL;
 }
 
-void spirv_compiler_destroy(struct spirv_compiler **spirv)
+void pl_spirv_destroy(pl_spirv *pspirv)
 {
-    if (!*spirv)
+    pl_spirv spirv = *pspirv;
+    if (!spirv)
         return;
 
-    (*spirv)->impl->destroy(*spirv);
+    spirv->impl->destroy(spirv);
+    *pspirv = NULL;
 }
 
-pl_str spirv_compile_glsl(struct spirv_compiler *spirv, void *alloc,
-                          const struct pl_glsl_version *glsl,
-                          enum glsl_shader_stage stage,
-                          const char *shader)
+pl_str pl_spirv_compile_glsl(pl_spirv spirv, void *alloc,
+                             struct pl_glsl_version glsl,
+                             enum glsl_shader_stage stage,
+                             const char *shader)
 {
     return spirv->impl->compile(spirv, alloc, glsl, stage, shader);
 }

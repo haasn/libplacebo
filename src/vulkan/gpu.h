@@ -24,6 +24,7 @@
 #include "utils.h"
 
 #include "../gpu.h"
+#include "../glsl/spirv.h"
 #include "../pl_thread.h"
 
 pl_gpu pl_gpu_create_vk(struct vk_ctx *vk);
@@ -53,7 +54,7 @@ enum queue_type {
 struct pl_vk {
     struct pl_gpu_fns impl;
     struct vk_ctx *vk;
-    struct spirv_compiler *spirv;
+    pl_spirv spirv;
 
     // Some additional cached device limits and features checks
     uint32_t max_push_descriptors;

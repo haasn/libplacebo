@@ -404,10 +404,10 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
         .ctx = ctx,
         .impl = pl_fns_d3d11,
         .dev = ctx->dev,
-        .spirv = spirv_compiler_create(ctx->log, &(const struct pl_spirv_version) {
-                                          .env_version = pl_spirv_version_to_vulkan(spirv_ver),
-                                          .spv_version = spirv_ver,
-                                      }),
+        .spirv = pl_spirv_create(ctx->log, (struct pl_spirv_version) {
+            .env_version = pl_spirv_version_to_vulkan(spirv_ver),
+            .spv_version = spirv_ver,
+        }),
         .vbuf.bind_flags = D3D11_BIND_VERTEX_BUFFER,
         .ibuf.bind_flags = D3D11_BIND_INDEX_BUFFER,
     };

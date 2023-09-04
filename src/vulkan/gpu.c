@@ -260,7 +260,7 @@ static void vk_gpu_destroy(pl_gpu gpu)
             vk->DestroySampler(vk->dev, p->samplers[s][a], PL_VK_ALLOC);
     }
 
-    spirv_compiler_destroy(&p->spirv);
+    pl_spirv_destroy(&p->spirv);
     pl_mutex_destroy(&p->recording);
     pl_free((void *) gpu);
 }
@@ -415,11 +415,9 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
     struct pl_vk *p = PL_PRIV(gpu);
     pl_mutex_init(&p->recording);
-    p->impl = pl_fns_vk;
     p->vk = vk;
-
-    const struct pl_spirv_version spirv_ver = get_spirv_version(vk);
-    p->spirv = spirv_compiler_create(vk->log, &spirv_ver);
+    p->impl = pl_fns_vk;
+    p->spirv = pl_spirv_create(vk->log, get_spirv_version(vk));
     if (!p->spirv)
         goto error;
 

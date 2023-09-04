@@ -21,48 +21,47 @@
 #include "spirv.h"
 #include "utils.h"
 
-const struct spirv_compiler_impl pl_spirv_shaderc;
+const struct spirv_compiler pl_spirv_shaderc;
 
 struct priv {
     shaderc_compiler_t compiler;
-    struct pl_spirv_version spirv_ver;
 };
 
-static void shaderc_destroy(struct spirv_compiler *spirv)
+static void shaderc_destroy(pl_spirv spirv)
 {
     struct priv *p = PL_PRIV(spirv);
     shaderc_compiler_release(p->compiler);
-    pl_free(spirv);
+    pl_free((void *) spirv);
 }
 
-static struct spirv_compiler *shaderc_create(pl_log log, const struct pl_spirv_version *spirv_ver)
+static pl_spirv shaderc_create(pl_log log, struct pl_spirv_version spirv_ver)
 {
-    struct spirv_compiler *spirv = pl_alloc_obj(NULL, spirv, struct priv);
-    *spirv = (struct spirv_compiler) {
+    struct pl_spirv_t *spirv = pl_alloc_obj(NULL, spirv, struct priv);
+    *spirv = (struct pl_spirv_t) {
         .signature = pl_str0_hash(pl_spirv_shaderc.name),
-        .impl = &pl_spirv_shaderc,
-        .log = log,
+        .impl      = &pl_spirv_shaderc,
+        .version   = spirv_ver,
+        .log       = log,
     };
 
     struct priv *p = PL_PRIV(spirv);
-    p->spirv_ver = *spirv_ver;
     p->compiler = shaderc_compiler_initialize();
     if (!p->compiler)
         goto error;
 
     unsigned int ver = 0, rev = 0;
     shaderc_get_spv_version(&ver, &rev);
-    pl_info(log, "shaderc SPIR-V version %u.%u rev %u",
+    PL_INFO(spirv, "shaderc SPIR-V version %u.%u rev %u",
             ver >> 16, (ver >> 8) & 0xff, rev);
 
     // Clamp to supported version by shaderc
-    if (ver < p->spirv_ver.spv_version) {
-        p->spirv_ver.spv_version = ver;
-        p->spirv_ver.env_version = pl_spirv_version_to_vulkan(ver);
+    if (ver < spirv->version.spv_version) {
+        spirv->version.spv_version = ver;
+        spirv->version.env_version = pl_spirv_version_to_vulkan(ver);
     }
 
-    pl_hash_merge(&spirv->signature, (uint64_t) p->spirv_ver.spv_version << 32 |
-                                                p->spirv_ver.env_version);
+    pl_hash_merge(&spirv->signature, (uint64_t) spirv->version.spv_version << 32 |
+                                                spirv->version.env_version);
     pl_hash_merge(&spirv->signature, (uint64_t) ver << 32 | rev);
     return spirv;
 
@@ -71,8 +70,8 @@ error:
     return NULL;
 }
 
-static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
-                              const struct pl_glsl_version *glsl,
+static pl_str shaderc_compile(pl_spirv spirv, void *alloc,
+                              struct pl_glsl_version glsl_ver,
                               enum glsl_shader_stage stage,
                               const char *shader)
 {
@@ -85,22 +84,22 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
 
     shaderc_compile_options_set_optimization_level(opts,
             shaderc_optimization_level_performance);
-    shaderc_compile_options_set_target_spirv(opts, p->spirv_ver.spv_version);
+    shaderc_compile_options_set_target_spirv(opts, spirv->version.spv_version);
     shaderc_compile_options_set_target_env(opts, shaderc_target_env_vulkan,
-                                                 p->spirv_ver.env_version);
+                                                 spirv->version.env_version);
 
     for (int i = 0; i < 3; i++) {
         shaderc_compile_options_set_limit(opts,
                 shaderc_limit_max_compute_work_group_size_x + i,
-                glsl->max_group_size[i]);
+                glsl_ver.max_group_size[i]);
     }
 
     shaderc_compile_options_set_limit(opts,
             shaderc_limit_min_program_texel_offset,
-            glsl->min_gather_offset);
+            glsl_ver.min_gather_offset);
     shaderc_compile_options_set_limit(opts,
             shaderc_limit_max_program_texel_offset,
-            glsl->max_gather_offset);
+            glsl_ver.max_gather_offset);
 
     static const shaderc_shader_kind kinds[] = {
         [GLSL_SHADER_VERTEX]   = shaderc_glsl_vertex_shader,
@@ -166,7 +165,7 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
     return ret;
 }
 
-const struct spirv_compiler_impl pl_spirv_shaderc = {
+const struct spirv_compiler pl_spirv_shaderc = {
     .name       = "shaderc",
     .destroy    = shaderc_destroy,
     .create     = shaderc_create,

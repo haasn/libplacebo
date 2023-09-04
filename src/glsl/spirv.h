@@ -20,29 +20,31 @@
 #include "log.h"
 #include "utils.h"
 
-struct spirv_compiler {
-    const struct spirv_compiler_impl *impl;
+typedef const struct pl_spirv_t {
+    const struct spirv_compiler *impl;
     pl_log log;
+
+    // SPIR-V version specified at creation time.
+    struct pl_spirv_version version;
 
     // For cache invalidation, should uniquely identify everything about this
     // spirv compiler and its configuration.
     uint64_t signature;
-};
+} *pl_spirv;
 
 // Initialize a SPIR-V compiler instance, or returns NULL on failure.
-struct spirv_compiler *spirv_compiler_create(pl_log log,
-                                             const struct pl_spirv_version *spirv_ver);
-void spirv_compiler_destroy(struct spirv_compiler **spirv);
+pl_spirv pl_spirv_create(pl_log log, struct pl_spirv_version spirv_ver);
+void pl_spirv_destroy(pl_spirv *spirv);
 
 // Compile GLSL to SPIR-V. Returns {0} on failure.
-pl_str spirv_compile_glsl(struct spirv_compiler *spirv, void *alloc,
-                          const struct pl_glsl_version *glsl,
-                          enum glsl_shader_stage stage,
-                          const char *shader);
+pl_str pl_spirv_compile_glsl(pl_spirv spirv, void *alloc,
+                             struct pl_glsl_version glsl_ver,
+                             enum glsl_shader_stage stage,
+                             const char *shader);
 
-struct spirv_compiler_impl {
+struct spirv_compiler {
     const char *name;
-    void (*destroy)(struct spirv_compiler *spirv);
-    __typeof__(spirv_compiler_create) *create;
-    __typeof__(spirv_compile_glsl) *compile;
+    void (*destroy)(pl_spirv spirv);
+    __typeof__(pl_spirv_create) *create;
+    __typeof__(pl_spirv_compile_glsl) *compile;
 };

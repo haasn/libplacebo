@@ -60,8 +60,8 @@ void pl_glslang_uninit(void)
     pl_static_mutex_unlock(&pl_glslang_mutex);
 }
 
-struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
-                                          const struct pl_spirv_version *spirv_ver,
+struct pl_glslang_res *pl_glslang_compile(struct pl_glsl_version glsl_ver,
+                                          struct pl_spirv_version spirv_ver,
                                           enum glsl_shader_stage stage,
                                           const char *text)
 {
@@ -78,16 +78,16 @@ struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
 
     TShader *shader = new TShader(lang);
 
-    shader->setEnvClient(EShClientVulkan, (EShTargetClientVersion) spirv_ver->env_version);
-    shader->setEnvTarget(EShTargetSpv, (EShTargetLanguageVersion) spirv_ver->spv_version);
+    shader->setEnvClient(EShClientVulkan, (EShTargetClientVersion) spirv_ver.env_version);
+    shader->setEnvTarget(EShTargetSpv, (EShTargetLanguageVersion) spirv_ver.spv_version);
     shader->setStrings(&text, 1);
 
     TBuiltInResource limits = DefaultTBuiltInResource;
-    limits.maxComputeWorkGroupSizeX = glsl->max_group_size[0];
-    limits.maxComputeWorkGroupSizeY = glsl->max_group_size[1];
-    limits.maxComputeWorkGroupSizeZ = glsl->max_group_size[2];
-    limits.minProgramTexelOffset = glsl->min_gather_offset;
-    limits.maxProgramTexelOffset = glsl->max_gather_offset;
+    limits.maxComputeWorkGroupSizeX = glsl_ver.max_group_size[0];
+    limits.maxComputeWorkGroupSizeY = glsl_ver.max_group_size[1];
+    limits.maxComputeWorkGroupSizeZ = glsl_ver.max_group_size[2];
+    limits.minProgramTexelOffset = glsl_ver.min_gather_offset;
+    limits.maxProgramTexelOffset = glsl_ver.max_gather_offset;
 
     if (!shader->parse(&limits, 0, true, EShMsgDefault)) {
         res->error_msg = pl_str0dup0(res, shader->getInfoLog());
