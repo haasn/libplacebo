@@ -304,6 +304,7 @@ static void d3d11_gpu_destroy(pl_gpu gpu)
         SAFE_RELEASE(p->imm);
     }
 
+    pl_spirv_destroy(&p->spirv);
     pl_free((void *) gpu);
 }
 
