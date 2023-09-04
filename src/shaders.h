@@ -21,6 +21,7 @@
 #include <limits.h>
 
 #include "common.h"
+#include "cache.h"
 #include "log.h"
 #include "gpu.h"
 
@@ -129,6 +130,7 @@ pl_str_builder sh_finalize_internal(pl_shader sh);
 // Helper functions for convenience
 #define SH_PARAMS(sh) ((sh)->info->info.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
+#define SH_CACHE(sh) pl_gpu_cache(SH_GPU(sh))
 
 // Returns the GLSL version, defaulting to desktop 130.
 struct pl_glsl_version sh_glsl(const pl_shader sh);

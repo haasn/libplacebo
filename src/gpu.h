@@ -41,6 +41,9 @@ struct pl_gpu_fns {
     // Warning: Care must be taken to avoid recursive calls.
     pl_dispatch dp;
 
+    // Internal cache, or NULL. Set by the user (via pl_gpu_set_cache).
+    _Atomic(pl_cache) cache;
+
     // Destructors: These also free the corresponding objects, but they
     // must not be called on NULL. (The NULL checks are done by the pl_*_destroy
     // wrappers)
@@ -93,8 +96,9 @@ static inline bool pl_gpu_supports_interop(pl_gpu gpu)
            gpu->import_caps.sync;
 }
 
-// Returns the GPU-internal `pl_dispatch` object.
+// Returns the GPU-internal `pl_dispatch` and `pl_cache` objects.
 pl_dispatch pl_gpu_dispatch(pl_gpu gpu);
+pl_cache pl_gpu_cache(pl_gpu gpu);
 
 // GPU-internal helpers: these should not be used outside of GPU implementations
 

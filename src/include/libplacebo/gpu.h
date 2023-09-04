@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #include <libplacebo/common.h>
+#include <libplacebo/cache.h>
 #include <libplacebo/log.h>
 
 PL_API_BEGIN
@@ -246,6 +247,15 @@ typedef const struct pl_gpu_t {
     // This will only be filled in if interop is supported.
     struct pl_gpu_pci_address pci;
 } *pl_gpu;
+
+// Attach a pl_cache object to this GPU instance. This cache will be
+// used to cache all compiled shaders, as well as several other shader objects
+// (e.g. cached 3DLUTs). Calling this with `cache = NULL` disables the cache.
+//
+// Note: Calling this after shaders have already been compiled will not
+// retroactively add those shaders to the cache, so it's recommended to set
+// this early, before creating any passes.
+PL_API void pl_gpu_set_cache(pl_gpu gpu, pl_cache cache);
 
 enum pl_fmt_type {
     PL_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats

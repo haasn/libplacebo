@@ -36,6 +36,20 @@ pl_dispatch pl_gpu_dispatch(pl_gpu gpu)
     return impl->dp;
 }
 
+pl_cache pl_gpu_cache(pl_gpu gpu)
+{
+    if (!gpu)
+        return NULL;
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    return atomic_load(&impl->cache);
+}
+
+void pl_gpu_set_cache(pl_gpu gpu, pl_cache cache)
+{
+    struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    atomic_store(&impl->cache, cache);
+}
+
 bool pl_fmt_is_ordered(pl_fmt fmt)
 {
     bool ret = !fmt->opaque;

@@ -263,6 +263,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
 
     // Finally, create a `pl_dispatch` object for internal operations
     struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    atomic_init(&impl->cache, NULL);
     impl->dp = pl_dispatch_create(gpu->log, gpu);
     return gpu;
 }
