@@ -64,4 +64,6 @@ enum {
     CACHE_KEY_DITHER    = UINT64_C(0x6fed75eb6dce86cb), // dither matrix
     CACHE_KEY_H274      = UINT64_C(0x2fb9adca04b42c4d), // H.274 film grain DB
     CACHE_KEY_GAMUT_LUT = UINT64_C(0x41bbe0c35ea24b2e), // gamut mapping 3DLUT
+    CACHE_KEY_SPIRV     = UINT64_C(0x32352f6605ff60a7), // bare SPIR-V module
+    CACHE_KEY_VK_PIPE   = UINT64_C(0x4bdab2817ad02ad4), // VkPipelineCache
 };

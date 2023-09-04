@@ -16,6 +16,7 @@
  */
 
 #include "gpu.h"
+#include "cache.h"
 #include "glsl/spirv.h"
 
 // For pl_pass.priv
@@ -86,79 +87,31 @@ static const VkDescriptorType dsType[] = {
     [PL_DESC_BUF_TEXEL_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
 };
 
-#define CACHE_MAGIC {'P','L','V','K'}
-#define CACHE_VERSION 4
-static const char vk_cache_magic[4] = CACHE_MAGIC;
-
-struct vk_cache_header {
-    char magic[sizeof(vk_cache_magic)];
-    int cache_version;
-    uint64_t signature;
-    size_t vert_spirv_len;
-    size_t frag_spirv_len;
-    size_t comp_spirv_len;
-    size_t pipecache_len;
-};
-
-static uint64_t cache_signature(pl_gpu gpu, const struct pl_pass_params *params)
-{
-    struct pl_vk *p = PL_PRIV(gpu);
-    uint64_t sig = p->spirv->signature;
-
-    pl_hash_merge(&sig, pl_str0_hash(params->glsl_shader));
-    if (params->type == PL_PASS_RASTER)
-        pl_hash_merge(&sig, pl_str0_hash(params->vertex_shader));
-    return sig;
-}
-
-static bool vk_use_cached_program(const struct pl_pass_params *params,
-                                  pl_str *vert_spirv, pl_str *frag_spirv,
-                                  pl_str *comp_spirv, pl_str *pipecache,
-                                  uint64_t signature)
-{
-    pl_str cache = {
-        .buf = (uint8_t *) params->cached_program,
-        .len = params->cached_program_len,
-    };
-
-    if (cache.len < sizeof(struct vk_cache_header))
-        return false;
-
-    struct vk_cache_header *header = (struct vk_cache_header *) cache.buf;
-    cache = pl_str_drop(cache, sizeof(*header));
-
-    if (strncmp(header->magic, vk_cache_magic, sizeof(vk_cache_magic)) != 0)
-        return false;
-    if (header->cache_version != CACHE_VERSION)
-        return false;
-    if (header->signature != signature)
-        return false;
-
-#define GET(ptr)                                        \
-        if (cache.len < header->ptr##_len)              \
-            return false;                               \
-        *ptr = pl_str_take(cache, header->ptr##_len);   \
-        cache = pl_str_drop(cache, ptr->len);
-
-    GET(vert_spirv);
-    GET(frag_spirv);
-    GET(comp_spirv);
-    GET(pipecache);
-    return true;
-}
-
 static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
                                 enum glsl_shader_stage stage,
                                 const char *shader,
-                                pl_str *out_spirv)
+                                pl_cache_obj *out_spirv)
 {
     struct pl_vk *p = PL_PRIV(gpu);
+    pl_cache cache = pl_gpu_cache(gpu);
+    uint64_t key = CACHE_KEY_SPIRV;
+    if (cache) { // skip computing key if `cache
+        pl_hash_merge(&key, p->spirv->signature);
+        pl_hash_merge(&key, pl_str0_hash(shader));
+        out_spirv->key = key;
+        if (pl_cache_get(cache, out_spirv)) {
+            PL_DEBUG(gpu, "Re-using cached SPIR-V object 0x%"PRIx64, key);
+            return VK_SUCCESS;
+        }
+    }
 
     pl_clock_t start = pl_clock_now();
-    *out_spirv = pl_spirv_compile_glsl(p->spirv, alloc, gpu->glsl, stage, shader);
+    pl_str spirv = pl_spirv_compile_glsl(p->spirv, alloc, gpu->glsl, stage, shader);
     pl_log_cpu_time(gpu->log, start, pl_clock_now(), "translating SPIR-V");
-
-    return out_spirv->len ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+    out_spirv->data = spirv.buf;
+    out_spirv->size = spirv.len;
+    out_spirv->free = pl_free;
+    return spirv.len ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 static const VkShaderStageFlags stageFlags[] = {
@@ -497,39 +450,44 @@ no_descriptors: ;
     VK(vk->CreatePipelineLayout(vk->dev, &linfo, PL_VK_ALLOC,
                                 &pass_vk->pipeLayout));
 
-    pl_str vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
-    uint64_t sig = cache_signature(gpu, params);
-    if (vk_use_cached_program(params, &vert, &frag, &comp, &pipecache, sig)) {
-        PL_DEBUG(gpu, "Using cached SPIR-V and VkPipeline");
-    } else {
-        pipecache.len = 0;
-        switch (params->type) {
-        case PL_PASS_RASTER:
-            VK(vk_compile_glsl(gpu, tmp, GLSL_SHADER_VERTEX,
-                               params->vertex_shader, &vert));
-            VK(vk_compile_glsl(gpu, tmp, GLSL_SHADER_FRAGMENT,
-                               params->glsl_shader, &frag));
-            comp.len = 0;
-            break;
-        case PL_PASS_COMPUTE:
-            VK(vk_compile_glsl(gpu, tmp, GLSL_SHADER_COMPUTE,
-                               params->glsl_shader, &comp));
-            frag.len = 0;
-            vert.len = 0;
-            break;
-        case PL_PASS_INVALID:
-        case PL_PASS_TYPE_COUNT:
-            pl_unreachable();
-        }
+    pl_cache_obj vert = {0}, frag = {0}, comp = {0};
+    switch (params->type) {
+    case PL_PASS_RASTER: ;
+        VK(vk_compile_glsl(gpu, tmp, GLSL_SHADER_VERTEX, params->vertex_shader, &vert));
+        VK(vk_compile_glsl(gpu, tmp, GLSL_SHADER_FRAGMENT, params->glsl_shader, &frag));
+        break;
+    case PL_PASS_COMPUTE:
+        VK(vk_compile_glsl(gpu, tmp, GLSL_SHADER_COMPUTE, params->glsl_shader, &comp));
+        break;
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
-    VkPipelineCacheCreateInfo pcinfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
-        .pInitialData = pipecache.buf,
-        .initialDataSize = pipecache.len,
-    };
+    // Use hash of generated SPIR-V as key for pipeline cache
+    const pl_cache cache = pl_gpu_cache(gpu);
+    pl_cache_obj pipecache = {0};
+    if (cache) {
+        pipecache.key = CACHE_KEY_VK_PIPE;
+        pl_hash_merge(&pipecache.key, pl_var_hash(vk->props.pipelineCacheUUID));
+        pl_hash_merge(&pipecache.key, pl_mem_hash(vert.data, vert.size));
+        pl_hash_merge(&pipecache.key, pl_mem_hash(frag.data, frag.size));
+        pl_hash_merge(&pipecache.key, pl_mem_hash(comp.data, comp.size));
+        pl_cache_get(cache, &pipecache);
+    }
 
-    VK(vk->CreatePipelineCache(vk->dev, &pcinfo, PL_VK_ALLOC, &pass_vk->cache));
+    if (cache || has_spec) {
+        // Don't create pipeline cache unless we either plan on caching the
+        // result of this shader to a pl_cache, or if we will possibly re-use
+        // it due to the presence of specialization constants
+        VkPipelineCacheCreateInfo pcinfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+            .pInitialData = pipecache.data,
+            .initialDataSize = pipecache.size,
+        };
+
+        VK(vk->CreatePipelineCache(vk->dev, &pcinfo, PL_VK_ALLOC, &pass_vk->cache));
+    }
 
     VkShaderModuleCreateInfo sinfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -538,13 +496,13 @@ no_descriptors: ;
     pl_clock_t start = pl_clock_now();
     switch (params->type) {
     case PL_PASS_RASTER: {
-        sinfo.pCode = (uint32_t *) vert.buf;
-        sinfo.codeSize = vert.len;
+        sinfo.pCode = (uint32_t *) vert.data;
+        sinfo.codeSize = vert.size;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &pass_vk->vert));
         PL_VK_NAME(SHADER_MODULE, pass_vk->vert, "vertex");
 
-        sinfo.pCode = (uint32_t *) frag.buf;
-        sinfo.codeSize = frag.len;
+        sinfo.pCode = (uint32_t *) frag.data;
+        sinfo.codeSize = frag.size;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &pass_vk->shader));
         PL_VK_NAME(SHADER_MODULE, pass_vk->shader, "fragment");
 
@@ -589,8 +547,8 @@ no_descriptors: ;
         break;
     }
     case PL_PASS_COMPUTE: {
-        sinfo.pCode = (uint32_t *) comp.buf;
-        sinfo.codeSize = comp.len;
+        sinfo.pCode = (uint32_t *) comp.data;
+        sinfo.codeSize = comp.size;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &pass_vk->shader));
         PL_VK_NAME(SHADER_MODULE, pass_vk->shader, "compute");
         break;
@@ -603,51 +561,38 @@ no_descriptors: ;
     pl_clock_t after_compilation = pl_clock_now();
     pl_log_cpu_time(gpu->log, start, after_compilation, "compiling shader");
 
+    // Update cache entries on successful compilation
+    pl_cache_steal(cache, &vert);
+    pl_cache_steal(cache, &frag);
+    pl_cache_steal(cache, &comp);
+
     // Create the graphics/compute pipeline
     VkPipeline *pipe = has_spec ? &pass_vk->base : &pass_vk->pipe;
     VK(vk_recreate_pipelines(vk, pass, has_spec, VK_NULL_HANDLE, pipe));
     pl_log_cpu_time(gpu->log, after_compilation, pl_clock_now(), "creating pipeline");
+
+    // Update pipeline cache
+    if (cache) {
+        size_t size = 0;
+        VK(vk->GetPipelineCacheData(vk->dev, pass_vk->cache, &size, NULL));
+        pl_cache_obj_resize(tmp, &pipecache, size);
+        VK(vk->GetPipelineCacheData(vk->dev, pass_vk->cache, &size, pipecache.data));
+        pl_cache_steal(cache, &pipecache);
+    }
 
     if (!has_spec) {
         // We can free these if we no longer need them for specialization
         pl_free_ptr(&pass_vk->attrs);
         vk->DestroyShaderModule(vk->dev, pass_vk->vert, PL_VK_ALLOC);
         vk->DestroyShaderModule(vk->dev, pass_vk->shader, PL_VK_ALLOC);
+        vk->DestroyPipelineCache(vk->dev, pass_vk->cache, PL_VK_ALLOC);
         pass_vk->vert = VK_NULL_HANDLE;
         pass_vk->shader = VK_NULL_HANDLE;
-    }
-
-    // Update params->cached_program
-    pl_str cache = {0};
-    VK(vk->GetPipelineCacheData(vk->dev, pass_vk->cache, &cache.len, NULL));
-    cache.buf = pl_alloc(tmp, cache.len);
-    VK(vk->GetPipelineCacheData(vk->dev, pass_vk->cache, &cache.len, cache.buf));
-    if (!has_spec) {
-        vk->DestroyPipelineCache(vk->dev, pass_vk->cache, PL_VK_ALLOC);
         pass_vk->cache = VK_NULL_HANDLE;
     }
 
-    struct vk_cache_header header = {
-        .magic = CACHE_MAGIC,
-        .cache_version = CACHE_VERSION,
-        .signature = sig,
-        .vert_spirv_len = vert.len,
-        .frag_spirv_len = frag.len,
-        .comp_spirv_len = comp.len,
-        .pipecache_len = cache.len,
-    };
-
     PL_DEBUG(vk, "Pass statistics: size %zu, SPIR-V: vert %zu frag %zu comp %zu",
-             cache.len, vert.len, frag.len, comp.len);
-
-    pl_str prog = {0};
-    pl_str_append(pass, &prog, (pl_str){ (uint8_t *) &header, sizeof(header) });
-    pl_str_append(pass, &prog, vert);
-    pl_str_append(pass, &prog, frag);
-    pl_str_append(pass, &prog, comp);
-    pl_str_append(pass, &prog, cache);
-    pass->params.cached_program = prog.buf;
-    pass->params.cached_program_len = prog.len;
+             pipecache.size, vert.size, frag.size, comp.size);
 
     success = true;
 
