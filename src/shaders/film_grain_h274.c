@@ -172,6 +172,8 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         .height     = 13 * 64,
         .comps      = 1,
         .fill       = fill_grain_lut,
+        .signature  = CACHE_KEY_H274, // doesn't depend on anything
+        .cache      = SH_CACHE(sh),
     ));
 
     sh_describe(sh, "H.274 film grain");

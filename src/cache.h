@@ -62,4 +62,5 @@ enum {
     CACHE_KEY_SH_LUT    = UINT64_C(0x2206183d320352c6), // sh_lut cache
     CACHE_KEY_ICC_3DLUT = UINT64_C(0xff703a6dd8a996f6), // ICC 3dlut
     CACHE_KEY_DITHER    = UINT64_C(0x6fed75eb6dce86cb), // dither matrix
+    CACHE_KEY_H274      = UINT64_C(0x2fb9adca04b42c4d), // H.274 film grain DB
 };
