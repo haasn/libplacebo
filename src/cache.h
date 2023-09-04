@@ -60,4 +60,5 @@ static inline void pl_cache_obj_resize(void *alloc, pl_cache_obj *obj, size_t si
 
 enum {
     CACHE_KEY_SH_LUT    = UINT64_C(0x2206183d320352c6), // sh_lut cache
+    CACHE_KEY_ICC_3DLUT = UINT64_C(0xff703a6dd8a996f6), // ICC 3dlut
 };

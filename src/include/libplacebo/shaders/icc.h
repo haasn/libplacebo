@@ -54,27 +54,19 @@ struct pl_icc_params {
     // or when using PL_INTENT_PERCEPTUAL, but YMMV.
     bool force_bpc;
 
-    // 3DLUT caching API. Providing these functions can help speed up ICC LUT
-    // generation by saving/loading profiles to/from disk. Both of these
-    // callbacks are optional.
-    void *cache_priv;
+    // If provided, this pl_cache instance will be used to cache the generated
+    // 3DLUTs. Note that these can get large, especially for large values of
+    // size_{r,g,b}, so it's recommended to split this cache off from the main
+    // shader cache.
     //
-    // This is called to inform users of new cache entries. The user may store
-    // this cache to disk or some other internal caching mechanism.
-    void (*cache_save)(void *priv, uint64_t sig, const uint8_t *cache, size_t size);
-    //
-    // This is called to query for existing cache entries. The user should look
-    // up this cache entry and write its contents to `cache`, ensuring that no
-    // more than `size` bytes are written, and return `true` on success.
-    bool (*cache_load)(void *priv, uint64_t sig, uint8_t *cache, size_t size);
-    //
-    // Note: The `signature` of a cache entry is NOT equal to the `signature`
-    // of the underlying `pl_icc_object` - it is split up into separate entries
-    // for `pl_icc_decode` and `pl_icc_encode`, and also includes a hashed
-    // representation of the encoded parameters.
-    //
-    // Note: These callbacks will only be called from within `pl_icc_decode` /
-    // `pl_icc_encode`, so `cache_priv` should exceed this lifetime.
+    // Note: When the 3DLUTs are sufficiently small (<100 kB), the cache from
+    // the `pl_gpu`, if any, will be used as a fallback.
+    pl_cache cache;
+
+    // Deprecated legacy caching API. Replaced by `cache`.
+    PL_DEPRECATED void *cache_priv;
+    PL_DEPRECATED void (*cache_save)(void *priv, uint64_t sig, const uint8_t *cache, size_t size);
+    PL_DEPRECATED bool (*cache_load)(void *priv, uint64_t sig, uint8_t *cache, size_t size);
 };
 
 #define PL_ICC_DEFAULTS                         \

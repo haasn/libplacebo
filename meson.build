@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '321': 'deprecate pl_icc_params.cache_{save,load,priv}',
       '320': 'add pl_gpu_set_cache',
       '319': 'add <libplacebo/cache.h>',
       '318': 'add pl_filter_ewa_lanczossharp and pl_filter_ewa_lanczos4sharpest',

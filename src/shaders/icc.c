@@ -30,6 +30,7 @@ const struct pl_icc_params pl_icc_default_params = { PL_ICC_DEFAULTS };
 
 struct icc_priv {
     pl_log log;
+    pl_cache cache; // for backwards compatibility
     cmsContext cms;
     cmsHPROFILE profile;
     cmsHPROFILE approx; // approximation profile
@@ -46,6 +47,32 @@ static void error_callback(cmsContext cms, cmsUInt32Number code,
     pl_err(log, "lcms2: [%d] %s", (int) code, msg);
 }
 
+static void set_callback(void *priv, pl_cache_obj obj)
+{
+    pl_icc_object icc = priv;
+    icc->params.cache_save(icc->params.cache_priv, obj.key, obj.data, obj.size);
+}
+
+static pl_cache_obj get_callback(void *priv, uint64_t key)
+{
+    pl_icc_object icc = priv;
+    int s_r = icc->params.size_r, s_g = icc->params.size_g, s_b = icc->params.size_b;
+    size_t data_size = s_r * s_g * s_b * sizeof(uint16_t[4]);
+    void *data = pl_alloc(NULL, data_size);
+    bool ok = icc->params.cache_load(icc->params.cache_priv, key, data, data_size);
+    if (!ok) {
+        pl_free(data);
+        return (pl_cache_obj) {0};
+    }
+
+    return (pl_cache_obj) {
+        .key  = key,
+        .data = data,
+        .size = data_size,
+        .free = pl_free,
+    };
+}
+
 void pl_icc_close(pl_icc_object *picc)
 {
     pl_icc_object icc = *picc;
@@ -56,6 +83,7 @@ void pl_icc_close(pl_icc_object *picc)
     cmsCloseProfile(p->approx);
     cmsCloseProfile(p->profile);
     cmsDeleteContext(p->cms);
+    pl_cache_destroy(&p->cache);
     pl_free_ptr((void **) picc);
 }
 
@@ -440,7 +468,8 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     cmsSetProfileVersion(p->approx, 2.2);
 
     // Hash all parameters affecting the generated 3DLUT
-    p->lut_sig = icc->signature;
+    p->lut_sig = CACHE_KEY_ICC_3DLUT;
+    pl_hash_merge(&p->lut_sig, icc->signature);
     pl_hash_merge(&p->lut_sig, params->intent);
     pl_hash_merge(&p->lut_sig, params->size_r);
     pl_hash_merge(&p->lut_sig, params->size_g);
@@ -450,20 +479,21 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     pl_hash_merge(&p->lut_sig, v.u);
     // min luma depends only on the max luma and profile
 
+    // Backwards compatibility with old caching API
+    if ((params->cache_save || params->cache_load) && !params->cache) {
+        p->cache = pl_cache_create(pl_cache_params(
+            .log  = log,
+            .set  = params->cache_save ? set_callback : NULL,
+            .get  = params->cache_load ? get_callback : NULL,
+            .priv = icc,
+        ));
+    }
+
     return icc;
 
 error:
     pl_icc_close((pl_icc_object *) &icc);
     return NULL;
-}
-
-static inline bool cache_load(pl_icc_object icc, uint64_t sig,
-                              uint8_t *cache, size_t size)
-{
-    if (icc->params.cache_load)
-        return icc->params.cache_load(icc->params.cache_priv, sig, cache, size);
-
-    return false;
 }
 
 static void fill_lut(void *datap, const struct sh_lut_params *params, bool decode)
@@ -472,13 +502,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     struct icc_priv *p = PL_PRIV(icc);
     cmsHPROFILE srcp = decode ? p->profile : p->approx;
     cmsHPROFILE dstp = decode ? p->approx  : p->profile;
-
     int s_r = params->width, s_g = params->height, s_b = params->depth;
-    size_t data_size = s_r * s_g * s_b * sizeof(uint16_t[4]);
-    if (cache_load(icc, params->signature, datap, data_size)) {
-        PL_INFO(p, "Using cached 3DLUT (0x%"PRIX64")", params->signature);
-        return;
-    }
 
     pl_clock_t start = pl_clock_now();
     cmsHTRANSFORM tf = cmsCreateTransformTHR(p->cms, srcp, TYPE_RGB_16,
@@ -528,11 +552,6 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     pl_log_cpu_time(p->log, after_transform, pl_clock_now(), "generating ICC 3DLUT");
     cmsDeleteTransform(tf);
     pl_free(tmp);
-
-    if (icc->params.cache_save) {
-        icc->params.cache_save(icc->params.cache_priv, params->signature,
-                               datap, data_size);
-    }
 }
 
 static void fill_decode(void *datap, const struct sh_lut_params *params)
@@ -543,6 +562,12 @@ static void fill_decode(void *datap, const struct sh_lut_params *params)
 static void fill_encode(void *datap, const struct sh_lut_params *params)
 {
     fill_lut(datap, params, false);
+}
+
+static pl_cache get_cache(pl_icc_object icc, pl_shader sh)
+{
+    struct icc_priv *p = PL_PRIV(icc);
+    return PL_DEF(icc->params.cache, PL_DEF(p->cache, SH_CACHE(sh)));
 }
 
 void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
@@ -564,6 +589,7 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
         .comps      = 4,
         .signature  = p->lut_sig,
         .fill       = fill_decode,
+        .cache      = get_cache(icc, sh),
         .priv       = (void *) icc,
     ));
 
@@ -613,6 +639,7 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
         .comps      = 4,
         .signature  = ~p->lut_sig, // avoid confusion with decoding LUTs
         .fill       = fill_encode,
+        .cache      = get_cache(icc, sh),
         .priv       = (void *) icc,
     ));
 
