@@ -30,11 +30,14 @@ int main()
     pl_str_append_asprintf(tmp, &buf, "%.*s", PL_STR_FMT(test));
     REQUIRE(pl_str_equals(buf, test));
 
-    pl_str_append_asprintf_c(tmp, &buf, "%d %f %lld %zu %.*sx %hx %hx %hx %hx",
-        1, 1.0f, 0xFFll, (size_t) 0, PL_STR_FMT(empty),
+    pl_str_append_asprintf_c(tmp, &buf, "%d %f %f %f %lld %zu %.*sx %hx %hx %hx %hx",
+        1, 1.0f, 4294967295.56, 83224965647295.65, 0xFFll, (size_t) 0, PL_STR_FMT(empty),
         (unsigned short) 0xCAFEu, (unsigned short) 0x1, (unsigned short) 0,
         (unsigned short) 0xFFFFu);
-    REQUIRE(pl_str_equals0(buf, "test1 1 255 0 x cafe 1 0 ffff"));
+    const char *expected = "test1 1 4294967295.56 83224965647295.66 255 0 x cafe 1 0 ffff";
+    // fallback can produce different precision
+    const char *expected2 = "test1 1 4294967295.55999994277954102 83224965647295.65625 255 0 x cafe 1 0 ffff";
+    REQUIRE(pl_str_equals0(buf, expected) || pl_str_equals0(buf, expected2));
 
     REQUIRE_CMP(pl_strchr(null, ' '), <, 0, "d");
     REQUIRE_CMP((int) pl_strspn(null, " "), ==, 0, "d");
@@ -83,12 +86,21 @@ int main()
     REQUIRE(pl_str_endswith(test, null));
     REQUIRE(pl_str_endswith(test, test));
 
+    double d;
     float f;
     int i;
     unsigned u;
     int64_t i64;
     uint64_t u64;
 
+    REQUIRE(pl_str_parse_double(pl_str0("4294967295.56"), &d));      REQUIRE_FEQ(d, 4294967295.56, 1e-20);
+    REQUIRE(pl_str_parse_double(pl_str0("-4294967295.56"), &d));     REQUIRE_FEQ(d, -4294967295.56, 1e-20);
+    REQUIRE(pl_str_parse_double(pl_str0("83224965647295.65"), &d));  REQUIRE_FEQ(d, 83224965647295.65, 1e-20);
+    REQUIRE(pl_str_parse_double(pl_str0("-83224965647295.65"), &d)); REQUIRE_FEQ(d, -83224965647295.65, 1e-20);
+    REQUIRE(pl_str_parse_float(pl_str0("4294967295.56"), &f));       REQUIRE_FEQ(f, 4294967295.56f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("-4294967295.56"), &f));      REQUIRE_FEQ(f, -4294967295.56f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("83224965647295.65"), &f));   REQUIRE_FEQ(f, 83224965647295.65f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("-83224965647295.65"), &f));  REQUIRE_FEQ(f, -83224965647295.65f, 1e-8);
     REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f));     REQUIRE_FEQ(f, 1.3984f, 1e-8);
     REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f)); REQUIRE_FEQ(f, -8.9100083f, 1e-8);
     REQUIRE(pl_str_parse_float(pl_str0("-0"), &f));         REQUIRE_FEQ(f, 0.0f, 1e-8);
