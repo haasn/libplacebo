@@ -6,6 +6,7 @@ registry_xml = get_option('vulkan-registry')
 
 # Prefer our Vulkan headers for portability
 vulkan_headers_dir = thirdparty/'Vulkan-Headers'
+vulkan_headers_inc = include_directories()
 if fs.is_dir(vulkan_headers_dir/'include')
   vulkan_headers = declare_dependency()
   vulkan_headers_inc = include_directories('../../3rdparty/Vulkan-Headers/include')
