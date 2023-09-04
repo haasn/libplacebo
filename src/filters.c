@@ -732,8 +732,8 @@ const struct pl_filter_config pl_filter_ginseng = {
     .allowed     = PL_FILTER_ALL,
 };
 
-#define JINC_ZERO3 3.2383154841662362
-#define JINC_ZERO4 4.2410628637960699
+#define JINC_ZERO3 3.2383154841662362076499
+#define JINC_ZERO4 4.2410628637960698819573
 
 const struct pl_filter_config pl_filter_ewa_jinc = {
     .name        = "ewa_jinc",
@@ -773,7 +773,7 @@ const struct pl_filter_config pl_filter_ewa_lanczos4sharpest = {
     .kernel      = &pl_filter_function_jinc,
     .window      = &pl_filter_function_jinc,
     .radius      = JINC_ZERO4,
-    .blur        = 0.88451002338585141,
+    .blur        = 0.88451209326050047745788,
     .antiring    = 0.8,
     .polar       = true,
     .allowed     = PL_FILTER_SCALING,
