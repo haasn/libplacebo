@@ -23,7 +23,6 @@
 const struct pl_dither_params pl_dither_default_params = { PL_DITHER_DEFAULTS };
 
 struct sh_dither_obj {
-    enum pl_dither_method method;
     pl_shader_obj lut;
 };
 
@@ -38,8 +37,8 @@ static void fill_dither_matrix(void *data, const struct sh_lut_params *params)
 {
     pl_assert(params->width > 0 && params->height > 0 && params->comps == 1);
 
-    const struct sh_dither_obj *obj = params->priv;
-    switch (obj->method) {
+    const struct pl_dither_params *dpar = params->priv;
+    switch (dpar->method) {
     case PL_DITHER_ORDERED_LUT:
         pl_assert(params->width == params->height);
         pl_generate_bayer_matrix(data, params->width);
@@ -146,9 +145,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
         if (!obj)
             goto fallback;
 
-        bool changed = obj->method != method;
-        obj->method = method;
-
+        bool cache = method == PL_DITHER_BLUE_NOISE;
         lut_size = 1 << PL_DEF(params->lut_size, pl_dither_default_params.lut_size);
         lut = sh_lut(sh, sh_lut_params(
             .object     = &obj->lut,
@@ -156,9 +153,10 @@ void pl_shader_dither(pl_shader sh, int new_depth,
             .width      = lut_size,
             .height     = lut_size,
             .comps      = 1,
-            .update     = changed,
             .fill       = fill_dither_matrix,
-            .priv       = obj,
+            .signature  = (CACHE_KEY_DITHER ^ method) * lut_size,
+            .cache      = cache ? SH_CACHE(sh) : NULL,
+            .priv       = (void *) params,
         ));
         if (!lut)
             goto fallback;
