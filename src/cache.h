@@ -55,3 +55,9 @@ static inline void pl_cache_obj_resize(void *alloc, pl_cache_obj *obj, size_t si
     }
     obj->size = size;
 }
+
+// Internal list of base seeds for different object types, randomly generated
+
+enum {
+    CACHE_KEY_SH_LUT    = UINT64_C(0x2206183d320352c6), // sh_lut cache
+};

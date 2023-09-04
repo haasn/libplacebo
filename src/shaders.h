@@ -328,6 +328,10 @@ struct sh_lut_params {
     // rather than being treated as read-only.
     bool dynamic;
 
+    // If set , generated shader objects are automatically cached in this
+    // cache. Requires `signature` to be set (and uniquely identify the LUT).
+    pl_cache cache;
+
     // Will be called with a zero-initialized buffer whenever the data needs to
     // be computed, which happens whenever the size is changed, the shader
     // object is invalidated, or `update` is set to true.
