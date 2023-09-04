@@ -18,6 +18,7 @@
 #include "gpu.h"
 #include "formats.h"
 #include "glsl/spirv.h"
+#include "../cache.h"
 
 struct stream_buf_slice {
     const void *data;
@@ -492,13 +493,7 @@ error:;
     return out;
 }
 
-#define CACHE_MAGIC {'P','L','D','3','D',11}
-#define CACHE_VERSION 2
-static const char d3d11_cache_magic[6] = CACHE_MAGIC;
-
 struct d3d11_cache_header {
-    char magic[sizeof(d3d11_cache_magic)];
-    int cache_version;
     uint64_t hash;
     bool num_workgroups_used;
     int num_main_cbvs;
@@ -513,12 +508,23 @@ struct d3d11_cache_header {
     size_t comp_bc_len;
 };
 
-static inline uint64_t pass_cache_signature(pl_gpu gpu,
+static inline uint64_t pass_cache_signature(pl_gpu gpu, uint64_t *key,
                                             const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
 
-    uint64_t hash = p->spirv->signature;
+    uint64_t hash = CACHE_KEY_D3D_DXBC; // seed to uniquely identify d3d11 shaders
+
+    pl_hash_merge(&hash, pl_str_hash(pl_str0(params->glsl_shader)));
+    if (params->type == PL_PASS_RASTER)
+        pl_hash_merge(&hash, pl_str_hash(pl_str0(params->vertex_shader)));
+
+    // store hash based on the shader bodys as the lookup key
+    if (key)
+        *key = hash;
+
+    // and add the compiler version information into the verification signature
+    pl_hash_merge(&hash, p->spirv->signature);
 
     unsigned spvc_major, spvc_minor, spvc_patch;
     spvc_get_version(&spvc_major, &spvc_minor, &spvc_patch);
@@ -532,10 +538,6 @@ static inline uint64_t pass_cache_signature(pl_gpu gpu,
                        | ((uint64_t)p->d3d_compiler_ver.build << 16)
                        |  (uint64_t)p->d3d_compiler_ver.revision);
     pl_hash_merge(&hash, p->fl);
-
-    pl_hash_merge(&hash, pl_str_hash(pl_str0(params->glsl_shader)));
-    if (params->type == PL_PASS_RASTER)
-        pl_hash_merge(&hash, pl_str_hash(pl_str0(params->vertex_shader)));
 
     return hash;
 }
@@ -553,26 +555,26 @@ static inline size_t cache_payload_size(struct d3d11_cache_header *header)
 
 static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
                                      const struct pl_pass_params *params,
+                                     pl_cache_obj *obj, uint64_t *out_sig,
                                      pl_str *vert_bc, pl_str *frag_bc, pl_str *comp_bc)
 {
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
+    const pl_cache gpu_cache = pl_gpu_cache(gpu);
+    if (!gpu_cache)
+        return false;
 
-    pl_str cache = {
-        .buf = (uint8_t *) params->cached_program,
-        .len = params->cached_program_len,
-    };
+    *out_sig = pass_cache_signature(gpu, &obj->key, params);
+    if (!pl_cache_get(gpu_cache, obj))
+        return false;
 
+    pl_str cache = (pl_str) { obj->data, obj->size };
     if (cache.len < sizeof(struct d3d11_cache_header))
         return false;
 
     struct d3d11_cache_header *header = (struct d3d11_cache_header *) cache.buf;
     cache = pl_str_drop(cache, sizeof(*header));
 
-    if (strncmp(header->magic, d3d11_cache_magic, sizeof(d3d11_cache_magic)) != 0)
-        return false;
-    if (header->cache_version != CACHE_VERSION)
-        return false;
-    if (header->hash != pass_cache_signature(gpu, params))
+    if (header->hash != *out_sig)
         return false;
 
     // determine required cache size before reading anything
@@ -615,15 +617,17 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
 }
 
 static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass_t *pass,
+                                       uint64_t key, uint64_t sig,
                                        const pl_str *vs_str, const pl_str *ps_str,
                                        const pl_str *cs_str)
 {
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
+    const pl_cache gpu_cache = pl_gpu_cache(gpu);
+    if (!gpu_cache)
+        return;
 
     struct d3d11_cache_header header = {
-        .magic = CACHE_MAGIC,
-        .cache_version = CACHE_VERSION,
-        .hash = pass_cache_signature(gpu, &pass->params),
+        .hash = sig,
         .num_workgroups_used = pass_p->num_workgroups_used,
         .num_main_cbvs = pass_p->main.cbvs.num,
         .num_main_srvs = pass_p->main.srvs.num,
@@ -639,9 +643,9 @@ static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass_t *pass,
 
     size_t cache_size = sizeof(header) + cache_payload_size(&header);
     pl_str cache = {0};
-    pl_str_append(pass, &cache, (pl_str){ (uint8_t *) &header, sizeof(header) });
+    pl_str_append(NULL, &cache, (pl_str){ (uint8_t *) &header, sizeof(header) });
 
-#define WRITE_ARRAY(name) pl_str_append(pass, &cache, \
+#define WRITE_ARRAY(name) pl_str_append(NULL, &cache, \
         (pl_str){ (uint8_t *) pass_p->name.elem, \
                   sizeof(*pass_p->name.elem) * pass_p->name.num })
     WRITE_ARRAY(main.cbvs);
@@ -653,18 +657,16 @@ static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass_t *pass,
     WRITE_ARRAY(uavs);
 
     if (vs_str)
-        pl_str_append(pass, &cache, *vs_str);
+        pl_str_append(NULL, &cache, *vs_str);
 
     if (ps_str)
-        pl_str_append(pass, &cache, *ps_str);
+        pl_str_append(NULL, &cache, *ps_str);
 
     if (cs_str)
-        pl_str_append(pass, &cache, *cs_str);
+        pl_str_append(NULL, &cache, *cs_str);
 
     pl_assert(cache_size == cache.len);
-
-    pass->params.cached_program = cache.buf;
-    pass->params.cached_program_len = cache.len;
+    pl_cache_str(gpu_cache, key, &cache);
 }
 
 void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
@@ -696,9 +698,11 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass_t *pass,
     ID3DBlob *ps_blob = NULL;
     pl_str ps_str = {0};
     D3D11_INPUT_ELEMENT_DESC *in_descs = NULL;
+    pl_cache_obj obj = {0};
+    uint64_t sig = 0;
     bool success = false;
 
-    if (d3d11_use_cached_program(gpu, pass, params, &vs_str, &ps_str, NULL))
+    if (d3d11_use_cached_program(gpu, pass, params, &obj, &sig, &vs_str, &ps_str, NULL))
         PL_DEBUG(gpu, "Using cached DXBC shaders");
 
     pl_assert((vs_str.len == 0) == (ps_str.len == 0));
@@ -773,12 +777,13 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass_t *pass,
     }
     D3D(ID3D11Device_CreateBlendState(p->dev, &bdesc, &pass_p->bstate));
 
-    d3d11_update_program_cache(gpu, pass, &vs_str, &ps_str, NULL);
+    d3d11_update_program_cache(gpu, pass, obj.key, sig, &vs_str, &ps_str, NULL);
 
     success = true;
 error:
     SAFE_RELEASE(vs_blob);
     SAFE_RELEASE(ps_blob);
+    pl_cache_obj_free(&obj);
     pl_free(in_descs);
     return success;
 }
@@ -791,9 +796,11 @@ static bool pass_create_compute(pl_gpu gpu, struct pl_pass_t *pass,
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     ID3DBlob *cs_blob = NULL;
     pl_str cs_str = {0};
+    pl_cache_obj obj = {0};
+    uint64_t sig = 0;
     bool success = false;
 
-    if (d3d11_use_cached_program(gpu, pass, params, NULL, NULL, &cs_str))
+    if (d3d11_use_cached_program(gpu, pass, params, &obj, &sig, NULL, NULL, &cs_str))
         PL_DEBUG(gpu, "Using cached DXBC shader");
 
     if (cs_str.len == 0) {
@@ -820,10 +827,11 @@ static bool pass_create_compute(pl_gpu gpu, struct pl_pass_t *pass,
                                       &pass_p->num_workgroups_buf));
     }
 
-    d3d11_update_program_cache(gpu, pass, NULL, NULL, &cs_str);
+    d3d11_update_program_cache(gpu, pass, obj.key, sig, NULL, NULL, &cs_str);
 
     success = true;
 error:
+    pl_cache_obj_free(&obj);
     SAFE_RELEASE(cs_blob);
     return success;
 }

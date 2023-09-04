@@ -67,4 +67,5 @@ enum {
     CACHE_KEY_SPIRV     = UINT64_C(0x32352f6605ff60a7), // bare SPIR-V module
     CACHE_KEY_VK_PIPE   = UINT64_C(0x4bdab2817ad02ad4), // VkPipelineCache
     CACHE_KEY_GL_PROG   = UINT64_C(0x4274c309f4f0477b), // GL_ARB_get_program_binary
+    CACHE_KEY_D3D_DXBC  = UINT64_C(0x807668516811d3bc), // DXBC bytecode
 };
