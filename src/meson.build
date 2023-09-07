@@ -223,7 +223,10 @@ if host_machine.system() == 'windows'
                                        include_directories: meson.project_source_root()/'win32')
 endif
 
-fast_float_inc = include_directories('../3rdparty/fast_float/include')
+fast_float_inc = include_directories()
+if fs.is_dir('../3rdparty/fast_float/include')
+  fast_float_inc = include_directories('../3rdparty/fast_float/include')
+endif
 
 ### Main library build process
 inc = include_directories('./include')

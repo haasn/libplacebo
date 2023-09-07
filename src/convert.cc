@@ -19,7 +19,9 @@
 #include <limits>
 #include <system_error>
 
-#include <fast_float/fast_float.h>
+#if __has_include(<fast_float/fast_float.h>)
+# include <fast_float/fast_float.h>
+#endif
 
 #include "pl_string.h"
 
@@ -65,14 +67,20 @@ static inline bool from_chars(pl_str str, T &n, Args ...args)
                                          n, args...);
         return ec == std::errc();
     } else {
-        static_assert(std::is_same_v<float, T> || std::is_same_v<double, T>,
-                      "Not implemented!");
+        constexpr bool is_fp = std::is_same_v<float, T> || std::is_same_v<double, T>;
+        static_assert(is_fp, "Not implemented!");
+#if !__has_include(<fast_float/fast_float.h>)
+        static_assert(!is_fp, "<fast_float/fast_float.h> is required, but not " \
+                              "found. Please run `git submodule update --init`" \
+                              " or provide <fast_float/fast_float.h>");
+#else
         // FIXME: Fallback for libc++, as it does not implement floating-point
         // variant of std::from_chars. Remove this when appropriate.
         auto [ptr, ec] = fast_float::from_chars((const char *) str.buf,
                                                 (const char *) str.buf + str.len,
                                                 n, args...);
         return ec == std::errc();
+#endif
     }
 }
 
