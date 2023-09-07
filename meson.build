@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '322': 'remove pl_pass_params.cached_program(_len)',
       '321': 'deprecate pl_icc_params.cache_{save,load,priv}',
       '320': 'add pl_gpu_set_cache',
       '319': 'add <libplacebo/cache.h>',

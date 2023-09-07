@@ -1206,21 +1206,6 @@ struct pl_pass_params {
     // a compute shader.
     const char *glsl_shader;
 
-    // Highly implementation-specific byte array storing a compiled version of
-    // the same shader. Can be used to speed up pass creation on already
-    // known/cached shaders.
-    //
-    // Note: There are a few restrictions on this. Passing an out-of-date
-    // cache, passing a cache corresponding to a different program, or passing
-    // a cache belonging to a different GPU, are all guaranteed to be valid.
-    //
-    // It is, however, undefined behavior to pass arbitrary or maliciously
-    // crafted bytes - and users are advised that attaching a shader cache
-    // obtained from the internet could lead to arbitrary program behavior
-    // (possibly including code execution).
-    const uint8_t *cached_program;
-    size_t cached_program_len;
-
     // --- type==PL_PASS_RASTER only
 
     // Describes the interpretation and layout of the vertex data.
@@ -1247,6 +1232,10 @@ struct pl_pass_params {
     //
     // Specifying `blend_params` requires `load_target` to be true.
     bool load_target;
+
+    // --- Deprecated / removed fields.
+    PL_DEPRECATED const uint8_t *cached_program; // Non-functional
+    PL_DEPRECATED size_t cached_program_len;
 };
 
 #define pl_pass_params(...) (&(struct pl_pass_params) { __VA_ARGS__ })

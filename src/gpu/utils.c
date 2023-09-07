@@ -1192,8 +1192,6 @@ void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
 struct pl_pass_params pl_pass_params_copy(void *alloc, const struct pl_pass_params *params)
 {
     struct pl_pass_params new = *params;
-    new.cached_program = NULL;
-    new.cached_program_len = 0;
 
     new.glsl_shader = pl_str0dup0(alloc, new.glsl_shader);
     new.vertex_shader = pl_str0dup0(alloc, new.vertex_shader);
