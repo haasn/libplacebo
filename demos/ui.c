@@ -1,3 +1,5 @@
+// License: CC0 / Public Domain
+
 #define NK_IMPLEMENTATION
 #include "ui.h"
 

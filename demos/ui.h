@@ -1,3 +1,4 @@
+// License: CC0 / Public Domain
 #pragma once
 
 #define NK_INCLUDE_FIXED_TYPES

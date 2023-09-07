@@ -1,3 +1,4 @@
+// License: CC0 / Public Domain
 #pragma once
 
 #include <assert.h>
