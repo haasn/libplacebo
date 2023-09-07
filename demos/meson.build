@@ -108,7 +108,7 @@ else
 
   dep = declare_dependency(
     dependencies: [ libplacebo, build_deps ] + additional_dep,
-    sources: ['window.c'],
+    sources: ['window.c', 'utils.c'],
     include_directories: vulkan_headers_inc,
     link_with: apis,
   )
