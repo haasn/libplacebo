@@ -167,6 +167,8 @@ static inline void pl_hash_merge(uint64_t *accum, uint64_t hash) {
     *accum ^= hash + 0x9e3779b9 + (*accum << 6) + (*accum >> 2);
 }
 
+#define pl_var_hash(x) pl_mem_hash(&(x), sizeof(x))
+
 static inline uint64_t pl_str_hash(pl_str str)
 {
     return pl_mem_hash(str.buf, str.len);

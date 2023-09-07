@@ -3118,7 +3118,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
             struct pl_filter_config filter = *scaler;                           \
             HASH_PTR(filter.kernel, NULL, false);                               \
             HASH_PTR(filter.window, NULL, false);                               \
-            pl_hash_merge(&info.hash, pl_mem_hash(&filter, sizeof(filter)));    \
+            pl_hash_merge(&info.hash, pl_var_hash(filter));                     \
             scaler = NULL;                                                      \
         }                                                                       \
     } while (0)
@@ -3140,7 +3140,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
         const struct pl_hook *hook = params.hooks[i];
         if (hook->stages == PL_HOOK_OUTPUT)
             continue; // ignore hooks only relevant to pass_output_target
-        pl_hash_merge(&info.hash, pl_mem_hash(hook, sizeof(*hook)));
+        pl_hash_merge(&info.hash, pl_var_hash(*hook));
         info.trivial = false;
     }
     params.hooks = NULL;
@@ -3178,7 +3178,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.info_callback);
     CLEAR(params.info_priv);
 
-    pl_hash_merge(&info.hash, pl_mem_hash(&params, sizeof(params)));
+    pl_hash_merge(&info.hash, pl_var_hash(params));
     return info;
 }
 

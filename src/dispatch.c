@@ -814,7 +814,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         pl_hash_merge(&pass->signature, target->params.format->signature);
         if (blend) {
             pl_static_assert(sizeof(*blend) == sizeof(enum pl_blend_mode) * 4);
-            pl_hash_merge(&pass->signature, pl_mem_hash(blend, sizeof(*blend)));
+            pl_hash_merge(&pass->signature, pl_var_hash(*blend));
         }
 
         // Load projection matrix if required
