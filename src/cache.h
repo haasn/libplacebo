@@ -66,4 +66,5 @@ enum {
     CACHE_KEY_GAMUT_LUT = UINT64_C(0x41bbe0c35ea24b2e), // gamut mapping 3DLUT
     CACHE_KEY_SPIRV     = UINT64_C(0x32352f6605ff60a7), // bare SPIR-V module
     CACHE_KEY_VK_PIPE   = UINT64_C(0x4bdab2817ad02ad4), // VkPipelineCache
+    CACHE_KEY_GL_PROG   = UINT64_C(0x4274c309f4f0477b), // GL_ARB_get_program_binary
 };

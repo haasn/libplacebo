@@ -16,6 +16,7 @@
  */
 
 #include "gpu.h"
+#include "cache.h"
 #include "formats.h"
 #include "utils.h"
 
@@ -24,43 +25,30 @@ int gl_desc_namespace(pl_gpu gpu, enum pl_desc_type type)
     return (int) type;
 }
 
-#define CACHE_MAGIC {'P','L','G','L'}
-#define CACHE_VERSION 1
-static const char gl_cache_magic[4] = CACHE_MAGIC;
-
 struct gl_cache_header {
-    char magic[sizeof(gl_cache_magic)];
-    int cache_version;
     GLenum format;
 };
 
-static GLuint load_cached_program(pl_gpu gpu, const struct pl_pass_params *params)
+static GLuint load_cached_program(pl_gpu gpu, pl_cache cache, pl_cache_obj *obj)
 {
     const gl_funcs *gl = gl_funcs_get(gpu);
     if (!gl_test_ext(gpu, "GL_ARB_get_program_binary", 41, 30))
         return 0;
 
-    pl_str cache = {
-        .buf = (void *) params->cached_program,
-        .len = params->cached_program_len,
-    };
-
-    if (cache.len < sizeof(struct gl_cache_header))
-        return false;
-
-    struct gl_cache_header *header = (struct gl_cache_header *) cache.buf;
-    cache = pl_str_drop(cache, sizeof(*header));
-
-    if (strncmp(header->magic, gl_cache_magic, sizeof(gl_cache_magic)) != 0)
+    if (!pl_cache_get(cache, obj))
         return 0;
-    if (header->cache_version != CACHE_VERSION)
+
+    if (obj->size < sizeof(struct gl_cache_header))
         return 0;
 
     GLuint prog = gl->CreateProgram();
     if (!gl_check_err(gpu, "load_cached_program: glCreateProgram"))
         return 0;
 
-    gl->ProgramBinary(prog, header->format, cache.buf, cache.len);
+    struct gl_cache_header *header = (struct gl_cache_header *) obj->data;
+    pl_str rest = (pl_str) { obj->data, obj->size };
+    rest = pl_str_drop(rest, sizeof(*header));
+    gl->ProgramBinary(prog, header->format, rest.buf, rest.len);
     gl->GetError(); // discard potential useless error
 
     GLint status = 0;
@@ -236,10 +224,18 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     struct pl_gl *p = PL_PRIV(gpu);
     struct pl_pass_t *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_gl);
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
+    pl_cache cache = pl_gpu_cache(gpu);
     pass->params = pl_pass_params_copy(pass, params);
 
+    pl_cache_obj obj = { .key = CACHE_KEY_GL_PROG };
+    if (cache) {
+        pl_hash_merge(&obj.key, pl_str0_hash(params->glsl_shader));
+        if (params->type == PL_PASS_RASTER)
+            pl_hash_merge(&obj.key, pl_str0_hash(params->vertex_shader));
+    }
+
     // Load/Compile program
-    if ((pass_gl->program = load_cached_program(gpu, params))) {
+    if ((pass_gl->program = load_cached_program(gpu, cache, &obj))) {
         PL_DEBUG(gpu, "Using cached GL program");
     } else {
         pl_clock_t start = pl_clock_now();
@@ -251,36 +247,23 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         goto error;
 
     // Update program cache if possible
-    if (gl_test_ext(gpu, "GL_ARB_get_program_binary", 41, 30)) {
-        GLint size = 0;
-        gl->GetProgramiv(pass_gl->program, GL_PROGRAM_BINARY_LENGTH, &size);
-
-        if (size > 0) {
-            uint8_t *buffer = pl_alloc(NULL, size);
-            GLsizei actual_size = 0;
-            struct gl_cache_header header = {
-                .magic = CACHE_MAGIC,
-                .cache_version = CACHE_VERSION,
-            };
-
-            gl->GetProgramBinary(pass_gl->program, size, &actual_size,
-                                 &header.format, buffer);
-            if (actual_size > 0) {
-                pl_str cache = {0};
-                pl_str_append(pass, &cache, (pl_str) { (void *) &header, sizeof(header) });
-                pl_str_append(pass, &cache, (pl_str) { buffer, actual_size });
-                pass->params.cached_program = cache.buf;
-                pass->params.cached_program_len = cache.len;
+    if (cache && gl_test_ext(gpu, "GL_ARB_get_program_binary", 41, 30)) {
+        GLint buf_size = 0;
+        gl->GetProgramiv(pass_gl->program, GL_PROGRAM_BINARY_LENGTH, &buf_size);
+        if (buf_size > 0) {
+            buf_size += sizeof(struct gl_cache_header);
+            pl_cache_obj_resize(NULL, &obj, buf_size);
+            struct gl_cache_header *header = obj.data;
+            void *buffer = &header[1];
+            GLsizei binary_size = 0;
+            gl->GetProgramBinary(pass_gl->program, buf_size, &binary_size,
+                                 &header->format, buffer);
+            bool ok = gl_check_err(gpu, "gl_pass_create: get program binary");
+            if (ok) {
+                obj.size = sizeof(*header) + binary_size;
+                pl_assert(obj.size <= buf_size);
+                pl_cache_set(cache, &obj);
             }
-
-            pl_free(buffer);
-        }
-
-        if (!gl_check_err(gpu, "gl_pass_create: get program binary")) {
-            PL_WARN(gpu, "Failed generating program binary.. ignoring");
-            pl_free((void *) pass->params.cached_program);
-            pass->params.cached_program = NULL;
-            pass->params.cached_program_len = 0;
         }
     }
 
@@ -352,11 +335,13 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     if (!gl_check_err(gpu, "gl_pass_create"))
         goto error;
 
+    pl_cache_obj_free(&obj);
     RELEASE_CURRENT();
     return pass;
 
 error:
     PL_ERR(gpu, "Failed creating pass");
+    pl_cache_obj_free(&obj);
     gl_pass_destroy(gpu, pass);
     RELEASE_CURRENT();
     return NULL;
