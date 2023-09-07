@@ -515,9 +515,9 @@ static inline uint64_t pass_cache_signature(pl_gpu gpu, uint64_t *key,
 
     uint64_t hash = CACHE_KEY_D3D_DXBC; // seed to uniquely identify d3d11 shaders
 
-    pl_hash_merge(&hash, pl_str_hash(pl_str0(params->glsl_shader)));
+    pl_hash_merge(&hash, pl_str0_hash(params->glsl_shader));
     if (params->type == PL_PASS_RASTER)
-        pl_hash_merge(&hash, pl_str_hash(pl_str0(params->vertex_shader)));
+        pl_hash_merge(&hash, pl_str0_hash(params->vertex_shader));
 
     // store hash based on the shader bodys as the lookup key
     if (key)
