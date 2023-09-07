@@ -1129,7 +1129,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
             float precision = -log10f(par->polar_cutoff);
             nk_property_float(nk, "Polar precision", 0.0, &precision, 6.0, 0.05, 0.005);
-            par->polar_cutoff = exp10f(-precision);
+            par->polar_cutoff = powf(10.0f, -precision);
 
             struct pl_sigmoid_params *spar = &opts->sigmoid_params;
             nk_layout_row_dynamic(nk, 24, 2);
