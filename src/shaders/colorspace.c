@@ -16,6 +16,8 @@
  */
 
 #include <math.h>
+
+#include "cache.h"
 #include "shaders.h"
 
 #include <libplacebo/shaders/colorspace.h>
@@ -1972,6 +1974,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             .depth      = gamut.lut_size_h,
             .comps      = gamut.lut_stride,
             .signature  = gamut_map_signature(&gamut),
+            .cache      = SH_CACHE(sh),
             .fill       = fill_gamut_lut,
             .priv       = &gamut,
         ));
