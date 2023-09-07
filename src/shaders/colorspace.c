@@ -1013,7 +1013,6 @@ struct sh_color_map_obj {
 
     // Gamut map state
     struct {
-        struct pl_gamut_map_params params;
         pl_shader_obj lut;
     } gamut;
 
@@ -1026,6 +1025,19 @@ struct sh_color_map_obj {
         float max_pq;
     } peak;
 };
+
+// Excluding size, since this is checked by sh_lut
+static uint64_t gamut_map_signature(const struct pl_gamut_map_params *par)
+{
+    uint64_t sig = CACHE_KEY_GAMUT_LUT;
+    pl_hash_merge(&sig, pl_str0_hash(par->function->name));
+    pl_hash_merge(&sig, pl_var_hash(par->input_gamut));
+    pl_hash_merge(&sig, pl_var_hash(par->output_gamut));
+    pl_hash_merge(&sig, pl_var_hash(par->min_luma));
+    pl_hash_merge(&sig, pl_var_hash(par->max_luma));
+    pl_hash_merge(&sig, pl_var_hash(par->constants));
+    return sig;
+}
 
 static void sh_color_map_uninit(pl_gpu gpu, void *ptr)
 {
@@ -1959,11 +1971,10 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             .height     = gamut.lut_size_C,
             .depth      = gamut.lut_size_h,
             .comps      = gamut.lut_stride,
-            .update     = !pl_gamut_map_params_equal(&gamut, &obj->gamut.params),
+            .signature  = gamut_map_signature(&gamut),
             .fill       = fill_gamut_lut,
             .priv       = &gamut,
         ));
-        obj->gamut.params = gamut;
         if (!lut) {
             SH_FAIL(sh, "Failed generating gamut-mapping LUT!");
             return;
