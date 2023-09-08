@@ -341,6 +341,7 @@ int pl_cache_load_ex(pl_cache cache,
             !read(priv, entry.size, buf) ||
             !read(priv, PAD_ALIGN(entry.size), padding))
         {
+            pl_mutex_unlock(&p->lock);
             PL_WARN(p, "Cache seems truncated, missing objects.. ignoring rest");
             pl_free(buf);
             return num_loaded;
@@ -348,6 +349,7 @@ int pl_cache_load_ex(pl_cache cache,
 
         uint64_t checksum = pl_mem_hash(buf, entry.size);
         if (checksum != entry.hash) {
+            pl_mutex_unlock(&p->lock);
             PL_WARN(p, "Cache entry seems corrupt, checksum mismatch.. ignoring rest");
             pl_free(buf);
             return num_loaded;
