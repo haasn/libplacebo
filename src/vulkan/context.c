@@ -458,19 +458,12 @@ void pl_vk_inst_destroy(pl_vk_inst *inst_ptr)
     pl_free_ptr((void **) inst_ptr);
 }
 
-#ifdef MSAN
-__attribute__((no_sanitize("memory")))
-#endif
 static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
                                           VkDebugUtilsMessageTypeFlagsEXT msgType,
                                           const VkDebugUtilsMessengerCallbackDataEXT *data,
                                           void *priv)
 {
     pl_log log = priv;
-
-    // MSAN really doesn't like reading from the stack-allocated memory
-    // allocated by the non-instrumented vulkan library, so just comment it out
-    // when building with MSAN as a cheap hack-around.
 
     // Ignore errors for messages that we consider false positives
     switch (data->messageIdNumber) {
