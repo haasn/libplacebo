@@ -18,6 +18,7 @@
 #pragma once
 
 #include "common.h"
+#include "hash.h"
 
 #include <libplacebo/cache.h>
 

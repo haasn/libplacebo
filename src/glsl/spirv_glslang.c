@@ -15,6 +15,7 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "hash.h"
 #include "spirv.h"
 #include "utils.h"
 #include "glsl/glslang.h"

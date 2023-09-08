@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "filters.h"
+#include "hash.h"
 #include "shaders.h"
 #include "dispatch.h"
 

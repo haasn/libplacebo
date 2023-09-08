@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <shaderc/shaderc.h>
 
+#include "hash.h"
 #include "spirv.h"
 #include "utils.h"
 

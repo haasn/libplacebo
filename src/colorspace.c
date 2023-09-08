@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "hash.h"
 
 #include <libplacebo/colorspace.h>
 #include <libplacebo/tone_mapping.h>

@@ -16,6 +16,7 @@
  */
 
 #include "common.h"
+#include "hash.h"
 
 static void grow_str(void *alloc, pl_str *str, size_t len)
 {
