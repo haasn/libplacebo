@@ -121,14 +121,17 @@ static bool try_set(pl_cache cache, pl_cache_obj obj)
     for (int i = p->objects.num - 1; i >= 0; i--) {
         pl_cache_obj prev = p->objects.elem[i];
         if (prev.key == obj.key) {
+            PL_TRACE(p, "Removing out-of-date object 0x%"PRIx64, prev.key);
             remove_obj(cache, prev);
             PL_ARRAY_REMOVE_AT(p->objects, i);
             break;
         }
     }
 
-    if (!obj.size)
+    if (!obj.size) {
+        PL_TRACE(p, "Deleted object 0x%"PRIx64, obj.key);
         return true;
+    }
 
     if (obj.size > p->max_object_size) {
         PL_DEBUG(p, "Object 0x%"PRIx64" (size %zu) exceeds max size %zu, discarding",
@@ -139,7 +142,10 @@ static bool try_set(pl_cache cache, pl_cache_obj obj)
     // Make space by deleting old objects
     while (p->total_size + obj.size > p->max_total_size) {
         pl_assert(p->objects.num);
-        remove_obj(cache, p->objects.elem[0]);
+        pl_cache_obj old = p->objects.elem[0];
+        PL_TRACE(p, "Removing object 0x%"PRIx64" (size %zu) to make room",
+                 old.key, old.size);
+        remove_obj(cache, old);
         PL_ARRAY_REMOVE_AT(p->objects, 0);
     }
 
@@ -148,6 +154,7 @@ static bool try_set(pl_cache cache, pl_cache_obj obj)
         obj.free = pl_free;
     }
 
+    PL_TRACE(p, "Inserting new object 0x%"PRIx64" (size %zu)", obj.key, obj.size);
     PL_ARRAY_APPEND((void *) cache, p->objects, obj);
     p->total_size += obj.size;
     return true;
@@ -288,6 +295,7 @@ int pl_cache_save_ex(pl_cache cache,
 
     for (int i = 0; i < num_objects; i++) {
         pl_cache_obj obj = p->objects.elem[i];
+        PL_TRACE(p, "Saving object 0x%"PRIx64" (size %zu)", obj.key, obj.size);
         write(priv, sizeof(struct cache_entry), &(struct cache_entry) {
             .key  = obj.key,
             .size = obj.size,
@@ -357,6 +365,7 @@ int pl_cache_load_ex(pl_cache cache,
             return num_loaded;
         }
 
+        PL_TRACE(p, "Loading object 0x%"PRIx64" (size %zu)", entry.key, entry.size);
         bool ok = try_set(cache, (pl_cache_obj) {
             .key  = entry.key,
             .size = entry.size,
