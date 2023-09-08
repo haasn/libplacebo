@@ -287,6 +287,7 @@ A full list of optional dependencies each feature requires:
 - **opengl**: `glad2` (*)
 - **shaderc**: `libshaderc`
 - **vulkan**: `libvulkan`, `python3-jinja2` (*)
+- **xxhash**: `libxxhash`
 
 (*) This dependency is bundled automatically when doing a recursive clone.
 

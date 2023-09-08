@@ -36,6 +36,20 @@ static inline uint64_t pl_str0_hash(const char *str)
     return pl_mem_hash(str, str ? strlen(str) : 0);
 }
 
+#ifdef PL_HAVE_XXHASH
+
+#define XXH_NAMESPACE pl_
+#define XXH_INLINE_ALL
+#define XXH_NO_STREAM
+#include <xxhash.h>
+
+XXH_FORCE_INLINE uint64_t pl_mem_hash(const void *mem, size_t size)
+{
+    return XXH3_64bits(mem, size);
+}
+
+#else // !PL_HAVE_XXHASH
+
 /*
    SipHash reference C implementation
    Modified for use by libplacebo:
@@ -142,3 +156,5 @@ static inline uint64_t pl_mem_hash(const void *mem, size_t size)
     b = v0 ^ v1 ^ v2 ^ v3;
     return b;
 }
+
+#endif // PL_HAVE_XXHASH

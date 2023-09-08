@@ -190,6 +190,12 @@ if libdovi.found()
   build_deps += libdovi
 endif
 
+xxhash = dependency('libxxhash', required: get_option('xxhash')).partial_dependency(includes: true, compile_args: true)
+components.set('xxhash', xxhash.found())
+if xxhash.found()
+  build_deps += xxhash
+endif
+
 # Generate configuration files
 defs = ''
 pc_vars = []
