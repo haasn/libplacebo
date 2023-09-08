@@ -17,6 +17,7 @@
 
 #include <stdio.h>
 #include <locale.h>
+#include <limits.h>
 
 #include "common.h"
 #include "cache.h"
