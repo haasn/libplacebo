@@ -106,7 +106,6 @@ sources = [
   'options.c',
   'pl_alloc.c',
   'pl_string.c',
-  'siphash.c',
   'swapchain.c',
   'tone_mapping.c',
   'utils/dolbyvision.c',
