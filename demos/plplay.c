@@ -988,6 +988,12 @@ static void draw_opt_data(void *priv, pl_opt_data data)
     }
 }
 
+static void draw_cache_line(void *priv, pl_cache_obj obj)
+{
+    struct nk_context *nk = priv;
+    nk_labelf(nk, NK_TEXT_LEFT, " - 0x%016"PRIx64": %zu bytes", obj.key, obj.size);
+}
+
 static void update_settings(struct plplay *p, const struct pl_frame *target)
 {
     struct nk_context *nk = ui_get_context(p->ui);
@@ -1958,6 +1964,36 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
                 nk_layout_row_dynamic(nk, 24, 1);
                 pl_options_iterate(opts, draw_opt_data, nk);
+                nk_tree_pop(nk);
+            }
+
+            if (nk_tree_push(nk, NK_TREE_NODE, "Cache statistics", NK_MINIMIZED)) {
+                nk_layout_row_dynamic(nk, 24, 2);
+                nk_label(nk, "Cached objects:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%d", pl_cache_objects(p->cache));
+                nk_label(nk, "Total size:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%zu", pl_cache_size(p->cache));
+                nk_label(nk, "Maximum total size:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%zu", p->cache->params.max_total_size);
+                nk_label(nk, "Maximum object size:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%zu", p->cache->params.max_object_size);
+
+                if (nk_button_label(nk, "Clear cache"))
+                    pl_cache_reset(p->cache);
+                if (nk_button_label(nk, "Save cache")) {
+                    FILE *file = fopen(p->cache_file, "wb");
+                    if (file) {
+                        pl_cache_save_file(p->cache, file);
+                        fclose(file);
+                    }
+                }
+
+                if (nk_tree_push(nk, NK_TREE_NODE, "Object list", NK_MINIMIZED)) {
+                    nk_layout_row_dynamic(nk, 24, 1);
+                    pl_cache_iterate(p->cache, draw_cache_line, nk);
+                    nk_tree_pop(nk);
+                }
+
                 nk_tree_pop(nk);
             }
 
