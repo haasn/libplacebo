@@ -254,7 +254,7 @@ void pl_cache_iterate(pl_cache cache,
 #define PAD_ALIGN(x)  (PL_ALIGN2(x, sizeof(uint32_t)) - (x))
 
 struct __attribute__((__packed__)) cache_header {
-    char magic[8];
+    char     magic[8];
     uint32_t version;
     uint32_t num_entries;
 };
@@ -264,6 +264,8 @@ struct __attribute__((__packed__)) cache_entry {
     uint64_t size;
     uint64_t hash;
 };
+
+pl_static_assert(sizeof(struct cache_header) % alignof(struct cache_entry) == 0);
 
 int pl_cache_save_ex(pl_cache cache,
                      void (*write)(void *priv, size_t size, const void *ptr),
