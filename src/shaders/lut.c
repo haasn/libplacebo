@@ -469,12 +469,16 @@ next_dim: ; // `continue` out of the inner loop
         if (params->dynamic)
             pl_log_level_cap(sh->log, PL_LOG_TRACE);
 
-        PL_DEBUG(sh, "LUT invalidated, regenerating..");
-        size_t buf_size = size * params->comps * pl_var_type_size(vartype);
+        size_t el_size = params->comps * pl_var_type_size(vartype);
+        if (type == SH_LUT_TEXTURE)
+            el_size = texfmt->texel_size;
+
+        size_t buf_size = size * el_size;
         if (pl_cache_get(params->cache, &obj) && obj.size == buf_size) {
             PL_DEBUG(sh, "Re-using cached LUT (0x%"PRIx64") with size %zu",
                      obj.key, obj.size);
         } else {
+            PL_DEBUG(sh, "LUT invalidated, regenerating..");
             pl_cache_obj_resize(NULL, &obj, buf_size);
             pl_clock_t start = pl_clock_now();
             params->fill(obj.data, params);
