@@ -1643,7 +1643,25 @@ static void fill_tone_lut(void *data, const struct sh_lut_params *params)
 static void fill_gamut_lut(void *data, const struct sh_lut_params *params)
 {
     const struct pl_gamut_map_params *lut_params = params->priv;
-    pl_gamut_map_generate(data, lut_params);
+    const int lut_size = params->width * params->height * params->depth;
+    void *tmp = pl_alloc(NULL, lut_size * sizeof(float) * lut_params->lut_stride);
+    pl_gamut_map_generate(tmp, lut_params);
+
+    // Convert to 16-bit signed integer for GPU texture
+    const float *in = tmp;
+    int16_t *out = data;
+    pl_assert(lut_params->lut_stride == 3);
+    pl_assert(params->comps == 4);
+    for (int i = 0; i < lut_size; i++) {
+        const int16_t range = INT16_MAX - 1;
+        out[0] = roundf(in[0] * range);
+        out[1] = roundf(in[1] * range);
+        out[2] = roundf(in[2] * range);
+        in  += 3;
+        out += 4;
+    }
+
+    pl_free(tmp);
 }
 
 void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *params,
@@ -1723,7 +1741,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .lut_size_I      = PL_DEF(params->lut3d_size[0], lut3d_size_def[0]),
         .lut_size_C      = PL_DEF(params->lut3d_size[1], lut3d_size_def[1]),
         .lut_size_h      = PL_DEF(params->lut3d_size[2], lut3d_size_def[2]),
-        .lut_stride      = 4,
+        .lut_stride      = 3,
     };
 
     float src_peak_static;
@@ -1968,11 +1986,13 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             .object     = &obj->gamut.lut,
             .var_type   = PL_VAR_FLOAT,
             .lut_type   = SH_LUT_TEXTURE,
+            .fmt        = pl_find_fmt(SH_GPU(sh), PL_FMT_SNORM, 4,
+                                      16, 16, PL_FMT_CAP_LINEAR),
             .method     = params->lut3d_tricubic ? SH_LUT_CUBIC : SH_LUT_LINEAR,
             .width      = gamut.lut_size_I,
             .height     = gamut.lut_size_C,
             .depth      = gamut.lut_size_h,
-            .comps      = gamut.lut_stride,
+            .comps      = 4,
             .signature  = gamut_map_signature(&gamut),
             .cache      = SH_CACHE(sh),
             .fill       = fill_gamut_lut,
