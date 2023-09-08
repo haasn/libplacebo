@@ -839,7 +839,6 @@ int main(int argc, char **argv)
         if (ret > 0 && ret < sizeof(p->cache_file)) {
             p->cache = pl_cache_create(pl_cache_params(
                 .log             = p->log,
-                .max_object_size =  1 << 20, //  1 MB
                 .max_total_size  = 10 << 20, // 10 MB
             ));
             pl_gpu_set_cache(p->win->gpu, p->cache);
