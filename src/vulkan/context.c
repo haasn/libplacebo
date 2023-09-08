@@ -558,6 +558,7 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
     void *tmp = pl_tmp(NULL);
     params = PL_DEF(params, &pl_vk_inst_default_params);
     VkInstance inst = NULL;
+    pl_clock_t start;
 
     PL_ARRAY(const char *) exts = {0};
 
@@ -595,11 +596,13 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
     };
 
     // Enumerate all supported layers
+    start = pl_clock_now();
     PL_VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
     uint32_t num_layers_avail = 0;
     EnumerateInstanceLayerProperties(&num_layers_avail, NULL);
     VkLayerProperties *layers_avail = pl_calloc_ptr(tmp, num_layers_avail, layers_avail);
     EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
+    pl_log_cpu_time(log, start, pl_clock_now(), "enumerating instance layers");
 
     pl_debug(log, "Available layers:");
     for (int i = 0; i < num_layers_avail; i++) {
@@ -656,6 +659,7 @@ debug_layers_done: ;
     }
 
     // Enumerate all supported extensions
+    start = pl_clock_now();
     PL_VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
     uint32_t num_exts_avail = 0;
     EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, NULL);
@@ -685,6 +689,7 @@ debug_layers_done: ;
         }
     }
 
+    pl_log_cpu_time(log, start, pl_clock_now(), "enumerating instance extensions");
     pl_debug(log, "Available instance extensions:");
     for (int i = 0; i < num_exts_avail; i++)
         pl_debug(log, "    %s", exts_avail[i].extensionName);
@@ -851,8 +856,10 @@ debug_extra_ext_done: ;
             pl_info(log, "    %s", layers.elem[i]);
     }
 
+    start = pl_clock_now();
     PL_VK_LOAD_FUN(NULL, CreateInstance, get_addr);
     VkResult res = CreateInstance(&info, PL_VK_ALLOC, &inst);
+    pl_log_cpu_time(log, start, pl_clock_now(), "creating vulkan instance");
     if (res != VK_SUCCESS) {
         pl_fatal(log, "Failed creating instance: %s", vk_res_str(res));
         goto error;
@@ -978,11 +985,13 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
     PL_VK_LOAD_FUN(inst, GetPhysicalDeviceProperties2, get_addr);
     pl_assert(GetPhysicalDeviceProperties2);
 
+    pl_clock_t start = pl_clock_now();
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
     VK(EnumeratePhysicalDevices(inst, &num, NULL));
     devices = pl_calloc_ptr(NULL, num, devices);
     VK(EnumeratePhysicalDevices(inst, &num, devices));
+    pl_log_cpu_time(log, start, pl_clock_now(), "enumerating physical devices");
 
     static const struct { const char *name; int priority; } types[] = {
         [VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU]   = {"discrete",   5},
@@ -1173,10 +1182,12 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     }
 
     // Enumerate all supported extensions
+    pl_clock_t start = pl_clock_now();
     uint32_t num_exts_avail = 0;
     VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
     VkExtensionProperties *exts_avail = pl_calloc_ptr(tmp, num_exts_avail, exts_avail);
     VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
+    pl_log_cpu_time(vk->log, start, pl_clock_now(), "enumerating device extensions");
 
     PL_DEBUG(vk, "Available device extensions:");
     for (int i = 0; i < num_exts_avail; i++)
@@ -1291,7 +1302,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     for (int i = 0; i < vk->exts.num; i++)
         PL_INFO(vk, "    %s", vk->exts.elem[i]);
 
+    start = pl_clock_now();
     VK(vk->CreateDevice(vk->physd, &dinfo, PL_VK_ALLOC, &vk->dev));
+    pl_log_cpu_time(vk->log, start, pl_clock_now(), "creating vulkan device");
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++)
