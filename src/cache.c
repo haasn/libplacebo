@@ -365,14 +365,15 @@ int pl_cache_load_ex(pl_cache cache,
             return num_loaded;
         }
 
-        PL_TRACE(p, "Loading object 0x%"PRIx64" (size %zu)", entry.key, entry.size);
-        bool ok = try_set(cache, (pl_cache_obj) {
+        pl_cache_obj obj = {
             .key  = entry.key,
             .size = entry.size,
             .data = buf,
             .free = pl_free,
-        });
-        if (ok) {
+        };
+
+        PL_TRACE(p, "Loading object 0x%"PRIx64" (size %zu)", obj.key, obj.size);
+        if (try_set(cache, obj)) {
             num_loaded++;
             loaded_bytes += entry.size;
         } else {
