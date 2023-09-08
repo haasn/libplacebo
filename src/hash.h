@@ -19,8 +19,10 @@
 
 #include "common.h"
 
+#define GOLDEN_RATIO_64 UINT64_C(0x9e3779b97f4a7c15)
+
 static inline void pl_hash_merge(uint64_t *accum, uint64_t hash) {
-    *accum ^= hash + 0x9e3779b9 + (*accum << 6) + (*accum >> 2);
+    *accum ^= hash + GOLDEN_RATIO_64 + (*accum << 6) + (*accum >> 2);
 }
 
 static inline uint64_t pl_mem_hash(const void *mem, size_t size);
