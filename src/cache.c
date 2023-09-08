@@ -258,7 +258,7 @@ void pl_cache_iterate(pl_cache cache,
 
 #define CACHE_MAGIC   "pl_cache"
 #define CACHE_VERSION 1
-#define PAD_ALIGN(x)  (PL_ALIGN2(x, sizeof(uint32_t)) - (x))
+#define PAD_ALIGN(x)  PL_ALIGN2(x, sizeof(uint32_t))
 
 struct __attribute__((__packed__)) cache_header {
     char     magic[8];
@@ -303,7 +303,7 @@ int pl_cache_save_ex(pl_cache cache,
         });
         static const uint8_t padding[PAD_ALIGN(1)] = {0};
         write(priv, obj.size, obj.data);
-        write(priv, PAD_ALIGN(obj.size), padding);
+        write(priv, PAD_ALIGN(obj.size) - obj.size, padding);
     }
 
     pl_mutex_unlock(&p->lock);
@@ -335,6 +335,11 @@ int pl_cache_load_ex(pl_cache cache,
         PL_INFO(p, "Failed loading cache: wrong version... skipping");
         return 0;
     }
+    if (header.num_entries > INT_MAX) {
+        PL_ERR(p, "Failed loading cache: %"PRIu32" entries overflows int",
+               header.num_entries);
+        return 0;
+    }
 
     int num_loaded = 0;
     size_t loaded_bytes = 0;
@@ -343,26 +348,29 @@ int pl_cache_load_ex(pl_cache cache,
 
     for (int i = 0; i < header.num_entries; i++) {
         struct cache_entry entry;
-        void *buf = NULL;
+        if (!read(priv, sizeof(entry), &entry)) {
+            PL_WARN(p, "Cache seems truncated, missing objects.. ignoring rest");
+            goto error;
+        }
 
-        uint8_t padding[PAD_ALIGN(1)];
-        if (!read(priv, sizeof(entry), &entry) ||
-            !(buf = pl_alloc(NULL, entry.size)) ||
-            !read(priv, entry.size, buf) ||
-            !read(priv, PAD_ALIGN(entry.size), padding))
-        {
-            pl_mutex_unlock(&p->lock);
+        if (entry.size > SIZE_MAX) {
+            PL_WARN(p, "Cache object size %"PRIu64" overflows SIZE_MAX.. "
+                    "suspect broken file, ignoring rest", entry.size);
+            goto error;
+        }
+
+        void *buf = pl_alloc(NULL, PAD_ALIGN(entry.size));
+        if (!read(priv, PAD_ALIGN(entry.size), buf)) {
             PL_WARN(p, "Cache seems truncated, missing objects.. ignoring rest");
             pl_free(buf);
-            return num_loaded;
+            goto error;
         }
 
         uint64_t checksum = pl_mem_hash(buf, entry.size);
         if (checksum != entry.hash) {
-            pl_mutex_unlock(&p->lock);
             PL_WARN(p, "Cache entry seems corrupt, checksum mismatch.. ignoring rest");
             pl_free(buf);
-            return num_loaded;
+            goto error;
         }
 
         pl_cache_obj obj = {
@@ -381,11 +389,13 @@ int pl_cache_load_ex(pl_cache cache,
         }
     }
 
-    pl_mutex_unlock(&p->lock);
     pl_log_cpu_time(p->log, start, pl_clock_now(), "loading cache");
     if (num_loaded)
         PL_DEBUG(p, "Loaded %d objects, totalling %zu bytes", num_loaded, loaded_bytes);
 
+    // fall through
+error:
+    pl_mutex_unlock(&p->lock);
     return num_loaded;
 }
 
