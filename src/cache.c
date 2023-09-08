@@ -140,7 +140,7 @@ static bool try_set(pl_cache cache, pl_cache_obj obj)
     }
 
     // Make space by deleting old objects
-    while (p->total_size + obj.size > p->max_total_size) {
+    while (p->total_size + obj.size > p->max_total_size || p->objects.num == INT_MAX) {
         pl_assert(p->objects.num);
         pl_cache_obj old = p->objects.elem[0];
         PL_TRACE(p, "Removing object 0x%"PRIx64" (size %zu) to make room",
