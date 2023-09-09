@@ -31,8 +31,6 @@ struct priv {
     pl_mutex lock;
     PL_ARRAY(pl_cache_obj) objects;
     size_t total_size;
-    size_t max_total_size;
-    size_t max_object_size;
 };
 
 int pl_cache_objects(pl_cache cache)
@@ -69,9 +67,13 @@ pl_cache pl_cache_create(const struct pl_cache_params *params)
         p->log = params->log;
     }
 
-    p->max_object_size = PL_DEF(cache->params.max_object_size, SIZE_MAX);
-    p->max_total_size  = PL_DEF(cache->params.max_total_size, SIZE_MAX);
-    p->max_object_size = PL_MIN(p->max_object_size, p->max_total_size);
+    // Sanitize size limits
+    size_t total_size  = PL_DEF(cache->params.max_total_size,  SIZE_MAX);
+    size_t object_size = PL_DEF(cache->params.max_object_size, SIZE_MAX);
+    object_size = PL_MIN(total_size, object_size);
+    cache->params.max_total_size  = total_size;
+    cache->params.max_object_size = object_size;
+
     return cache;
 }
 
@@ -134,14 +136,16 @@ static bool try_set(pl_cache cache, pl_cache_obj obj)
         return true;
     }
 
-    if (obj.size > p->max_object_size) {
+    if (obj.size > cache->params.max_object_size) {
         PL_DEBUG(p, "Object 0x%"PRIx64" (size %zu) exceeds max size %zu, discarding",
                  obj.key, obj.size, cache->params.max_object_size);
         return false;
     }
 
     // Make space by deleting old objects
-    while (p->total_size + obj.size > p->max_total_size || p->objects.num == INT_MAX) {
+    while (p->total_size + obj.size > cache->params.max_total_size ||
+           p->objects.num == INT_MAX)
+    {
         pl_assert(p->objects.num);
         pl_cache_obj old = p->objects.elem[0];
         PL_TRACE(p, "Removing object 0x%"PRIx64" (size %zu) to make room",
