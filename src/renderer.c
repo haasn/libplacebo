@@ -2872,43 +2872,14 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
     }
 }
 
-static bool pass_init(struct pass_state *pass, bool acquire_image)
+static void pass_fix_frames(struct pass_state *pass)
 {
     pl_renderer rr = pass->rr;
     const struct pl_render_params *params = pass->params;
     struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
 
-    if (!acquire_frame(pass, target, &pass->acquired.target))
-        goto error;
-    if (acquire_image && image) {
-        if (!acquire_frame(pass, image, &pass->acquired.image))
-            goto error;
-
-        const struct pl_deinterlace_params *deint = params->deinterlace_params;
-        bool needs_refs = image->field != PL_FIELD_NONE && deint &&
-                          pl_deinterlace_needs_refs(deint->algo);
-
-        if (image->prev && needs_refs) {
-            // Move into local copy so we can acquire/release it
-            pass->prev = *image->prev;
-            image->prev = &pass->prev;
-            if (!acquire_frame(pass, &pass->prev, &pass->acquired.prev))
-                goto error;
-        }
-        if (image->next && needs_refs) {
-            pass->next = *image->next;
-            image->next = &pass->next;
-            if (!acquire_frame(pass, &pass->next, &pass->acquired.next))
-                goto error;
-        }
-    }
-
-    if (!validate_structs(pass->rr, acquire_image ? image : NULL, target))
-        goto error;
-
     fix_refs_and_rects(pass);
-    find_fbo_format(pass);
 
     // Fallback for older ICC profile API
     icc_fallback(pass, image,  &rr->icc_fallback[ICC_IMAGE]);
@@ -2962,6 +2933,44 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
             }
         }
     }
+}
+
+static bool pass_init(struct pass_state *pass, bool acquire_image)
+{
+    struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
+    struct pl_frame *target = &pass->target;
+
+    if (!acquire_frame(pass, target, &pass->acquired.target))
+        goto error;
+    if (acquire_image && image) {
+        if (!acquire_frame(pass, image, &pass->acquired.image))
+            goto error;
+
+        const struct pl_render_params *params = pass->params;
+        const struct pl_deinterlace_params *deint = params->deinterlace_params;
+        bool needs_refs = image->field != PL_FIELD_NONE && deint &&
+                          pl_deinterlace_needs_refs(deint->algo);
+
+        if (image->prev && needs_refs) {
+            // Move into local copy so we can acquire/release it
+            pass->prev = *image->prev;
+            image->prev = &pass->prev;
+            if (!acquire_frame(pass, &pass->prev, &pass->acquired.prev))
+                goto error;
+        }
+        if (image->next && needs_refs) {
+            pass->next = *image->next;
+            image->next = &pass->next;
+            if (!acquire_frame(pass, &pass->next, &pass->acquired.next))
+                goto error;
+        }
+    }
+
+    if (!validate_structs(pass->rr, acquire_image ? image : NULL, target))
+        goto error;
+
+    find_fbo_format(pass);
+    pass_fix_frames(pass);
 
     pass->tmp = pl_tmp(NULL);
     return true;
