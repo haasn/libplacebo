@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '330': 'add pl_frames_infer(_mix)',
       '329': 'add pl_frame_mix_current and pl_frame_mix_nearest',
       '328': 'remove pl_render_params.ignore_icc_profiles',
       '327': 'remove pl_render_params.icc_params',

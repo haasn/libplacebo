@@ -2875,7 +2875,6 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
 static void pass_fix_frames(struct pass_state *pass)
 {
     pl_renderer rr = pass->rr;
-    const struct pl_render_params *params = pass->params;
     struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
 
@@ -2933,6 +2932,20 @@ static void pass_fix_frames(struct pass_state *pass)
             }
         }
     }
+}
+
+void pl_frames_infer(pl_renderer rr, struct pl_frame *image,
+                     struct pl_frame *target)
+{
+    struct pass_state pass = {
+        .rr     = rr,
+        .image  = *image,
+        .target = *target,
+    };
+
+    pass_fix_frames(&pass);
+    *image  = pass.image;
+    *target = pass.target;
 }
 
 static bool pass_init(struct pass_state *pass, bool acquire_image)
@@ -3606,6 +3619,27 @@ fallback:
 
 error: // for parameter validation failures
     return false;
+}
+
+void pl_frames_infer_mix(pl_renderer rr, const struct pl_frame_mix *mix,
+                         struct pl_frame *target, struct pl_frame *out_ref)
+{
+    struct pass_state pass = {
+        .rr     = rr,
+        .target = *target,
+    };
+
+    const struct pl_frame *refimg = pl_frame_mix_nearest(mix);
+    if (refimg) {
+        pass.image = *refimg;
+    } else {
+        pass.src_ref = -1;
+    }
+
+    pass_fix_frames(&pass);
+    *target = pass.target;
+    if (out_ref)
+        *out_ref = pass.image;
 }
 
 void pl_frame_set_chroma_location(struct pl_frame *frame,

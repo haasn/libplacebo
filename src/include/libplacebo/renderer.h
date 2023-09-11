@@ -664,6 +664,27 @@ static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
     pl_frame_clear_rgba(gpu, frame, clear_color_rgba);
 }
 
+// Helper functions to return the fixed/inferred pl_frame parameters used
+// for rendering internally. Mutates `image` and `target` in-place to hold
+// the modified values, which are what will actually be used for rendering.
+//
+// This currently includes:
+// - Defaulting all missing pl_color_space/repr parameters
+// - Coalescing all rotation to the target
+// - Rounding and clamping the target crop to pixel boundaries and adjusting the
+//   image crop correspondingly
+//
+// Note: This is idempotent and does not generally alter the effects of a
+// subsequent `pl_render_image` on the same pl_frame pair. (But see the
+// following warning)
+//
+// Warning: This does *not* call pl_frame.acquire/release, and so the returned
+// metadata *may* be incorrect if the acquire callback mutates the pl_frame in
+// nontrivial ways, in particular the crop and color space fields.
+PL_API void pl_frames_infer(pl_renderer rr, struct pl_frame *image,
+                            struct pl_frame *target);
+
+
 // Render a single image to a target using the given parameters. This is
 // fully dynamic, i.e. the params can change at any time. libplacebo will
 // internally detect and flush whatever caches are invalidated as a result of
@@ -798,6 +819,13 @@ PL_API const struct pl_frame *pl_frame_mix_nearest(const struct pl_frame_mix *mi
 PL_API bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                                 const struct pl_frame *target,
                                 const struct pl_render_params *params);
+
+// Analog of `pl_frame_infer` corresponding to `pl_render_image_mix`. This
+// function will *not* mutate the frames contained in `mix`, and instead
+// return an adjusted copy of the "reference" frame for that image mix in
+// `out_refimage`, or {0} if the mix is empty.
+PL_API void pl_frames_infer_mix(pl_renderer rr, const struct pl_frame_mix *mix,
+                                struct pl_frame *target, struct pl_frame *out_ref);
 
 // Backwards compatibility with old filters API, may be deprecated.
 // Redundant with pl_filter_configs and masking `allowed` for
