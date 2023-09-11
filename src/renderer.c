@@ -935,7 +935,11 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         sh->output = PL_SHADER_SIG_COLOR;
         pl_shader_decode_color(sh, &ol.repr, NULL);
+        if (pass->dst_icc)
+            color.transfer = PL_COLOR_TRC_LINEAR;
         pl_shader_color_map_ex(sh, &osd_params, pl_color_map_args(ol.color, color));
+        if (pass->dst_icc)
+            pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
 
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
