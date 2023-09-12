@@ -680,11 +680,6 @@ static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
 // freely overwritten or discarded by the caller, even the referenced
 // `pl_tex` objects may be freely reused.
 //
-// Note on overlays: `image.overlays` will be rendered directly onto the image,
-// which means they get affected by things like scaling and frame mixing.
-// `target.overlays` will also be rendered, but directly onto the target. They
-// don't even need to be inside `target.crop`.
-//
 // Note: `image` may be NULL, in which case `target.overlays` will still be
 // rendered, but nothing else.
 PL_API bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
