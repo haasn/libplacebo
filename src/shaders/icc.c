@@ -369,45 +369,18 @@ static void infer_clut_size(struct pl_icc_object_t *icc)
             (int) params->size_r, (int) params->size_g, (int) params->size_b);
 }
 
-pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
-                          const struct pl_icc_params *pparams)
+static bool icc_init(struct pl_icc_object_t *icc)
 {
-    if (!profile->data)
-        return NULL;
-
-    struct pl_icc_object_t *icc = pl_zalloc_obj(NULL, icc, struct icc_priv);
     struct icc_priv *p = PL_PRIV(icc);
     struct pl_icc_params *params = &icc->params;
-    *params = pparams ? *pparams : pl_icc_default_params;
-    icc->signature = profile->signature;
-    p->log = log;
-    p->cms = cmsCreateContext(NULL, (void *) log);
-    if (!p->cms) {
-        PL_ERR(p, "Failed creating LittleCMS context!");
-        goto error;
-    }
-
-    cmsSetLogErrorHandlerTHR(p->cms, error_callback);
-    PL_INFO(p, "Opening ICC profile..");
-    p->profile = cmsOpenProfileFromMemTHR(p->cms, profile->data, profile->len);
-    if (!p->profile) {
-        PL_ERR(p, "Failed opening ICC profile");
-        goto error;
-    }
-
-    if (cmsGetColorSpace(p->profile) != cmsSigRgbData) {
-        PL_ERR(p, "Invalid ICC profile: not RGB");
-        goto error;
-    }
-
     if (params->intent < 0 || params->intent > PL_INTENT_ABSOLUTE_COLORIMETRIC)
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
     struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
     if (!detect_csp(icc, out_prim, &icc->gamma))
-        goto error;
+        return false;
     if (!detect_contrast(icc, &icc->csp.hdr, params, params->max_luma))
-        goto error;
+        return false;
     infer_clut_size(icc);
 
     const struct pl_raw_primaries *best = NULL;
@@ -447,7 +420,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     cmsToneCurve *curve = cmsBuildParametricToneCurve(p->cms, 2,
             (double[3]) { icc->gamma, p->a, p->b });
     if (!curve)
-        goto error;
+        return false;
 
     cmsCIExyY wp_xyY = { best->white.x, best->white.y, 1.0 };
     cmsCIExyYTRIPLE prim_xyY = {
@@ -460,7 +433,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
                         (cmsToneCurve *[3]){ curve, curve, curve });
     cmsFreeToneCurve(curve);
     if (!p->approx)
-        goto error;
+        return false;
 
     // We need to create an ICC V2 profile because ICC V4 perceptual profiles
     // have normalized semantics, but we want colorimetric mapping with BPC
@@ -482,18 +455,115 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     // Backwards compatibility with old caching API
     if ((params->cache_save || params->cache_load) && !params->cache) {
         p->cache = pl_cache_create(pl_cache_params(
-            .log  = log,
+            .log  = p->log,
             .set  = params->cache_save ? set_callback : NULL,
             .get  = params->cache_load ? get_callback : NULL,
             .priv = icc,
         ));
     }
 
+    return true;
+}
+
+pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
+                          const struct pl_icc_params *params)
+{
+    if (!profile->data)
+        return NULL;
+
+    struct pl_icc_object_t *icc = pl_zalloc_obj(NULL, icc, struct icc_priv);
+    struct icc_priv *p = PL_PRIV(icc);
+    icc->params = params ? *params : pl_icc_default_params;
+    icc->signature = profile->signature;
+    p->log = log;
+    p->cms = cmsCreateContext(NULL, (void *) log);
+    if (!p->cms) {
+        PL_ERR(p, "Failed creating LittleCMS context!");
+        goto error;
+    }
+
+    cmsSetLogErrorHandlerTHR(p->cms, error_callback);
+    PL_INFO(p, "Opening ICC profile..");
+    p->profile = cmsOpenProfileFromMemTHR(p->cms, profile->data, profile->len);
+    if (!p->profile) {
+        PL_ERR(p, "Failed opening ICC profile");
+        goto error;
+    }
+
+    if (cmsGetColorSpace(p->profile) != cmsSigRgbData) {
+        PL_ERR(p, "Invalid ICC profile: not RGB");
+        goto error;
+    }
+
+    if (!icc_init(icc))
+        goto error;
+
     return icc;
 
 error:
     pl_icc_close((pl_icc_object *) &icc);
     return NULL;
+}
+
+static bool icc_reopen(pl_icc_object kicc, const struct pl_icc_params *params)
+{
+    struct pl_icc_object_t *icc = (struct pl_icc_object_t *) kicc;
+    struct icc_priv *p = PL_PRIV(icc);
+    cmsCloseProfile(p->approx);
+    pl_cache_destroy(&p->cache);
+
+    *icc = (struct pl_icc_object_t) {
+        .params    = *params,
+        .signature = icc->signature,
+    };
+
+    *p = (struct icc_priv) {
+        .log     = p->log,
+        .cms     = p->cms,
+        .profile = p->profile,
+    };
+
+    PL_DEBUG(p, "Reinitializing ICC profile in-place");
+    return icc_init(icc);
+}
+
+bool pl_icc_update(pl_log log, pl_icc_object *out_icc,
+                   const struct pl_icc_profile *profile,
+                   const struct pl_icc_params *params)
+{
+    params = PL_DEF(params, &pl_icc_default_params);
+    pl_icc_object icc = *out_icc;
+    if (!icc && !profile)
+        return false; // nothing to update
+
+    uint64_t sig = profile ? profile->signature : icc->signature;
+    if (!icc || icc->signature != sig) {
+        pl_assert(profile);
+        pl_icc_close(&icc);
+        *out_icc = icc = pl_icc_open(log, profile, params);
+        return icc != NULL;
+    }
+
+    int size_r = PL_DEF(params->size_r, icc->params.size_r);
+    int size_g = PL_DEF(params->size_g, icc->params.size_g);
+    int size_b = PL_DEF(params->size_b, icc->params.size_b);
+    bool compat = params->intent     == icc->params.intent    &&
+                  params->max_luma   == icc->params.max_luma  &&
+                  params->force_bpc  == icc->params.force_bpc &&
+                  size_r             == icc->params.size_r    &&
+                  size_g             == icc->params.size_g    &&
+                  size_b             == icc->params.size_b;
+    if (compat)
+        return true;
+
+    // ICC signature is the same but parameters are different, re-open in-place
+    if (!icc_reopen(icc, params)) {
+        pl_icc_close(&icc);
+        *out_icc = NULL;
+        return false;
+    }
+
+    return true;
 }
 
 static void fill_lut(void *datap, const struct sh_lut_params *params, bool decode)
@@ -682,6 +752,15 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
 {
     pl_err(log, "libplacebo compiled without LittleCMS 2 support!");
     return NULL;
+}
+
+bool pl_icc_update(pl_log log, pl_icc_object *obj,
+                   const struct pl_icc_profile *profile,
+                   const struct pl_icc_params *params)
+{
+    pl_err(log, "libplacebo compiled without LittleCMS 2 support!");
+    *obj = NULL;
+    return false;
 }
 
 void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,

@@ -104,6 +104,19 @@ PL_API pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profil
                                  const struct pl_icc_params *params);
 PL_API void pl_icc_close(pl_icc_object *icc);
 
+// Update an existing pl_icc_object, which may be NULL, replacing it by the
+// new profile and parameters (if incompatible).
+//
+// Returns success. `obj` is set to the created profile, or NULL on error.
+//
+// Note: If `profile->signature` matches `(*obj)->signature`, or if `profile` is
+// NULL, then the existing profile is directly reused, with only the effective
+// parameters changing. In this case, `profile->data` is also *not* read from,
+// and may safely be NULL.
+PL_API bool pl_icc_update(pl_log log, pl_icc_object *obj,
+                          const struct pl_icc_profile *profile,
+                          const struct pl_icc_params *params);
+
 // Decode the input from the colorspace determined by the attached ICC profile
 // to linear light RGB (in the profile's containing primary set). `lut` must be
 // set to a shader object that will store the GPU resources associated with the
