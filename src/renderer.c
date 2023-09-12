@@ -628,9 +628,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         return info;
     }
 
-    if (!pass->fbofmt[4] || (rr->errors & PL_RENDER_ERR_SAMPLING) ||
-        !info.config)
-    {
+    if ((rr->errors & PL_RENDER_ERR_SAMPLING) || !info.config) {
         info.type = SAMPLER_DIRECT;
     } else if (info.config->kernel == &pl_filter_function_oversample) {
         info.type = SAMPLER_OVERSAMPLE;
@@ -651,6 +649,10 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
                 info.type = can_linear ? SAMPLER_NEAREST : SAMPLER_DIRECT;
         }
     }
+
+    // Disable advanced scaling without FBOs
+    if (!pass->fbofmt[4] && info.type == SAMPLER_COMPLEX)
+        info.type = SAMPLER_DIRECT;
 
     return info;
 }
