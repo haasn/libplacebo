@@ -2857,7 +2857,8 @@ static struct icc_state *update_icc(struct pass_state *pass,
                                     struct pl_frame *frame)
 {
     pl_renderer rr = pass->rr;
-    if (!frame || !frame->profile.data)
+    const struct pl_render_params *params = pass->params;
+    if (!frame || !frame->profile.data || params->ignore_icc_profiles)
         return NULL;
 
     const struct pl_icc_params *par;
