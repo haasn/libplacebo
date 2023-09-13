@@ -9,17 +9,11 @@
 
 #ifdef PL_HAVE_WIN32
 #include <shlobj.h>
-#endif
-
-#ifdef PL_HAVE_APPLE
-#include <sys/types.h>
-#include <pwd.h>
-#endif
-
-#ifdef PL_HAVE_UNIX
+#else
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pwd.h>
 #endif
 
 const char *get_cache_dir(char (*buf)[512])
