@@ -603,6 +603,13 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         info.dir_sep[1] = SAMPLER_UP;
     }
 
+    if (params->correct_subpixel_offsets) {
+        if (!info.dir_sep[0] && fabsf(src->rect.x0) > 1e-6f)
+            info.dir_sep[0] = SAMPLER_UP;
+        if (!info.dir_sep[1] && fabsf(src->rect.y0) > 1e-6f)
+            info.dir_sep[1] = SAMPLER_UP;
+    }
+
     // We use PL_MAX so downscaling overrides upscaling when choosing scalers
     info.dir = PL_MAX(info.dir_sep[0], info.dir_sep[1]);
     switch (info.dir) {

@@ -315,6 +315,9 @@ struct pl_render_params {
     // general-purpose ones.
     bool disable_builtin_scalers;
 
+    // Forces correction of subpixel offsets (using the configured `upscaler`).
+    bool correct_subpixel_offsets;
+
     // Ignore ICC profiles attached to either `image` or `target`.
     bool ignore_icc_profiles;
 

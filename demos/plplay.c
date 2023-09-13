@@ -1944,6 +1944,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_checkbox_label(nk, "Show all scaler presets", &p->advanced_scalers);
             nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);
             nk_checkbox_label(nk, "Disable built-in scalers", &par->disable_builtin_scalers);
+            nk_checkbox_label(nk, "Correct subpixel offsets", &par->correct_subpixel_offsets);
             nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
             nk_checkbox_label(nk, "Disable gamma-aware dither", &par->disable_dither_gamma_correction);
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
