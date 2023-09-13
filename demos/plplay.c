@@ -48,6 +48,20 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
+enum {
+    ZOOM_PAD = 0,
+    ZOOM_CROP,
+    ZOOM_STRETCH,
+    ZOOM_FIT,
+    ZOOM_RAW,
+    ZOOM_400,
+    ZOOM_200,
+    ZOOM_100,
+    ZOOM_50,
+    ZOOM_25,
+    ZOOM_COUNT,
+};
+
 struct plplay {
     struct window *win;
     struct ui *ui;
@@ -72,6 +86,7 @@ struct plplay {
     struct pl_icc_profile target_icc;
     char *target_icc_name;
     pl_rotation target_rot;
+    int target_zoom;
     bool colorspace_hint;
     bool colorspace_hint_dynamic;
     bool ignore_dovi;
@@ -502,13 +517,48 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     }
 
     assert(mix->num_frames);
-    double dar = pl_rect2df_aspect(&mix->frames[0]->crop);
-    if (p->stream->sample_aspect_ratio.num)
-        dar *= av_q2d(p->stream->sample_aspect_ratio);
+    pl_rect2df crop = mix->frames[0]->crop;
+    if (p->stream->sample_aspect_ratio.num && p->target_zoom != ZOOM_RAW) {
+        float sar = av_q2d(p->stream->sample_aspect_ratio);
+        pl_rect2df_stretch(&crop, fmaxf(1.0f, sar), fmaxf(1.0f, 1.0 / sar));
+    }
+
+    // Apply target rotation and un-rotate crop relative to target
     target.rotation = p->target_rot;
-    pl_rect2df_aspect_set_rot(&target.crop, dar,
-                              mix->frames[0]->rotation - target.rotation,
-                              0.0);
+    pl_rect2df_rotate(&crop, mix->frames[0]->rotation - target.rotation);
+
+    switch (p->target_zoom) {
+    case ZOOM_PAD:
+        pl_rect2df_aspect_copy(&target.crop, &crop, 0.0);
+        break;
+    case ZOOM_CROP:
+        pl_rect2df_aspect_copy(&target.crop, &crop, 1.0);
+        break;
+    case ZOOM_STRETCH:
+        break; // target.crop already covers full image
+    case ZOOM_FIT:
+        pl_rect2df_aspect_fit(&target.crop, &crop, 0.0);
+        break;
+    case ZOOM_RAW: ;
+        // Ensure pixels are exactly aligned, to avoid fractional scaling
+        int w = roundf(fabsf(pl_rect_w(crop)));
+        int h = roundf(fabsf(pl_rect_h(crop)));
+        target.crop.x0 = roundf((pl_rect_w(target.crop) - w) / 2.0f);
+        target.crop.y0 = roundf((pl_rect_h(target.crop) - h) / 2.0f);
+        target.crop.x1 = target.crop.x0 + w;
+        target.crop.y1 = target.crop.y0 + h;
+        break;
+    case ZOOM_400:
+    case ZOOM_200:
+    case ZOOM_100:
+    case ZOOM_50:
+    case ZOOM_25: ;
+        const float z = powf(2.0f, (int) ZOOM_100 - p->target_zoom);
+        const float sx = z * fabsf(pl_rect_w(crop)) / pl_rect_w(target.crop);
+        const float sy = z * fabsf(pl_rect_h(crop)) / pl_rect_h(target.crop);
+        pl_rect2df_stretch(&target.crop, sx, sy);
+        break;
+    }
 
     struct pl_color_map_params *cpars = &opts->color_map_params;
     if (cpars->visualize_lut) {
@@ -1080,7 +1130,28 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             static const char *tscale_none = "None (No frame mixing)";
             #define SCALE_DESC(scaler, fallback) (par->scaler ? par->scaler->description : fallback)
 
+            static const char *zoom_modes[ZOOM_COUNT] = {
+                [ZOOM_PAD]        = "Pad to window",
+                [ZOOM_CROP]       = "Crop to window",
+                [ZOOM_STRETCH]    = "Stretch to window",
+                [ZOOM_FIT]        = "Fit inside window",
+                [ZOOM_RAW]        = "Unscaled (raw)",
+                [ZOOM_400]        = "400% zoom",
+                [ZOOM_200]        = "200% zoom",
+                [ZOOM_100]        = "100% zoom",
+                [ZOOM_50]         = " 50% zoom",
+                [ZOOM_25]         = " 25% zoom",
+            };
+
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
+            nk_label(nk, "Zoom mode:", NK_TEXT_LEFT);
+            int zoom = nk_combo(nk, zoom_modes, ZOOM_COUNT, p->target_zoom, 16, nk_vec2(nk_widget_width(nk), 500));
+            if (zoom != p->target_zoom) {
+                // Image crop may change
+                pl_renderer_flush_cache(p->renderer);
+                p->target_zoom = zoom;
+            }
+
             nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, SCALE_DESC(upscaler, scale_none), nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
