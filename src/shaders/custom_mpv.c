@@ -1241,10 +1241,10 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         .priv = p,
         .params = params,
         .hooked = {
-            .name = stage,
-            .tex = params->tex,
-            .rect = params->rect,
-            .repr = params->repr,
+            .name  = stage,
+            .tex   = params->tex,
+            .rect  = params->rect,
+            .repr  = params->repr,
             .color = params->color,
             .comps = params->components,
         },
@@ -1323,7 +1323,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             for (int j = 0; j < p->pass_textures.num; j++) {
                 if (pl_str_equals(texname, p->pass_textures.elem[j].name)) {
                     // Note: We bind the whole texture, rather than
-                    // params->rect, because user shaders in general are not
+                    // hooked.rect, because user shaders in general are not
                     // designed to handle cropped input textures.
                     const struct pass_tex *ptex = &p->pass_textures.elem[j];
                     pl_rect2df rect = {
@@ -1331,10 +1331,10 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                     };
 
                     if (hook->offset_align && pl_str_equals(texname, stage)) {
-                        float sx = pl_rect_w(params->rect) / pl_rect_w(params->src_rect),
-                              sy = pl_rect_h(params->rect) / pl_rect_h(params->src_rect),
-                              ox = params->rect.x0 - sx * params->src_rect.x0,
-                              oy = params->rect.y0 - sy * params->src_rect.y0;
+                        float sx = pl_rect_w(ctx.hooked.rect) / pl_rect_w(params->src_rect),
+                              sy = pl_rect_h(ctx.hooked.rect) / pl_rect_h(params->src_rect),
+                              ox = ctx.hooked.rect.x0 - sx * params->src_rect.x0,
+                              oy = ctx.hooked.rect.y0 - sy * params->src_rect.y0;
 
                         PL_TRACE(p, "Aligning plane with ref: %f %f", ox, oy);
                         pl_rect2df_offset(&rect, ox, oy);
@@ -1529,35 +1529,35 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         if (!ok)
             goto error;
 
-        float sx = (float) out_w / params->tex->params.w,
-              sy = (float) out_h / params->tex->params.h,
-              x0 = sx * params->rect.x0 + hook->offset[0],
-              y0 = sy * params->rect.y0 + hook->offset[1];
+        float sx = (float) out_w / ctx.hooked.tex->params.w,
+              sy = (float) out_h / ctx.hooked.tex->params.h,
+              x0 = sx * ctx.hooked.rect.x0 + hook->offset[0],
+              y0 = sy * ctx.hooked.rect.y0 + hook->offset[1];
 
         pl_rect2df new_rect = {
             x0,
             y0,
-            x0 + sx * pl_rect_w(params->rect),
-            y0 + sy * pl_rect_h(params->rect),
+            x0 + sx * pl_rect_w(ctx.hooked.rect),
+            y0 + sy * pl_rect_h(ctx.hooked.rect),
         };
 
         if (hook->offset_align) {
             float rx = pl_rect_w(new_rect) / pl_rect_w(params->src_rect),
                   ry = pl_rect_h(new_rect) / pl_rect_h(params->src_rect),
-                  ox = rx * params->src_rect.x0 - sx * params->rect.x0,
-                  oy = ry * params->src_rect.y0 - sy * params->rect.y0;
+                  ox = rx * params->src_rect.x0 - sx * ctx.hooked.rect.x0,
+                  oy = ry * params->src_rect.y0 - sy * ctx.hooked.rect.y0;
 
             pl_rect2df_offset(&new_rect, ox, oy);
         }
 
         // Save the result of this shader invocation
         struct pass_tex ptex = {
-            .name = hook->save_tex.len ? hook->save_tex : stage,
-            .tex = fbo,
-            .repr = params->repr,
-            .color = params->color,
-            .comps  = PL_DEF(hook->comps, params->components),
-            .rect = new_rect,
+            .name  = hook->save_tex.len ? hook->save_tex : stage,
+            .tex   = fbo,
+            .repr  = ctx.hooked.repr,
+            .color = ctx.hooked.color,
+            .comps = PL_DEF(hook->comps, ctx.hooked.comps),
+            .rect  = new_rect,
         };
 
         // It's assumed that users will correctly normalize the input
@@ -1572,12 +1572,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         if (pl_str_equals(ptex.name, stage)) {
             ctx.hooked = ptex;
             res = (struct pl_hook_res) {
-                .output = PL_HOOK_SIG_TEX,
-                .tex = fbo,
-                .repr = ptex.repr,
-                .color = ptex.color,
+                .output     = PL_HOOK_SIG_TEX,
+                .tex        = fbo,
+                .repr       = ptex.repr,
+                .color      = ptex.color,
                 .components = ptex.comps,
-                .rect = new_rect,
+                .rect       = new_rect,
             };
         }
 
