@@ -692,9 +692,10 @@ struct pl_icc_profile {
     const void *data;
     size_t len;
 
-    // If a profile is set, this signature must uniquely identify it, ideally
-    // using a checksum of the profile contents. The user is free to choose the
-    // method of determining this signature, but note the existence of the
+    // If a profile is set, this signature must uniquely identify it (including
+    // across restarts, for caching), ideally using a checksum of the profile
+    // contents. The user is free to choose the method of determining this
+    // signature, but note the existence of the
     // `pl_icc_profile_compute_signature` helper.
     uint64_t signature;
 };
