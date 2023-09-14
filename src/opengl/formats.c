@@ -76,6 +76,16 @@ const struct gl_format formats_norm8[] = {
     {GL_RGBA8,          RGBA,  U8,  FMT("rgba8",    8, UNORM, S|L|F|V)},
 };
 
+// Signed variants
+/* TODO: these are broken in mesa
+const struct gl_format formats_snorm8[] = {
+    {GL_R8_SNORM,       R,     I8,  FMT("r8s",      8, SNORM, S|L|F|V)},
+    {GL_RG8_SNORM,      RG,    I8,  FMT("rg8s",     8, SNORM, S|L|F|V)},
+    {GL_RGB8_SNORM,     RGB,   I8,  FMT("rgb8s",    8, SNORM, S|L|F|V)},
+    {GL_RGBA8_SNORM,    RGBA,  I8,  FMT("rgba8s",   8, SNORM, S|L|F|V)},
+};
+*/
+
 // BGRA 8-bit
 const struct gl_format formats_bgra8[] = {
     {GL_RGBA8,          BGRA,  U8,  {
@@ -103,6 +113,16 @@ const struct gl_format formats_rgb16_fbo[] = {
 const struct gl_format formats_rgb16_fallback[] = {
     {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|V)},
 };
+
+// Signed 16-bit variants
+/* TODO: these are broken in mesa and nvidia
+const struct gl_format formats_snorm16[] = {
+    {GL_R16_SNORM,      R,     I16, FMT("r16s",    16, SNORM, S|L|F|V)},
+    {GL_RG16_SNORM,     RG,    I16, FMT("rg16s",   16, SNORM, S|L|F|V)},
+    {GL_RGB16_SNORM,    RGB,   I16, FMT("rgb16s",  16, SNORM, S|L|F|V)},
+    {GL_RGBA16_SNORM,   RGBA,  I16, FMT("rgba16s", 16, SNORM, S|L|F|V)},
+};
+*/
 
 // Floating point texture formats
 const struct gl_format formats_float[] = {
@@ -149,15 +169,6 @@ const struct gl_format formats_uint[] = {
     {GL_RG32UI,         RGI,   U32, FMT("rg32u",   32, UINT)},
     {GL_RGB32UI,        RGBI,  U32, FMT("rgb32u",  32, UINT)},
     {GL_RGBA32UI,       RGBAI, U32, FMT("rgba32u", 32, UINT)},
-
-    {GL_R8_SNORM,       R,     I8,  FMT("r8s",      8, SNORM)},
-    {GL_RG8_SNORM,      RG,    I8,  FMT("rg8s",     8, SNORM)},
-    {GL_RGB8_SNORM,     RGB,   I8,  FMT("rgb8s",    8, SNORM)},
-    {GL_RGBA8_SNORM,    RGBA,  I8,  FMT("rgba8s",   8, SNORM)},
-    {GL_R16_SNORM,      R,     I16, FMT("r16s",    16, SNORM)},
-    {GL_RG16_SNORM,     RG,    I16, FMT("rg16s",   16, SNORM)},
-    {GL_RGB16_SNORM,    RGB,   I16, FMT("rgb16s",  16, SNORM)},
-    {GL_RGBA16_SNORM,   RGBA,  I16, FMT("rgba16s", 16, SNORM)},
 
     {GL_R8I,            RI,    I8,  FMT("r8i",      8, SINT)},
     {GL_RG8I,           RGI,   I8,  FMT("rg8i",     8, SINT)},
