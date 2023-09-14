@@ -1600,11 +1600,11 @@ bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
 
 void pl_icc_profile_compute_signature(struct pl_icc_profile *profile)
 {
+    if (!profile->len)
+        profile->signature = 0;
+
     // In theory, we could get this value from the profile header itself if
     // lcms is available, but I'm not sure if it's even worth the trouble. Just
-    // hard-code this to a siphash64(), which is decently fast anyway.
-    profile->signature = pl_str_hash((pl_str) {
-        .buf = (uint8_t *) profile->data,
-        .len = profile->len
-    });
+    // hard-code this to a pl_mem_hash(), which is decently fast anyway.
+    profile->signature = pl_mem_hash(profile->data, profile->len);
 }
