@@ -1028,20 +1028,20 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_BOOL("dither_temporal", "Temporal dithering", dither_params.temporal),
 
     // ICC
-    OPT_ENABLE_PARAMS("icc", "Enable ICC settings", icc_params),
+    OPT_ENABLE_PARAMS("icc", "Enable ICC settings", icc_params, .deprecated = true),
     OPT_PRESET("icc_preset", "ICC preset", icc_params, LIST(
-               {"default", &pl_icc_default_params})),
+               {"default", &pl_icc_default_params}), .deprecated = true),
     OPT_ENUM("icc_intent", "ICC rendering intent", icc_params.intent, LIST(
              {"auto",       PL_INTENT_AUTO},
              {"perceptual", PL_INTENT_PERCEPTUAL},
              {"relative",   PL_INTENT_RELATIVE_COLORIMETRIC},
              {"saturation", PL_INTENT_SATURATION},
-             {"absolute",   PL_INTENT_ABSOLUTE_COLORIMETRIC})),
-    OPT_INT("icc_size_r", "ICC 3DLUT size R", icc_params.size_r, .max = 256),
-    OPT_INT("icc_size_g", "ICC 3DLUT size G", icc_params.size_g, .max = 256),
-    OPT_INT("icc_size_b", "ICC 3DLUT size G", icc_params.size_b, .max = 256),
-    OPT_FLOAT("icc_max_luma", "ICC profile luma override", icc_params.max_luma, .max = 10000),
-    OPT_BOOL("icc_force_bpc", "Force ICC black point compensation", icc_params.force_bpc),
+             {"absolute",   PL_INTENT_ABSOLUTE_COLORIMETRIC}), .deprecated = true),
+    OPT_INT("icc_size_r", "ICC 3DLUT size R", icc_params.size_r, .max = 256, .deprecated = true),
+    OPT_INT("icc_size_g", "ICC 3DLUT size G", icc_params.size_g, .max = 256, .deprecated = true),
+    OPT_INT("icc_size_b", "ICC 3DLUT size G", icc_params.size_b, .max = 256, .deprecated = true),
+    OPT_FLOAT("icc_max_luma", "ICC profile luma override", icc_params.max_luma, .max = 10000, .deprecated = true),
+    OPT_BOOL("icc_force_bpc", "Force ICC black point compensation", icc_params.force_bpc, .deprecated = true),
 
     // Cone distortion
     OPT_ENABLE_PARAMS("cone", "Enable cone distortion", cone_params),

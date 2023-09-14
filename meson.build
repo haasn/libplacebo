@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '327': 'remove pl_render_params.icc_params',
       '326': 'add pl_frame.icc',
       '325': 'add pl_icc_update',
       '324': 'add pl_render_params.correct_subpixel_offsets',

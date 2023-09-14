@@ -2864,8 +2864,7 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
         return;
     }
 
-    const struct pl_icc_params *params = pass->params->icc_params;
-    if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, params)) {
+    if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, NULL)) {
         frame->icc = fallback->icc;
     } else {
         PL_WARN(rr, "Failed opening ICC profile... ignoring");

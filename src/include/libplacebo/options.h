@@ -40,7 +40,7 @@ typedef struct pl_options_t {
     struct pl_peak_detect_params peak_detect_params;
     struct pl_color_map_params color_map_params;
     struct pl_dither_params dither_params;
-    struct pl_icc_params icc_params;
+    struct pl_icc_params icc_params PL_DEPRECATED;
     struct pl_cone_params cone_params;
     struct pl_blend_params blend_params;
     struct pl_deinterlace_params deinterlace_params;

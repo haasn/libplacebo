@@ -195,13 +195,6 @@ struct pl_render_params {
     // possible. Leaving this as NULL disables error diffusion.
     const struct pl_error_diffusion_kernel *error_diffusion;
 
-    // Configures the settings used to handle ICC profiles, if required. If
-    // NULL, defaults to `&pl_icc_default_params`.
-    //
-    // Note: This only affects profiles opened from `pl_frame.profile`, and
-    // has no effect on user-managed ICC profiles provided via `pl_frame.icc`.
-    const struct pl_icc_params *icc_params;
-
     // Configures the settings used to simulate color blindness, if desired.
     // If NULL, this feature is disabled.
     const struct pl_cone_params *cone_params;
@@ -361,6 +354,7 @@ struct pl_render_params {
 
     // --- Deprecated/removed fields
     bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
+    const struct pl_icc_params *icc_params PL_DEPRECATED; // use pl_frame.icc
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest
@@ -368,7 +362,6 @@ struct pl_render_params {
 #define PL_RENDER_DEFAULTS                              \
     .color_map_params   = &pl_color_map_default_params, \
     .color_adjustment   = &pl_color_adjustment_neutral, \
-    .icc_params         = &pl_icc_default_params,       \
     .lut_entries        = 64,                           \
     .tile_colors        = {{0.93, 0.93, 0.93},          \
                            {0.87, 0.87, 0.87}},         \
