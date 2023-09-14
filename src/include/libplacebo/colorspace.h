@@ -700,6 +700,8 @@ struct pl_icc_profile {
     uint64_t signature;
 };
 
+#define pl_icc_profile(...) &(struct pl_icc_profile) { __VA_ARGS__ }
+
 // This doesn't do a comparison of the actual contents, only of the signature.
 PL_API bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
                                  const struct pl_icc_profile *p2);
