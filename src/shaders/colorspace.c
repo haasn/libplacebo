@@ -1588,7 +1588,7 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
          "idx.y = 2.0 * length(ipt.yz);                         \n"
          "idx.z = %f * atan(ipt.z, ipt.y) + 0.5;                \n"
          "vec3 mapped = "$"(idx).xyz;                           \n"
-         "mapped.yz -= vec2(0.5);                               \n"
+         "mapped.yz -= vec2(32768.0/65535.0);                   \n"
          "float mappedhue = atan(mapped.z, mapped.y);           \n"
          "float mappedchroma = length(mapped.yz);               \n"
          "ipt = mapped;                                         \n"
@@ -1655,8 +1655,8 @@ static void fill_gamut_lut(void *data, const struct sh_lut_params *params)
     pl_assert(params->comps == 4);
     for (int i = 0; i < lut_size; i++) {
         out[0] = roundf(in[0] * UINT16_MAX);
-        out[1] = roundf((in[1] + 0.5f) * UINT16_MAX);
-        out[2] = roundf((in[2] + 0.5f) * UINT16_MAX);
+        out[1] = roundf(in[1] * UINT16_MAX + (UINT16_MAX >> 1));
+        out[2] = roundf(in[2] * UINT16_MAX + (UINT16_MAX >> 1));
         in  += 3;
         out += 4;
     }
@@ -2015,7 +2015,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
              "idx.y = 2.0 * length(ipt.yz);         \n"
              "idx.z = %f * atan(ipt.z, ipt.y) + 0.5;\n"
              "ipt = "$"(idx).xyz;                   \n"
-             "ipt.yz -= vec2(0.5);                  \n",
+             "ipt.yz -= vec2(32768.0/65535.0);      \n",
              SH_FLOAT(1.0f / lut_range),
              SH_FLOAT(-gamut.min_luma / lut_range),
              0.5f / M_PI, lut);
