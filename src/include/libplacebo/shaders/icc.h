@@ -54,13 +54,10 @@ struct pl_icc_params {
     // or when using PL_INTENT_PERCEPTUAL, but YMMV.
     bool force_bpc;
 
-    // If provided, this pl_cache instance will be used to cache the generated
-    // 3DLUTs. Note that these can get large, especially for large values of
-    // size_{r,g,b}, so it's recommended to split this cache off from the main
-    // shader cache.
-    //
-    // Note: When the 3DLUTs are sufficiently small (<100 kB), the cache from
-    // the `pl_gpu`, if any, will be used as a fallback.
+    // If provided, this pl_cache instance will be used, instead of the
+    // GPU-internal cache, to cache the generated 3DLUTs. Note that these can
+    // get large, especially for large values of size_{r,g,b}, so the user may
+    // wish to split this cache off from the main shader cache. (Optional)
     pl_cache cache;
 
     // Deprecated legacy caching API. Replaced by `cache`.
