@@ -468,7 +468,7 @@ static bool icc_init(struct pl_icc_object_t *icc)
 pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
                           const struct pl_icc_params *params)
 {
-    if (!profile->data)
+    if (!profile->len)
         return NULL;
 
     struct pl_icc_object_t *icc = pl_zalloc_obj(NULL, icc, struct icc_priv);
