@@ -797,7 +797,7 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         __VA_ARGS__                                                             \
     }
 
-#define OPT_ENUM(KEY, NAME, FIELD, ...)                                         \
+#define OPT_ENUM(KEY, NAME, FIELD, VALUES, ...)                                 \
     {                                                                           \
         .key  = KEY,                                                            \
         .name = NAME,                                                           \
@@ -810,14 +810,12 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
                 unsigned dummy;                                                 \
                 pl_static_assert(sizeof(defaults.FIELD) == sizeof(unsigned));   \
             }),                                                                 \
-            .values = (struct enum_val[]) {                                     \
-                __VA_ARGS__,                                                    \
-                {0}                                                             \
-            },                                                                  \
+            .values = (struct enum_val[]) { VALUES }                            \
         },                                                                      \
+        __VA_ARGS__                                                             \
     }
 
-#define OPT_PRESET(KEY, NAME, PARAMS, ...)                                      \
+#define OPT_PRESET(KEY, NAME, PARAMS, PRESETS, ...)                             \
     {                                                                           \
         .key    = KEY,                                                          \
         .name   = NAME,                                                         \
@@ -827,11 +825,9 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
             .parse   = parse_preset,                                            \
             .offset  = offsetof(struct pl_options_t, PARAMS),                   \
             .size    = sizeof(defaults.PARAMS),                                 \
-            .presets = (struct preset[]) {                                      \
-                __VA_ARGS__,                                                    \
-                {0}                                                             \
-            },                                                                  \
+            .presets = (struct preset[]) { PRESETS },                           \
         },                                                                      \
+        __VA_ARGS__                                                             \
     }
 
 #define OPT_NAMED(KEY, NAME, FIELD, NAMES, ...)                                 \
@@ -891,6 +887,8 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         __VA_ARGS__                                                             \
     }
 
+#define LIST(...) __VA_ARGS__, {0}
+
 #define SCALE_OPTS(PREFIX, NAME, FIELD)                                               \
     OPT_SCALER(PREFIX, NAME, FIELD),                                                  \
     OPT_SCALER_PRESET(PREFIX"_preset", NAME "preset", FIELD),                         \
@@ -908,10 +906,10 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
     OPT_BOOL(PREFIX"_polar", NAME" polar", FIELD.polar)
 
 const struct pl_opt_t pl_option_list[] = {
-    OPT_PRESET("preset", "Global preset", params,
+    OPT_PRESET("preset", "Global preset", params, LIST(
                {"default",      &pl_render_default_params},
                {"fast",         &pl_render_fast_params},
-               {"high_quality", &pl_render_high_quality_params}),
+               {"high_quality", &pl_render_high_quality_params})),
 
     // Scalers
     SCALE_OPTS("upscaler", "Upscaler", upscaler),
@@ -924,8 +922,8 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Debanding
     OPT_ENABLE_PARAMS("deband", "Enable debanding", deband_params),
-    OPT_PRESET("deband_preset", "Debanding preset", deband_params,
-               {"default", &pl_deband_default_params}),
+    OPT_PRESET("deband_preset", "Debanding preset", deband_params, LIST(
+               {"default", &pl_deband_default_params})),
     OPT_INT("deband_iterations", "Debanding iterations", deband_params.iterations, .max = 16),
     OPT_FLOAT("deband_threshold", "Debanding threshold", deband_params.threshold, .max = 1024.0),
     OPT_FLOAT("deband_radius", "Debanding radius", deband_params.radius, .max = 1024.0),
@@ -936,15 +934,15 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Sigmodization
     OPT_ENABLE_PARAMS("sigmoid", "Enable sigmoidization", sigmoid_params),
-    OPT_PRESET("sigmoid_preset", "Sigmoidization preset", sigmoid_params,
-               {"default", &pl_sigmoid_default_params}),
+    OPT_PRESET("sigmoid_preset", "Sigmoidization preset", sigmoid_params, LIST(
+               {"default", &pl_sigmoid_default_params})),
     OPT_FLOAT("sigmoid_center", "Sigmoidization center", sigmoid_params.center, .max = 1.0),
     OPT_FLOAT("sigmoid_slope", "Sigmoidization slope", sigmoid_params.slope, .min = 1.0, .max = 20.0),
 
     // Color adjustment
     OPT_ENABLE_PARAMS("color_adjustment", "Enable color adjustment", color_adjustment),
-    OPT_PRESET("color_adjustment_preset", "Color adjustment preset", color_adjustment,
-               {"neutral", &pl_color_adjustment_neutral}),
+    OPT_PRESET("color_adjustment_preset", "Color adjustment preset", color_adjustment, LIST(
+               {"neutral", &pl_color_adjustment_neutral})),
     OPT_FLOAT("brightness", "Brightness boost", color_adjustment.brightness, .min = -1.0, .max = 1.0),
     OPT_FLOAT("contrast", "Contrast boost", color_adjustment.contrast, .max = 100.0),
     OPT_FLOAT("saturation", "Saturation gain", color_adjustment.saturation, .max = 100.0),
@@ -956,9 +954,9 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Peak detection
     OPT_ENABLE_PARAMS("peak_detect", "Enable peak detection", peak_detect_params),
-    OPT_PRESET("peak_detect_preset", "Peak detection preset", peak_detect_params,
+    OPT_PRESET("peak_detect_preset", "Peak detection preset", peak_detect_params, LIST(
                {"default",      &pl_peak_detect_default_params},
-               {"high_quality", &pl_peak_detect_high_quality_params}),
+               {"high_quality", &pl_peak_detect_high_quality_params})),
     OPT_FLOAT("peak_smoothing_period", "Peak detection smoothing coefficient", peak_detect_params.smoothing_period, .max = 1000.0),
     OPT_FLOAT("scene_threshold_low", "Scene change threshold low", peak_detect_params.scene_threshold_low, .max = 100.0),
     OPT_FLOAT("scene_threshold_high", "Scene change threshold high", peak_detect_params.scene_threshold_high, .max = 100.0),
@@ -968,9 +966,9 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Color mapping
     OPT_ENABLE_PARAMS("color_map", "Enable color mapping", color_map_params),
-    OPT_PRESET("color_map_preset", "Color mapping preset", color_map_params,
+    OPT_PRESET("color_map_preset", "Color mapping preset", color_map_params, LIST(
                {"default",      &pl_color_map_default_params},
-               {"high_quality", &pl_color_map_high_quality_params}),
+               {"high_quality", &pl_color_map_high_quality_params})),
     OPT_NAMED("gamut_mapping", "Gamut mapping function", color_map_params.gamut_mapping,
               pl_gamut_map_functions),
     OPT_FLOAT("perceptual_deadzone", "Gamut mapping perceptual deadzone", color_map_params.gamut_constants.perceptual_deadzone, .max = 1.0f),
@@ -997,12 +995,12 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("linear_knee", "Tone mapping linear knee point", color_map_params.tone_constants.linear_knee, .max = 1.0f),
     OPT_FLOAT("exposure", "Tone mapping linear exposure", color_map_params.tone_constants.exposure, .max = 10.0f),
     OPT_BOOL("inverse_tone_mapping", "Inverse tone mapping", color_map_params.inverse_tone_mapping),
-    OPT_ENUM("tone_map_metadata", "Source of HDR metadata to use", color_map_params.metadata,
+    OPT_ENUM("tone_map_metadata", "Source of HDR metadata to use", color_map_params.metadata, LIST(
              {"any",       PL_HDR_METADATA_ANY},
              {"none",      PL_HDR_METADATA_NONE},
              {"hdr10",     PL_HDR_METADATA_HDR10},
              {"hdr10plus", PL_HDR_METADATA_HDR10PLUS},
-             {"cie_y",     PL_HDR_METADATA_CIE_Y}),
+             {"cie_y",     PL_HDR_METADATA_CIE_Y})),
     OPT_INT("tone_lut_size", "Tone mapping LUT size", color_map_params.lut_size, .max = 4096),
     OPT_FLOAT("contrast_recovery", "HDR contrast recovery strength", color_map_params.contrast_recovery, .max = 2.0),
     OPT_FLOAT("contrast_smoothness", "HDR contrast recovery smoothness", color_map_params.contrast_smoothness, .min = 1.0, .max = 32.0),
@@ -1019,26 +1017,26 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Dithering
     OPT_ENABLE_PARAMS("dither", "Enable dithering", dither_params),
-    OPT_PRESET("dither_preset", "Dithering preset", dither_params,
-               {"default", &pl_dither_default_params}),
-    OPT_ENUM("dither_method", "Dither method", dither_params.method,
+    OPT_PRESET("dither_preset", "Dithering preset", dither_params, LIST(
+               {"default", &pl_dither_default_params})),
+    OPT_ENUM("dither_method", "Dither method", dither_params.method, LIST(
              {"blue",         PL_DITHER_BLUE_NOISE},
              {"ordered_lut",  PL_DITHER_ORDERED_LUT},
              {"ordered",      PL_DITHER_ORDERED_FIXED},
-             {"white",        PL_DITHER_WHITE_NOISE}),
+             {"white",        PL_DITHER_WHITE_NOISE})),
     OPT_INT("dither_lut_size", "Dither LUT size", dither_params.lut_size, .min = 1, .max = 8),
     OPT_BOOL("dither_temporal", "Temporal dithering", dither_params.temporal),
 
     // ICC
     OPT_ENABLE_PARAMS("icc", "Enable ICC settings", icc_params),
-    OPT_PRESET("icc_preset", "ICC preset", icc_params,
-               {"default", &pl_icc_default_params}),
-    OPT_ENUM("icc_intent", "ICC rendering intent", icc_params.intent,
+    OPT_PRESET("icc_preset", "ICC preset", icc_params, LIST(
+               {"default", &pl_icc_default_params})),
+    OPT_ENUM("icc_intent", "ICC rendering intent", icc_params.intent, LIST(
              {"auto",       PL_INTENT_AUTO},
              {"perceptual", PL_INTENT_PERCEPTUAL},
              {"relative",   PL_INTENT_RELATIVE_COLORIMETRIC},
              {"saturation", PL_INTENT_SATURATION},
-             {"absolute",   PL_INTENT_ABSOLUTE_COLORIMETRIC}),
+             {"absolute",   PL_INTENT_ABSOLUTE_COLORIMETRIC})),
     OPT_INT("icc_size_r", "ICC 3DLUT size R", icc_params.size_r, .max = 256),
     OPT_INT("icc_size_g", "ICC 3DLUT size G", icc_params.size_g, .max = 256),
     OPT_INT("icc_size_b", "ICC 3DLUT size G", icc_params.size_b, .max = 256),
@@ -1047,7 +1045,7 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Cone distortion
     OPT_ENABLE_PARAMS("cone", "Enable cone distortion", cone_params),
-    OPT_PRESET("cone_preset", "Cone distortion preset", cone_params,
+    OPT_PRESET("cone_preset", "Cone distortion preset", cone_params, LIST(
                {"normal",        &pl_vision_normal},
                {"protanomaly",   &pl_vision_protanomaly},
                {"protanopia",    &pl_vision_protanopia},
@@ -1056,8 +1054,8 @@ const struct pl_opt_t pl_option_list[] = {
                {"tritanomaly",   &pl_vision_tritanomaly},
                {"tritanopia",    &pl_vision_tritanopia},
                {"monochromacy",  &pl_vision_monochromacy},
-               {"achromatopsia", &pl_vision_achromatopsia}),
-    OPT_ENUM("cones", "Cone selection", cone_params.cones,
+               {"achromatopsia", &pl_vision_achromatopsia})),
+    OPT_ENUM("cones", "Cone selection", cone_params.cones, LIST(
              {"none", PL_CONE_NONE},
              {"l",    PL_CONE_L},
              {"m",    PL_CONE_M},
@@ -1065,42 +1063,38 @@ const struct pl_opt_t pl_option_list[] = {
              {"lm",   PL_CONE_LM},
              {"ms",   PL_CONE_MS},
              {"ls",   PL_CONE_LS},
-             {"lms",  PL_CONE_LMS}),
+             {"lms",  PL_CONE_LMS})),
     OPT_FLOAT("cone_strength", "Cone distortion gain", cone_params.strength),
 
     // Blending
-#define BLEND_VALUES                             \
+#define BLEND_VALUES LIST(                       \
         {"zero",            PL_BLEND_ZERO},      \
         {"one",             PL_BLEND_ONE},       \
         {"alpha",           PL_BLEND_SRC_ALPHA}, \
-        {"one_minus_alpha", PL_BLEND_ONE_MINUS_SRC_ALPHA}
+        {"one_minus_alpha", PL_BLEND_ONE_MINUS_SRC_ALPHA})
 
     OPT_ENABLE_PARAMS("blend", "Enable output blending", blend_params),
-    OPT_PRESET("blend_preset", "Output blending preset", blend_params,
-               {"alpha_overlay", &pl_alpha_overlay}),
-    OPT_ENUM("blend_src_rgb", "Source RGB blend mode", blend_params.src_rgb,
-             BLEND_VALUES),
-    OPT_ENUM("blend_src_alpha", "Source alpha blend mode", blend_params.src_alpha,
-             BLEND_VALUES),
-    OPT_ENUM("blend_dst_rgb", "Target RGB blend mode", blend_params.dst_rgb,
-             BLEND_VALUES),
-    OPT_ENUM("blend_dst_alpha", "Target alpha blend mode", blend_params.dst_alpha,
-             BLEND_VALUES),
+    OPT_PRESET("blend_preset", "Output blending preset", blend_params, LIST(
+               {"alpha_overlay", &pl_alpha_overlay})),
+    OPT_ENUM("blend_src_rgb", "Source RGB blend mode", blend_params.src_rgb, BLEND_VALUES),
+    OPT_ENUM("blend_src_alpha", "Source alpha blend mode", blend_params.src_alpha, BLEND_VALUES),
+    OPT_ENUM("blend_dst_rgb", "Target RGB blend mode", blend_params.dst_rgb, BLEND_VALUES),
+    OPT_ENUM("blend_dst_alpha", "Target alpha blend mode", blend_params.dst_alpha, BLEND_VALUES),
 
     // Deinterlacing
     OPT_ENABLE_PARAMS("deinterlace", "Enable deinterlacing", deinterlace_params),
-    OPT_PRESET("deinterlace_preset", "Deinterlacing preset", deinterlace_params,
-               {"default", &pl_deinterlace_default_params}),
-    OPT_ENUM("deinterlace_algo", "Deinterlacing algorithm", deinterlace_params.algo,
+    OPT_PRESET("deinterlace_preset", "Deinterlacing preset", deinterlace_params, LIST(
+               {"default", &pl_deinterlace_default_params})),
+    OPT_ENUM("deinterlace_algo", "Deinterlacing algorithm", deinterlace_params.algo, LIST(
              {"weave", PL_DEINTERLACE_WEAVE},
              {"bob",   PL_DEINTERLACE_BOB},
-             {"yadif", PL_DEINTERLACE_YADIF}),
+             {"yadif", PL_DEINTERLACE_YADIF})),
     OPT_BOOL("deinterlace_skip_spatial", "Skip spatial interlacing check", deinterlace_params.skip_spatial_check),
 
     // Distortion
     OPT_ENABLE_PARAMS("distort", "Enable distortion", distort_params),
-    OPT_PRESET("distort_preset", "Distortion preset", distort_params,
-               {"default", &pl_distort_default_params}),
+    OPT_PRESET("distort_preset", "Distortion preset", distort_params, LIST(
+               {"default", &pl_distort_default_params})),
     OPT_FLOAT("distort_scale_x", "Distortion X scale", distort_params.transform.mat.m[0][0]),
     OPT_FLOAT("distort_scale_y", "Distortion Y scale", distort_params.transform.mat.m[1][1]),
     OPT_FLOAT("distort_shear_x", "Distortion X shear", distort_params.transform.mat.m[0][1]),
@@ -1110,23 +1104,23 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_BOOL("distort_unscaled", "Distortion unscaled", distort_params.unscaled),
     OPT_BOOL("distort_constrain", "Constrain distortion", distort_params.constrain),
     OPT_BOOL("distort_bicubic", "Distortion bicubic interpolation", distort_params.bicubic),
-    OPT_ENUM("distort_address_mode", "Distortion texture address mode", distort_params.address_mode,
+    OPT_ENUM("distort_address_mode", "Distortion texture address mode", distort_params.address_mode, LIST(
              {"clamp",  PL_TEX_ADDRESS_CLAMP},
              {"repeat", PL_TEX_ADDRESS_REPEAT},
-             {"mirror", PL_TEX_ADDRESS_MIRROR}),
-    OPT_ENUM("distort_alpha_mode", "Distortion alpha blending mode", distort_params.alpha_mode,
+             {"mirror", PL_TEX_ADDRESS_MIRROR})),
+    OPT_ENUM("distort_alpha_mode", "Distortion alpha blending mode", distort_params.alpha_mode, LIST(
              {"none",          PL_ALPHA_UNKNOWN},
              {"independent",   PL_ALPHA_INDEPENDENT},
-             {"premultiplied", PL_ALPHA_PREMULTIPLIED}),
+             {"premultiplied", PL_ALPHA_PREMULTIPLIED})),
 
     // Misc renderer settings
     OPT_NAMED("error_diffusion", "Error diffusion kernel", params.error_diffusion,
               pl_error_diffusion_kernels),
-    OPT_ENUM("lut_type", "Color mapping LUT type", params.lut_type,
+    OPT_ENUM("lut_type", "Color mapping LUT type", params.lut_type, LIST(
              {"unknown",    PL_LUT_UNKNOWN},
              {"native",     PL_LUT_NATIVE},
              {"normalized", PL_LUT_NORMALIZED},
-             {"conversion", PL_LUT_CONVERSION}),
+             {"conversion", PL_LUT_CONVERSION})),
     OPT_FLOAT("background_r", "Background color R", params.background_color[0], .max = 1.0),
     OPT_FLOAT("background_g", "Background color G", params.background_color[1], .max = 1.0),
     OPT_FLOAT("background_b", "Background color B", params.background_color[2], .max = 1.0),
