@@ -1799,7 +1799,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                     av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
                     p->target_icc.data = iccbuf;
                     p->target_icc.len = size;
-                    p->target_icc.signature++;
+                    pl_icc_profile_compute_signature(&p->target_icc);
                     free(p->target_icc_name);
                     p->target_icc_name = strdup(PL_BASENAME((char *) dropped_file));
                 }
@@ -1827,9 +1827,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
                 free(p->target_icc_name);
                 p->target_icc_name = NULL;
-                p->target_icc = (struct pl_icc_profile) {
-                    .signature = p->target_icc.signature + 1,
-                };
+                p->target_icc = (struct pl_icc_profile) {0};
             }
 
             nk_tree_pop(nk);
