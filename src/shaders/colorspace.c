@@ -1647,16 +1647,15 @@ static void fill_gamut_lut(void *data, const struct sh_lut_params *params)
     void *tmp = pl_alloc(NULL, lut_size * sizeof(float) * lut_params->lut_stride);
     pl_gamut_map_generate(tmp, lut_params);
 
-    // Convert to 16-bit signed integer for GPU texture
+    // Convert to 16-bit unsigned integer for GPU texture
     const float *in = tmp;
-    int16_t *out = data;
+    uint16_t *out = data;
     pl_assert(lut_params->lut_stride == 3);
     pl_assert(params->comps == 4);
     for (int i = 0; i < lut_size; i++) {
-        const int16_t range = INT16_MAX - 1;
-        out[0] = roundf(in[0] * range);
-        out[1] = roundf(in[1] * range);
-        out[2] = roundf(in[2] * range);
+        out[0] = roundf(in[0] * UINT16_MAX);
+        out[1] = roundf((in[1] + 0.5f) * UINT16_MAX);
+        out[2] = roundf((in[2] + 0.5f) * UINT16_MAX);
         in  += 3;
         out += 4;
     }
@@ -1807,7 +1806,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             gamut.function = &pl_gamut_map_saturation;
     }
 
-    pl_fmt gamut_fmt = pl_find_fmt(SH_GPU(sh), PL_FMT_SNORM, 4, 16, 16, PL_FMT_CAP_LINEAR);
+    pl_fmt gamut_fmt = pl_find_fmt(SH_GPU(sh), PL_FMT_UNORM, 4, 16, 16, PL_FMT_CAP_LINEAR);
     if (!gamut_fmt) {
         gamut.function = &pl_gamut_map_saturation;
         can_fast = true;
@@ -2014,7 +2013,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
              "idx.x = "$" * ipt.x + "$";            \n"
              "idx.y = 2.0 * length(ipt.yz);         \n"
              "idx.z = %f * atan(ipt.z, ipt.y) + 0.5;\n"
-             "ipt = "$"(idx).xyz;                   \n",
+             "ipt = "$"(idx).xyz;                   \n"
+             "ipt.yz -= vec2(0.5);                  \n",
              SH_FLOAT(1.0f / lut_range),
              SH_FLOAT(-gamut.min_luma / lut_range),
              0.5f / M_PI, lut);
