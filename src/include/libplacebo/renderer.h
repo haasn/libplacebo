@@ -197,6 +197,9 @@ struct pl_render_params {
 
     // Configures the settings used to handle ICC profiles, if required. If
     // NULL, defaults to `&pl_icc_default_params`.
+    //
+    // Note: This only affects profiles opened from `pl_frame.profile`, and
+    // has no effect on user-managed ICC profiles provided via `pl_frame.icc`.
     const struct pl_icc_params *icc_params;
 
     // Configures the settings used to simulate color blindness, if desired.
@@ -568,6 +571,11 @@ struct pl_frame {
     struct pl_color_space color;
 
     // Optional ICC profile associated with this frame.
+    pl_icc_object icc;
+
+    // Alternative to `icc`, this can be used in cases where allocating and
+    // tracking an pl_icc_object externally may be inconvenient. The resulting
+    // profile will be managed internally by the pl_renderer.
     struct pl_icc_profile profile;
 
     // Optional LUT associated with this frame.

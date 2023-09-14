@@ -48,8 +48,7 @@ struct osd_vertex {
 };
 
 struct icc_state {
-    pl_icc_object obj;
-    pl_shader_obj lut;
+    pl_icc_object icc;
     uint64_t error; // set to profile signature on failure
 };
 
@@ -69,12 +68,12 @@ struct pl_renderer_t {
     pl_shader_obj dither_state;
     pl_shader_obj grain_state[4];
     pl_shader_obj lut_state[3];
+    pl_shader_obj icc_state[2];
     PL_ARRAY(pl_tex) fbos;
     struct sampler sampler_main;
     struct sampler sampler_contrast;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
-    struct icc_state icc[2];
 
     // Temporary storage for vertex/index data
     PL_ARRAY(struct osd_vertex) osd_vertices;
@@ -87,6 +86,9 @@ struct pl_renderer_t {
 
     // For debugging / logging purposes
     int prev_dither;
+
+    // For backwards compatibility
+    struct icc_state icc_fallback[2];
 };
 
 enum {
@@ -94,6 +96,12 @@ enum {
     LUT_IMAGE,
     LUT_TARGET,
     LUT_PARAMS,
+};
+
+enum {
+    // Index into `icc_state`
+    ICC_IMAGE,
+    ICC_TARGET
 };
 
 pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu)
@@ -151,6 +159,8 @@ void pl_renderer_destroy(pl_renderer *p_rr)
         pl_shader_obj_destroy(&rr->lut_state[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_state); i++)
         pl_shader_obj_destroy(&rr->grain_state[i]);
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->icc_state); i++)
+        pl_shader_obj_destroy(&rr->icc_state[i]);
 
     // Free all samplers
     sampler_destroy(rr, &rr->sampler_main);
@@ -160,11 +170,9 @@ void pl_renderer_destroy(pl_renderer *p_rr)
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers_dst); i++)
         sampler_destroy(rr, &rr->samplers_dst[i]);
 
-    // Close all ICC profiles
-    for (int i = 0; i < PL_ARRAY_SIZE(rr->icc); i++) {
-        pl_shader_obj_destroy(&rr->icc[i].lut);
-        pl_icc_close(&rr->icc[i].obj);
-    }
+    // Free fallback ICC profiles
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->icc_fallback); i++)
+        pl_icc_close(&rr->icc_fallback[i].icc);
 
     pl_dispatch_destroy(&rr->dp);
     pl_free_ptr(p_rr);
@@ -350,9 +358,6 @@ struct pass_state {
 
     // Cached copies of the `prev` / `next` frames, for deinterlacing.
     struct pl_frame prev, next;
-
-    // Currently active (to-be-applied) ICC profiles for this rendering pass.
-    struct icc_state *src_icc, *dst_icc;
 
     // Some extra plane metadata, inferred from `planes`
     enum plane_type src_type[4];
@@ -942,11 +947,11 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         sh->output = PL_SHADER_SIG_COLOR;
         pl_shader_decode_color(sh, &ol.repr, NULL);
-        if (pass->dst_icc)
+        if (target->icc)
             color.transfer = PL_COLOR_TRC_LINEAR;
         pl_shader_color_map_ex(sh, &osd_params, pl_color_map_args(ol.color, color));
-        if (pass->dst_icc)
-            pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
+        if (target->icc)
+            pl_icc_encode(sh, target->icc, &rr->icc_state[ICC_TARGET]);
 
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
@@ -1864,9 +1869,9 @@ static bool pass_read_image(struct pass_state *pass)
 
     // A main PL_LUT_CONVERSION LUT overrides ICC profiles
     bool main_lut_override = params->lut && params->lut_type == PL_LUT_CONVERSION;
-    if (pass->src_icc && !main_lut_override) {
+    if (image->icc && !main_lut_override) {
         pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
-        pl_icc_decode(sh, pass->src_icc->obj, &pass->src_icc->lut, &pass->img.color);
+        pl_icc_decode(sh, image->icc, &rr->icc_state[ICC_IMAGE], &pass->img.color);
     }
 
     // Pre-multiply alpha channel before the rest of the pipeline, to avoid
@@ -2163,7 +2168,7 @@ static void pass_convert_colors(struct pass_state *pass)
 
     if (need_conversion) {
         struct pl_color_space target_csp = target->color;
-        if (pass->dst_icc)
+        if (target->icc)
             target_csp.transfer = PL_COLOR_TRC_LINEAR;
 
         if (pass->need_peak_fbo && !img_tex(pass, img))
@@ -2182,8 +2187,8 @@ static void pass_convert_colors(struct pass_state *pass)
             .feature_map   = feature_map,
         ));
 
-        if (pass->dst_icc)
-            pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
+        if (target->icc)
+            pl_icc_encode(sh, target->icc, &rr->icc_state[ICC_TARGET]);
     }
 
     enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
@@ -2846,31 +2851,26 @@ static void pass_uninit(struct pass_state *pass)
     pl_free_ptr(&pass->tmp);
 }
 
-static struct icc_state *update_icc(struct pass_state *pass,
-                                    struct icc_state *state,
-                                    struct pl_frame *frame)
+static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
+                         struct icc_state *fallback)
 {
     pl_renderer rr = pass->rr;
-    const struct pl_render_params *params = pass->params;
-    if (!frame || !frame->profile.data || params->ignore_icc_profiles)
-        return NULL;
+    if (!frame || frame->icc || !frame->profile.data)
+        return;
 
-    // Don't re-attempt already failed profiles
-    if (state->error && state->error == frame->profile.signature) {
-        pl_assert(!state->obj);
-        return NULL;
+    // Don't re-attempt opening already failed profiles
+    if (fallback->error && fallback->error == frame->profile.signature) {
+        pl_assert(!fallback->icc);
+        return;
     }
 
-    if (!pl_icc_update(rr->log, &state->obj, &frame->profile, params->icc_params)) {
+    const struct pl_icc_params *params = pass->params->icc_params;
+    if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, params)) {
+        frame->icc = fallback->icc;
+    } else {
         PL_WARN(rr, "Failed opening ICC profile... ignoring");
-        state->error = frame->profile.signature;
-        return NULL;
+        fallback->error = frame->profile.signature;
     }
-
-    frame->color.primaries = state->obj->containing_primaries;
-    frame->color.hdr = state->obj->csp.hdr;
-    state->error = 0;
-    return state;
 }
 
 static bool pass_init(struct pass_state *pass, bool acquire_image)
@@ -2911,10 +2911,24 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
     fix_refs_and_rects(pass);
     find_fbo_format(pass);
 
-    // Update ICC profiles, do this before inferring color space parameters
-    // because the ICC profile may override tagged values
-    pass->src_icc = update_icc(pass, &rr->icc[0], image);
-    pass->dst_icc = update_icc(pass, &rr->icc[1], target);
+    if (params->ignore_icc_profiles) {
+        image->icc = target->icc = NULL;
+    } else {
+        // Fallback for older ICC profile API
+        icc_fallback(pass, image,  &rr->icc_fallback[ICC_IMAGE]);
+        icc_fallback(pass, target, &rr->icc_fallback[ICC_TARGET]);
+
+        // Force colorspace metadata to ICC profile values, if present
+        if (image && image->icc) {
+            image->color.primaries = image->icc->containing_primaries;
+            image->color.hdr = image->icc->csp.hdr;
+        }
+
+        if (target->icc) {
+            target->color.primaries = target->icc->containing_primaries;
+            target->color.hdr = target->icc->csp.hdr;
+        }
+    }
 
     // Infer the target color space info based on the image's
     if (image) {
