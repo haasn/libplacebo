@@ -1588,6 +1588,7 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
          "idx.y = 2.0 * length(ipt.yz);                         \n"
          "idx.z = %f * atan(ipt.z, ipt.y) + 0.5;                \n"
          "vec3 mapped = "$"(idx).xyz;                           \n"
+         "mapped.yz -= vec2(0.5);                               \n"
          "float mappedhue = atan(mapped.z, mapped.y);           \n"
          "float mappedchroma = length(mapped.yz);               \n"
          "ipt = mapped;                                         \n"
