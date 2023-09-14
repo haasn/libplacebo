@@ -83,8 +83,6 @@ struct plplay {
 
     // settings / ui state
     pl_options opts;
-    struct pl_icc_profile target_icc;
-    char *target_icc_name;
     pl_rotation target_rot;
     int target_zoom;
     bool colorspace_hint;
@@ -100,9 +98,14 @@ struct plplay {
     enum pl_color_transfer force_trc;
     struct pl_hdr_metadata force_hdr;
     bool force_hdr_enable;
-    bool use_icc_luma;
     bool fps_override;
     float fps;
+
+    // ICC profile
+    pl_icc_object icc;
+    char *icc_name;
+    bool use_icc_luma;
+    bool force_bpc;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -170,8 +173,8 @@ static void uninit(struct plplay *p)
 
     free(p->shader_hooks);
     free(p->shader_paths);
-    free(p->target_icc_name);
-    av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
+    free(p->icc_name);
+    pl_icc_close(&p->icc);
 
     if (p->cache) {
         FILE *file = fopen(p->cache_file, "wb");
@@ -500,20 +503,25 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     update_settings(p, &target);
 
     if (p->target_override) {
-        target.profile = p->target_icc;
         target.repr = p->force_repr;
         pl_color_repr_merge(&target.repr, &frame->color_repr);
         apply_csp_overrides(p, &target.color);
 
+        // Update ICC profile parameters dynamically
+        float target_luma = 0.0f;
         if (p->use_icc_luma) {
-            // Always use detected luminance
-            opts->icc_params.max_luma = 0;
-        } else {
-            // Use HDR levels if available, fall back to default luminance
-            opts->icc_params.max_luma = target.color.hdr.max_luma;
-            if (!opts->icc_params.max_luma)
-                opts->icc_params.max_luma = pl_icc_default_params.max_luma;
+            pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+                .metadata = PL_HDR_METADATA_HDR10, // use only static HDR nits
+                .scaling  = PL_HDR_NITS,
+                .color    = &target.color,
+                .out_max  = &target_luma,
+            ));
         }
+        pl_icc_update(p->log, &p->icc, NULL, pl_icc_params(
+            .max_luma  = target_luma,
+            .force_bpc = p->force_bpc,
+        ));
+        target.icc = p->icc;
     }
 
     assert(mix->num_frames);
@@ -1609,7 +1617,6 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Output color space", NK_MINIMIZED)) {
-            struct pl_icc_params *iccpar = &opts->icc_params;
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Enable", &p->target_override);
             bool reset = nk_button_label(nk, "Reset settings");
@@ -1789,28 +1796,31 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop ICC profile here...") && dropped_file) {
-                uint8_t *iccbuf;
-                size_t size;
-                int ret = av_file_map(dropped_file, &iccbuf, &size, 0, NULL);
+                struct pl_icc_profile profile;
+                int ret = av_file_map(dropped_file, (uint8_t **) &profile.data,
+                                      &profile.len, 0, NULL);
                 if (ret < 0) {
                     fprintf(stderr, "Failed opening '%s': %s\n", dropped_file,
                             av_err2str(ret));
                 } else {
-                    av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
-                    p->target_icc.data = iccbuf;
-                    p->target_icc.len = size;
-                    pl_icc_profile_compute_signature(&p->target_icc);
-                    free(p->target_icc_name);
-                    p->target_icc_name = strdup(PL_BASENAME((char *) dropped_file));
+                    free(p->icc_name);
+                    pl_icc_profile_compute_signature(&profile);
+                    pl_icc_update(p->log, &p->icc, &profile, pl_icc_params(
+                        .force_bpc = p->force_bpc,
+                        .max_luma  = p->use_icc_luma ? 0 : PL_COLOR_SDR_WHITE,
+                    ));
+                    av_file_unmap((void *) profile.data, profile.len);
+                    if (p->icc)
+                        p->icc_name = strdup(PL_BASENAME((char *) dropped_file));
                 }
             }
 
-            if (p->target_icc.len) {
+            if (p->icc) {
                 nk_layout_row_dynamic(nk, 24, 2);
                 nk_labelf(nk, NK_TEXT_LEFT, "Loaded: %s",
-                          p->target_icc_name ? p->target_icc_name : "(unknown)");
+                          p->icc_name ? p->icc_name : "(unknown)");
                 reset_icc |= nk_button_label(nk, "Reset ICC");
-                nk_checkbox_label(nk, "Force BPC", &iccpar->force_bpc);
+                nk_checkbox_label(nk, "Force BPC", &p->force_bpc);
                 nk_checkbox_label(nk, "Use detected luminance", &p->use_icc_luma);
             }
 
@@ -1823,11 +1833,10 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 p->force_hdr_enable = false;
             }
 
-            if (reset_icc && p->target_icc.len) {
-                av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
-                free(p->target_icc_name);
-                p->target_icc_name = NULL;
-                p->target_icc = (struct pl_icc_profile) {0};
+            if (reset_icc && p->icc) {
+                pl_icc_close(&p->icc);
+                free(p->icc_name);
+                p->icc_name = NULL;
             }
 
             nk_tree_pop(nk);
