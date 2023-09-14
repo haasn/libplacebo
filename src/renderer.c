@@ -48,11 +48,9 @@ struct osd_vertex {
 };
 
 struct icc_state {
-    struct pl_icc_params params;
-    uint64_t signature;
     pl_icc_object obj;
     pl_shader_obj lut;
-    bool error;
+    uint64_t error; // set to profile signature on failure
 };
 
 struct pl_renderer_t {
@@ -2848,17 +2846,6 @@ static void pass_uninit(struct pass_state *pass)
     pl_free_ptr(&pass->tmp);
 }
 
-static bool icc_params_compat(const struct pl_icc_params *a,
-                              const struct pl_icc_params *b)
-{
-    return a->intent    == b->intent    &&
-           a->size_r    == b->size_r    &&
-           a->size_g    == b->size_g    &&
-           a->size_b    == b->size_b    &&
-           a->max_luma  == b->max_luma  &&
-           a->force_bpc == b->force_bpc;
-}
-
 static struct icc_state *update_icc(struct pass_state *pass,
                                     struct icc_state *state,
                                     struct pl_frame *frame)
@@ -2868,29 +2855,21 @@ static struct icc_state *update_icc(struct pass_state *pass,
     if (!frame || !frame->profile.data || params->ignore_icc_profiles)
         return NULL;
 
-    const struct pl_icc_params *par;
-    par = PL_DEF(pass->params->icc_params, &pl_icc_default_params);
-
-    if (frame->profile.signature == state->signature) {
-        if (state->obj && icc_params_compat(par, &state->params))
-            goto done;
-        if (state->error)
-            return NULL; // don't re-attempt already failed profiles
-    }
-
-    pl_icc_close(&state->obj);
-    state->params = *par;
-    state->signature = frame->profile.signature;
-    state->obj = pl_icc_open(rr->log, &frame->profile, par);
-    state->error = !state->obj;
-    if (state->error) {
-        PL_WARN(rr, "Failed opening ICC profile... ignoring");
+    // Don't re-attempt already failed profiles
+    if (state->error && state->error == frame->profile.signature) {
+        pl_assert(!state->obj);
         return NULL;
     }
 
-done:
+    if (!pl_icc_update(rr->log, &state->obj, &frame->profile, params->icc_params)) {
+        PL_WARN(rr, "Failed opening ICC profile... ignoring");
+        state->error = frame->profile.signature;
+        return NULL;
+    }
+
     frame->color.primaries = state->obj->containing_primaries;
     frame->color.hdr = state->obj->csp.hdr;
+    state->error = 0;
     return state;
 }
 
