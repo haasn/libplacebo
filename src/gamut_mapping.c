@@ -899,9 +899,9 @@ static void highlight(float *lut, const struct pl_gamut_map_params *params)
 
     FOREACH_LUT(lut, ipt) {
         if (!ingamut(ipt, dst)) {
-            ipt.I += 0.1f;
-            ipt.P *= -1.2f;
-            ipt.T *= -1.2f;
+            ipt.I = fminf(ipt.I + 0.1f, 1.0f);
+            ipt.P = fclampf(-1.2f * ipt.P, -0.5f, 0.5f);
+            ipt.T = fclampf(-1.2f * ipt.T, -0.5f, 0.5f);
         }
     }
 }
