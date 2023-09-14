@@ -1807,6 +1807,12 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             gamut.function = &pl_gamut_map_saturation;
     }
 
+    pl_fmt gamut_fmt = pl_find_fmt(SH_GPU(sh), PL_FMT_SNORM, 4, 16, 16, PL_FMT_CAP_LINEAR);
+    if (!gamut_fmt) {
+        gamut.function = &pl_gamut_map_saturation;
+        can_fast = true;
+    }
+
     bool need_tone_map = !pl_tone_map_params_noop(&tone);
     bool need_gamut_map = !pl_gamut_map_params_noop(&gamut);
 
@@ -1986,8 +1992,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             .object     = &obj->gamut.lut,
             .var_type   = PL_VAR_FLOAT,
             .lut_type   = SH_LUT_TEXTURE,
-            .fmt        = pl_find_fmt(SH_GPU(sh), PL_FMT_SNORM, 4,
-                                      16, 16, PL_FMT_CAP_LINEAR),
+            .fmt        = gamut_fmt,
             .method     = params->lut3d_tricubic ? SH_LUT_CUBIC : SH_LUT_LINEAR,
             .width      = gamut.lut_size_I,
             .height     = gamut.lut_size_C,
