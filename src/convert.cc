@@ -31,10 +31,15 @@ static int ccStrPrintDouble( char *str, int bufsize, int decimals, double value 
 namespace {
 
 template <typename T>
-concept has_std_to_chars = requires(char *begin, char *end, T &n)
-{
-    std::to_chars(begin, end, n);
+struct has_std_to_chars_impl {
+    template <typename CT>
+    static auto _(CT s) -> decltype(std::to_chars(s, s, std::declval<T>()), std::true_type{});
+    static auto _(...) -> std::false_type;
+    static constexpr bool value = decltype(_((char *){}))::value;
 };
+
+template <typename T>
+constexpr bool has_std_to_chars = has_std_to_chars_impl<T>::value;
 
 template <typename T, typename... Args>
 static inline int to_chars(char *buf, size_t len, T n, Args ...args)
@@ -53,10 +58,15 @@ static inline int to_chars(char *buf, size_t len, T n, Args ...args)
 }
 
 template <typename T>
-concept has_std_from_chars = requires(const char *begin, const char *end, T &n)
-{
-    std::from_chars(begin, end, n);
+struct has_std_from_chars_impl {
+    template <typename CT>
+    static auto _(CT s) -> decltype(std::from_chars(s, s, std::declval<T&>()), std::true_type{});
+    static auto _(...) -> std::false_type;
+    static constexpr bool value = decltype(_((const char *){}))::value;
 };
+
+template <typename T>
+constexpr bool has_std_from_chars = has_std_from_chars_impl<T>::value;
 
 template <typename T, typename... Args>
 static inline bool from_chars(pl_str str, T &n, Args ...args)
