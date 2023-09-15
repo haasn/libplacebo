@@ -3096,6 +3096,39 @@ error:
     return false;
 }
 
+const struct pl_frame *pl_frame_mix_current(const struct pl_frame_mix *mix)
+{
+    const struct pl_frame *cur = NULL;
+    for (int i = 0; i < mix->num_frames; i++) {
+        if (mix->timestamps[i] > 0.0f)
+            break;
+        cur = mix->frames[i];
+    }
+
+    return cur;
+}
+
+const struct pl_frame *pl_frame_mix_nearest(const struct pl_frame_mix *mix)
+{
+    if (!mix->num_frames)
+        return NULL;
+
+    const struct pl_frame *best = mix->frames[0];
+    float best_dist = fabsf(mix->timestamps[0]);
+    for (int i = 1; i < mix->num_frames; i++) {
+        float dist = fabsf(mix->timestamps[i]);
+        if (dist < best_dist) {
+            best = mix->frames[i];
+            best_dist = dist;
+            continue;
+        } else {
+            break;
+        }
+    }
+
+    return best;
+}
+
 struct params_info {
     uint64_t hash;
     bool trivial;
@@ -3211,20 +3244,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     for (int i = 0; i < images->num_frames - 1; i++)
         require(images->timestamps[i] <= images->timestamps[i+1]);
 
-    // As the canonical reference, find the nearest neighbour frame
-    const struct pl_frame *refimg = images->frames[0];
-    float best = fabsf(images->timestamps[0]);
-    for (int i = 1; i < images->num_frames; i++) {
-        float dist = fabsf(images->timestamps[i]);
-        if (dist < best) {
-            refimg = images->frames[i];
-            best = dist;
-            continue;
-        } else {
-            break;
-        }
-    }
-
+    const struct pl_frame *refimg = pl_frame_mix_nearest(images);
     struct pass_state pass = {
         .rr = rr,
         .params = params,

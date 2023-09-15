@@ -781,6 +781,12 @@ static inline float pl_frame_mix_radius(const struct pl_render_params *params)
     return params->frame_mixer->kernel->radius;
 }
 
+// Find closest frame to current PTS by zero-order hold semantics, or NULL.
+PL_API const struct pl_frame *pl_frame_mix_current(const struct pl_frame_mix *mix);
+
+// Find closest frame to current PTS by nearest neighbour semantics, or NULL.
+PL_API const struct pl_frame *pl_frame_mix_nearest(const struct pl_frame_mix *mix);
+
 // Render a mixture of images to the target using the given parameters. This
 // functions much like a generalization of `pl_render_image`, for when the API
 // user has more control over the frame queue / vsync loop, and can provide a
