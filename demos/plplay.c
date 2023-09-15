@@ -1957,7 +1957,6 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
             nk_checkbox_label(nk, "Force low-bit depth FBOs", &par->force_low_bit_depth_fbos);
             nk_checkbox_label(nk, "Disable constant hard-coding", &par->dynamic_constants);
-            nk_checkbox_label(nk, "Ignore ICC profiles", &par->ignore_icc_profiles);
 
             if (nk_check_label(nk, "Ignore Dolby Vision metadata", p->ignore_dovi) != p->ignore_dovi) {
                 // Flush the renderer cache on changes, since this can

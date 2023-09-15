@@ -314,9 +314,6 @@ struct pl_render_params {
     // Forces correction of subpixel offsets (using the configured `upscaler`).
     bool correct_subpixel_offsets;
 
-    // Ignore ICC profiles attached to either `image` or `target`.
-    bool ignore_icc_profiles;
-
     // Forces the use of dithering, even when rendering to 16-bit FBOs. This is
     // generally pretty pointless because most 16-bit FBOs have high enough
     // depth that rounding errors are below the human perception threshold,
@@ -355,6 +352,7 @@ struct pl_render_params {
     // --- Deprecated/removed fields
     bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
     const struct pl_icc_params *icc_params PL_DEPRECATED; // use pl_frame.icc
+    bool ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest

@@ -1144,7 +1144,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_BOOL("disable_linear_scaling", "Disable linear scaling", params.disable_linear_scaling),
     OPT_BOOL("disable_builtin_scalers", "Disable built-in scalers", params.disable_builtin_scalers),
     OPT_BOOL("correct_subpixel_offset", "Correct subpixel offsets", params.correct_subpixel_offsets),
-    OPT_BOOL("ignore_icc_profiles", "Ignore ICC profiles", params.ignore_icc_profiles),
+    OPT_BOOL("ignore_icc_profiles", "Ignore ICC profiles", params.ignore_icc_profiles, .deprecated = true),
     OPT_BOOL("force_dither", "Force-enable dithering", params.force_dither),
     OPT_BOOL("disable_dither_gamma_correction", "Disable gamma-correct dithering", params.disable_dither_gamma_correction),
     OPT_BOOL("disable_fbos", "Disable FBOs", params.disable_fbos),

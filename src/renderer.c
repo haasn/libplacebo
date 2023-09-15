@@ -2910,23 +2910,19 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
     fix_refs_and_rects(pass);
     find_fbo_format(pass);
 
-    if (params->ignore_icc_profiles) {
-        image->icc = target->icc = NULL;
-    } else {
-        // Fallback for older ICC profile API
-        icc_fallback(pass, image,  &rr->icc_fallback[ICC_IMAGE]);
-        icc_fallback(pass, target, &rr->icc_fallback[ICC_TARGET]);
+    // Fallback for older ICC profile API
+    icc_fallback(pass, image,  &rr->icc_fallback[ICC_IMAGE]);
+    icc_fallback(pass, target, &rr->icc_fallback[ICC_TARGET]);
 
-        // Force colorspace metadata to ICC profile values, if present
-        if (image && image->icc) {
-            image->color.primaries = image->icc->containing_primaries;
-            image->color.hdr = image->icc->csp.hdr;
-        }
+    // Force colorspace metadata to ICC profile values, if present
+    if (image && image->icc) {
+        image->color.primaries = image->icc->containing_primaries;
+        image->color.hdr = image->icc->csp.hdr;
+    }
 
-        if (target->icc) {
-            target->color.primaries = target->icc->containing_primaries;
-            target->color.hdr = target->icc->csp.hdr;
-        }
+    if (target->icc) {
+        target->color.primaries = target->icc->containing_primaries;
+        target->color.hdr = target->icc->csp.hdr;
     }
 
     // Infer the target color space info based on the image's
