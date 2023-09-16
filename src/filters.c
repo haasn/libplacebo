@@ -475,14 +475,6 @@ const struct pl_filter_function pl_filter_function_bcspline = {
     .params  = {0.5, 0.5},
 };
 
-static const struct pl_filter_function filter_function_hermite = {
-    .name    = "hermite", // alias
-    .tunable = {true, true},
-    .weight  = bcspline,
-    .radius  = 2.0,
-    .params  = {0.5, 0.5},
-};
-
 const struct pl_filter_function pl_filter_function_catmull_rom = {
     .tunable = {true, true},
     .weight  = bcspline,
@@ -613,7 +605,6 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_jinc,
     &pl_filter_function_sphinx,
     &pl_filter_function_bcspline,
-    &filter_function_hermite, // alias
     &pl_filter_function_catmull_rom,
     &pl_filter_function_mitchell,
     &pl_filter_function_robidoux,
@@ -961,7 +952,6 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"jinc",            &pl_filter_function_jinc},
     {"sphinx",          &pl_filter_function_sphinx},
     {"bcspline",        &pl_filter_function_bcspline},
-    {"hermite",         &filter_function_hermite}, // alias
     {"catmull_rom",     &pl_filter_function_catmull_rom},
     {"mitchell",        &pl_filter_function_mitchell},
     {"robidoux",        &pl_filter_function_robidoux},
