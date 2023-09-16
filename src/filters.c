@@ -326,7 +326,8 @@ static double bessel_i0(double x)
 static double kaiser(const struct pl_filter_ctx *f, double x)
 {
     double alpha = fmax(f->params[0], 0.0);
-    return bessel_i0(alpha * sqrt(1.0 - x * x)) / alpha;
+    double scale = bessel_i0(alpha);
+    return bessel_i0(alpha * sqrt(1.0 - x * x)) / scale;
 }
 
 const struct pl_filter_function pl_filter_function_kaiser = {
@@ -382,9 +383,9 @@ const struct pl_filter_function pl_filter_function_gaussian = {
 static double quadratic(const struct pl_filter_ctx *f, double x)
 {
     if (x < 0.5) {
-        return 0.75 - x * x;
+        return 1.0 - 4.0/3.0 * (x * x);
     } else {
-        return 0.5 * (x - 1.5) * (x - 1.5);
+        return 2.0 / 3.0 * (x - 1.5) * (x - 1.5);
     }
 }
 
@@ -510,7 +511,7 @@ const struct pl_filter_function pl_filter_function_robidouxsharp = {
 #define POW3(x) ((x) <= 0 ? 0 : (x) * (x) * (x))
 static double bicubic(const struct pl_filter_ctx *f, double x)
 {
-    return (1.0/6.0) * (  1 * POW3(x + 2)
+    return (1.0/4.0) * (  1 * POW3(x + 2)
                         - 4 * POW3(x + 1)
                         + 6 * POW3(x + 0)
                         - 4 * POW3(x - 1));
