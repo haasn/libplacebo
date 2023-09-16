@@ -470,6 +470,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
                PRINT_SIZE(slab->size), vk_res_str(res));
         vk_malloc_print_stats(ma, PL_LOG_ERR);
         pl_log_stack_trace(vk->log, PL_LOG_ERR);
+        pl_debug_abort();
         goto error;
 
     default:
