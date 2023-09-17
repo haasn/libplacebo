@@ -153,7 +153,7 @@ static void benchmark(pl_gpu gpu, const char *name,
     printf("'%s':\t%4lu frames in %1.6f seconds => %2.6f ms/frame (%5.2f FPS)",
           name, frames, secs, 1000 * secs / frames, frames / secs);
     if (gputime_count)
-        printf(", gpu time: %2.6f ms", 1e-6 * (gputime_total / gputime_count));
+        printf(", gpu time: %2.6f ms", 1e-6 * gputime_total / gputime_count);
     printf("\n");
 
     pl_timer_destroy(gpu, &timer);
