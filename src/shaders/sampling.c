@@ -337,7 +337,7 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
     vec2 frac2 = frac * frac;                       \
     vec2 inv   = vec2(1.0) - frac;                  \
     vec2 inv2  = inv * inv;                         \
-    /* compute basis spline */                      \
+    /* compute filter weights directly */           \
     vec2 w0 = 1.0/6.0 * inv2 * inv;                 \
     vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac); \
     vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);  \
@@ -347,6 +347,76 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
     h.xy -= vec2(2.0);                              \
     /* sample four corners, then interpolate */     \
     vec4 p = pos.xyxy + $pt.xyxy * h;               \
+    vec4 c00 = textureLod($tex, p.xy, 0.0);         \
+    vec4 c01 = textureLod($tex, p.xw, 0.0);         \
+    vec4 c0 = mix(c01, c00, g.y);                   \
+    vec4 c10 = textureLod($tex, p.zy, 0.0);         \
+    vec4 c11 = textureLod($tex, p.zw, 0.0);         \
+    vec4 c1 = mix(c11, c10, g.y);                   \
+    color = ${float:scale} * mix(c1, c0, g.x);      \
+    }
+
+    return true;
+}
+
+bool pl_shader_sample_hermite(pl_shader sh, const struct pl_sample_src *src)
+{
+    ident_t tex, pos, pt;
+    float rx, ry, scale;
+    if (!setup_src(sh, src, &tex, &pos, &pt, &rx, &ry, NULL, &scale, true, LINEAR))
+        return false;
+
+    if (rx < 1 || ry < 1) {
+        PL_TRACE(sh, "Using fast hermite sampling when downscaling. This "
+                 "will most likely result in nasty aliasing!");
+    }
+
+    sh_describe(sh, "hermite");
+#pragma GLSL /* pl_shader_sample_hermite */              \
+    vec4 color;                                          \
+    {                                                    \
+    vec2 pos  = $pos;                                    \
+    vec2 size = vec2(textureSize($tex, 0));              \
+    vec2 frac = fract(pos * size + vec2(0.5));           \
+    pos += $pt * (smoothstep(0.0, 1.0, frac) - frac);    \
+    color = ${float:scale} * textureLod($tex, pos, 0.0); \
+    }
+
+    return true;
+}
+
+bool pl_shader_sample_gaussian(pl_shader sh, const struct pl_sample_src *src)
+{
+    ident_t tex, pos, pt;
+    float rx, ry, scale;
+    if (!setup_src(sh, src, &tex, &pos, &pt, &rx, &ry, NULL, &scale, true, LINEAR))
+        return false;
+
+    if (rx < 1 || ry < 1) {
+        PL_TRACE(sh, "Using fast gaussian sampling when downscaling. This "
+                 "will most likely result in nasty aliasing!");
+    }
+
+    sh_describe(sh, "gaussian");
+#pragma GLSL /* pl_shader_sample_gaussian */        \
+    vec4 color;                                     \
+    {                                               \
+    vec2 pos  = $pos;                               \
+    vec2 size = vec2(textureSize($tex, 0));         \
+    vec2 off  = -fract(pos * size + vec2(0.5));     \
+    vec2 off2 = -2.0 * off * off;                   \
+    /* compute gaussian weights */                  \
+    vec2 w0 = exp(off2 + 4.0 * off - vec2(2.0));    \
+    vec2 w1 = exp(off2);                            \
+    vec2 w2 = exp(off2 - 4.0 * off - vec2(2.0));    \
+    vec2 w3 = exp(off2 - 8.0 * off - vec2(8.0));    \
+    vec4 g = vec4(w0 + w1, w2 + w3);                \
+    vec4 h = vec4(w1, w3) / g;                      \
+    h.xy -= vec2(1.0);                              \
+    h.zw += vec2(1.0);                              \
+    g.xy /= g.xy + g.zw; /* explicitly normalize */ \
+    /* sample four corners, then interpolate */     \
+    vec4 p = pos.xyxy + $pt.xyxy * (h + off.xyxy);  \
     vec4 c00 = textureLod($tex, p.xy, 0.0);         \
     vec4 c01 = textureLod($tex, p.xw, 0.0);         \
     vec4 c0 = mix(c01, c00, g.y);                   \

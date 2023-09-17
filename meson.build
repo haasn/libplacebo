@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '333': 'add pl_shader_sample_{hermite,gaussian}',
       '332': 'add pl_filter_function_hermite and pl_filter_hermite',
       '331': 'add pl_filter_function_cubic and remove bcspline family of filter functions',
       '330': 'add pl_frames_infer(_mix)',

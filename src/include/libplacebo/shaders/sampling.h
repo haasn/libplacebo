@@ -131,11 +131,14 @@ PL_API bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *s
 // `pl_shader_sample_direct`, but forces bilinear interpolation.
 PL_API bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src);
 
-// Performs hardware-accelerated / efficient bicubic sampling. This is more
-// efficient than using the generalized sampling routines and
-// pl_filter_function_bicubic. Only works well when upscaling - avoid for
-// downscaling.
+// Optimized versions of specific, strictly positive scaler kernels that take
+// adantage of linear texture sampling to reduce the number of fetches needed
+// by a factor of four. This family of functions performs radius-2 scaling
+// with only four texture fetches, which is far more efficient than using
+// the generalized 1D scaling method. Only works well for upscaling.
 PL_API bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src);
+PL_API bool pl_shader_sample_hermite(pl_shader sh, const struct pl_sample_src *src);
+PL_API bool pl_shader_sample_gaussian(pl_shader sh, const struct pl_sample_src *src);
 
 // A sampler that is similar to nearest neighbour sampling, but tries to
 // preserve pixel aspect ratios. This is mathematically equivalent to taking an
