@@ -558,10 +558,12 @@ static pl_shader img_sh(struct pass_state *pass, struct img *img)
 }
 
 enum sampler_type {
-    SAMPLER_DIRECT,  // pick based on texture caps
-    SAMPLER_NEAREST, // direct sampling, force nearest
-    SAMPLER_BICUBIC, // fast bicubic scaling
-    SAMPLER_COMPLEX, // complex custom filters
+    SAMPLER_DIRECT,     // pick based on texture caps
+    SAMPLER_NEAREST,    // direct sampling, force nearest
+    SAMPLER_BICUBIC,    // fast bicubic scaling
+    SAMPLER_HERMITE,    // fast hermite scaling
+    SAMPLER_GAUSSIAN,   // fast gaussian scaling
+    SAMPLER_COMPLEX,    // complex custom filters
     SAMPLER_OVERSAMPLE,
 };
 
@@ -654,6 +656,10 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         if (can_fast && !params->disable_builtin_scalers) {
             if (can_linear && info.config == &pl_filter_bicubic)
                 info.type = SAMPLER_BICUBIC;
+            if (can_linear && info.config == &pl_filter_hermite)
+                info.type = SAMPLER_HERMITE;
+            if (can_linear && info.config == &pl_filter_gaussian)
+                info.type = SAMPLER_GAUSSIAN;
             if (can_linear && info.config == &pl_filter_bilinear)
                 info.type = SAMPLER_DIRECT;
             if (info.config == &pl_filter_nearest)
@@ -701,6 +707,12 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
         return;
     case SAMPLER_BICUBIC:
         pl_shader_sample_bicubic(sh, src);
+        return;
+    case SAMPLER_HERMITE:
+        pl_shader_sample_hermite(sh, src);
+        return;
+    case SAMPLER_GAUSSIAN:
+        pl_shader_sample_gaussian(sh, src);
         return;
     case SAMPLER_COMPLEX:
         break; // continue below
