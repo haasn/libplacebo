@@ -190,6 +190,16 @@ static void bench_bicubic(pl_shader sh, pl_shader_obj *state, pl_tex src)
     REQUIRE(pl_shader_sample_bicubic(sh, pl_sample_src( .tex = src )));
 }
 
+static void bench_hermite(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    REQUIRE(pl_shader_sample_hermite(sh, pl_sample_src( .tex = src )));
+}
+
+static void bench_gaussian(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    REQUIRE(pl_shader_sample_gaussian(sh, pl_sample_src( .tex = src )));
+}
+
 static void bench_dither_blue(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
@@ -469,6 +479,8 @@ int main()
     benchmark(vk->gpu, "tex_upload ptr async", BENCH_TEX(bench_upload_async));
     benchmark(vk->gpu, "bilinear", BENCH_SH(bench_bilinear));
     benchmark(vk->gpu, "bicubic", BENCH_SH(bench_bicubic));
+    benchmark(vk->gpu, "hermite", BENCH_SH(bench_hermite));
+    benchmark(vk->gpu, "gaussian", BENCH_SH(bench_gaussian));
     benchmark(vk->gpu, "deband", BENCH_SH(bench_deband));
     benchmark(vk->gpu, "deband_heavy", BENCH_SH(bench_deband_heavy));
 
