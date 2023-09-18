@@ -40,6 +40,7 @@
     {"ewa_jinc",            &pl_filter_ewa_jinc,    "EWA Jinc (unwindowed)"},   \
     {"ewa_ginseng",         &pl_filter_ewa_ginseng, "EWA Ginseng"},             \
     {"ewa_hann",            &pl_filter_ewa_hann,    "EWA Hann"},                \
+    {"hermite",             &pl_filter_hermite,     "Hermite"},                 \
     {"catmull_rom",         &pl_filter_catmull_rom, "Catmull-Rom"},             \
     {"robidoux",            &pl_filter_robidoux,          "Robidoux"},          \
     {"robidouxsharp",       &pl_filter_robidouxsharp,     "RobidouxSharp"},     \

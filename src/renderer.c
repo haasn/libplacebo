@@ -212,7 +212,7 @@ const struct pl_render_params pl_render_high_quality_params = {
     PL_RENDER_DEFAULTS
     .upscaler           = &pl_filter_ewa_lanczossharp,
     .downscaler         = &pl_filter_mitchell,
-    .frame_mixer        = &pl_filter_mitchell_clamp,
+    .frame_mixer        = &pl_filter_hermite,
     .sigmoid_params     = &pl_sigmoid_default_params,
     .peak_detect_params = &pl_peak_detect_high_quality_params,
     .color_map_params   = &pl_color_map_high_quality_params,
@@ -225,6 +225,7 @@ const struct pl_filter_preset pl_frame_mixers[] = {
     { "linear",         &pl_filter_bilinear,        "Linear frame mixing" },
     { "oversample",     &pl_filter_oversample,      "Oversample (AKA SmoothMotion)" },
     { "mitchell_clamp", &pl_filter_mitchell_clamp,  "Cubic spline (clamped)" },
+    { "hermite",        &pl_filter_hermite,         "Cubic spline (Hermite)" },
     {0}
 };
 

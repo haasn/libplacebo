@@ -136,6 +136,7 @@ PL_API extern const struct pl_filter_function pl_filter_function_sphinx;
 // B ≈ 0.37, C ≈ 0.31: Robidoux filter (used by ImageMagick)
 // B ≈ 0.26, C ≈ 0.37: RobidouxSharp filter (sharper variant of Robidoux)
 PL_API extern const struct pl_filter_function pl_filter_function_cubic;
+PL_API extern const struct pl_filter_function pl_filter_function_hermite;
 #define pl_filter_function_bicubic pl_filter_function_cubic
 #define pl_filter_function_bcspline pl_filter_function_cubic
 
@@ -279,6 +280,7 @@ PL_API extern const struct pl_filter_config pl_filter_ewa_ginseng; // jinc-sinc
 PL_API extern const struct pl_filter_config pl_filter_ewa_hann;    // jinc-hann
 // Spline family
 PL_API extern const struct pl_filter_config pl_filter_bicubic;
+PL_API extern const struct pl_filter_config pl_filter_hermite;
 PL_API extern const struct pl_filter_config pl_filter_catmull_rom;
 PL_API extern const struct pl_filter_config pl_filter_mitchell;
 PL_API extern const struct pl_filter_config pl_filter_mitchell_clamp; // clamp = 1.0

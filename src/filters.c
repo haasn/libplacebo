@@ -492,6 +492,13 @@ static const struct pl_filter_function filter_function_bcspline = {
     .params  = {1.0, 0.0},
 };
 
+const struct pl_filter_function pl_filter_function_hermite = {
+    .weight  = cubic,
+    .name    = "hermite",
+    .radius  = 1.0,
+    .params  = {0.0, 0.0},
+};
+
 static double spline16(const struct pl_filter_ctx *f, double x)
 {
     if (x < 1.0) {
@@ -577,6 +584,7 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_cubic,
     &filter_function_bicubic, // alias
     &filter_function_bcspline, // alias
+    &pl_filter_function_hermite,
     &pl_filter_function_spline16,
     &pl_filter_function_spline36,
     &pl_filter_function_spline64,
@@ -776,6 +784,14 @@ const struct pl_filter_config pl_filter_bicubic = {
     .recommended = PL_FILTER_SCALING,
 };
 
+const struct pl_filter_config pl_filter_hermite = {
+    .name        = "hermite",
+    .description = "Hermite",
+    .kernel      = &pl_filter_function_hermite,
+    .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_FRAME_MIXING,
+};
+
 const struct pl_filter_config pl_filter_catmull_rom = {
     .name        = "catmull_rom",
     .description = "Catmull-Rom",
@@ -860,6 +876,7 @@ const struct pl_filter_config * const pl_filter_configs[] = {
     &pl_filter_ewa_lanczossharp,
     &pl_filter_ewa_lanczos4sharpest,
     &pl_filter_bicubic,
+    &pl_filter_hermite,
     &pl_filter_gaussian,
     &pl_filter_oversample,
     &pl_filter_mitchell,
@@ -921,6 +938,7 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"cubic",           &pl_filter_function_cubic},
     {"bicubic",         &filter_function_bicubic}, // alias
     {"bcspline",        &filter_function_bcspline}, // alias
+    {"hermite",         &pl_filter_function_hermite},
     {"spline16",        &pl_filter_function_spline16},
     {"spline36",        &pl_filter_function_spline36},
     {"spline64",        &pl_filter_function_spline64},
