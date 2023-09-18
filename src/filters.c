@@ -446,7 +446,7 @@ const struct pl_filter_function pl_filter_function_sphinx = {
     .radius    = 1.4302966531242027, // first zero
 };
 
-static double bcspline(const struct pl_filter_ctx *f, double x)
+static double cubic(const struct pl_filter_ctx *f, double x)
 {
     double b = f->params[0],
            c = f->params[1];
@@ -458,7 +458,7 @@ static double bcspline(const struct pl_filter_ctx *f, double x)
            q2 = (6.0 * b + 30.0 * c) / 6.0,
            q3 = (-b - 6.0 * c) / 6.0;
 
-    // Needed to ensure the kernel is sanely scaled, i.e. bcspline(0.0) = 1.0
+    // Needed to ensure the kernel is sanely scaled, i.e. cubic(0.0) = 1.0
     double scale = 1.0 / p0;
     if (x < 1.0) {
         return scale * (p0 + x * x * (p2 + x * p3));
@@ -468,59 +468,28 @@ static double bcspline(const struct pl_filter_ctx *f, double x)
     return 0.0;
 }
 
-const struct pl_filter_function pl_filter_function_bcspline = {
+const struct pl_filter_function pl_filter_function_cubic = {
     .tunable = {true, true},
-    .weight  = bcspline,
-    .name    = "bcspline",
+    .weight  = cubic,
+    .name    = "cubic",
     .radius  = 2.0,
-    .params  = {0.5, 0.5},
+    .params  = {1.0, 0.0},
 };
 
-const struct pl_filter_function pl_filter_function_catmull_rom = {
+static const struct pl_filter_function filter_function_bicubic = {
+    .name    = "bicubic", // alias
     .tunable = {true, true},
-    .weight  = bcspline,
-    .name    = "catmull_rom",
+    .weight  = cubic,
     .radius  = 2.0,
-    .params  = {0.0, 0.5},
+    .params  = {1.0, 0.0},
 };
 
-const struct pl_filter_function pl_filter_function_mitchell = {
+static const struct pl_filter_function filter_function_bcspline = {
+    .name    = "bcspline", // alias
     .tunable = {true, true},
-    .weight  = bcspline,
-    .name    = "mitchell",
+    .weight  = cubic,
     .radius  = 2.0,
-    .params  = {1/3.0, 1/3.0},
-};
-
-const struct pl_filter_function pl_filter_function_robidoux = {
-    .tunable = {true, true},
-    .weight  = bcspline,
-    .name    = "robidoux",
-    .radius  = 2.0,
-    .params  = {12 / (19 + 9 * M_SQRT2), 113 / (58 + 216 * M_SQRT2)},
-};
-
-const struct pl_filter_function pl_filter_function_robidouxsharp = {
-    .tunable = {true, true},
-    .weight  = bcspline,
-    .name    = "robidouxsharp",
-    .radius  = 2.0,
-    .params  = {6 / (13 + 7 * M_SQRT2), 7 / (2 + 12 * M_SQRT2)},
-};
-
-#define POW3(x) ((x) <= 0 ? 0 : (x) * (x) * (x))
-static double bicubic(const struct pl_filter_ctx *f, double x)
-{
-    return (1.0/4.0) * (  1 * POW3(x + 2)
-                        - 4 * POW3(x + 1)
-                        + 6 * POW3(x + 0)
-                        - 4 * POW3(x - 1));
-}
-
-const struct pl_filter_function pl_filter_function_bicubic = {
-    .weight = bicubic,
-    .name   = "bicubic",
-    .radius = 2.0,
+    .params  = {1.0, 0.0},
 };
 
 static double spline16(const struct pl_filter_ctx *f, double x)
@@ -605,12 +574,9 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_sinc,
     &pl_filter_function_jinc,
     &pl_filter_function_sphinx,
-    &pl_filter_function_bcspline,
-    &pl_filter_function_catmull_rom,
-    &pl_filter_function_mitchell,
-    &pl_filter_function_robidoux,
-    &pl_filter_function_robidouxsharp,
-    &pl_filter_function_bicubic,
+    &pl_filter_function_cubic,
+    &filter_function_bicubic, // alias
+    &filter_function_bcspline, // alias
     &pl_filter_function_spline16,
     &pl_filter_function_spline36,
     &pl_filter_function_spline64,
@@ -805,7 +771,7 @@ static const struct pl_filter_config filter_ewa_hanning = {
 const struct pl_filter_config pl_filter_bicubic = {
     .name        = "bicubic",
     .description = "Bicubic",
-    .kernel      = &pl_filter_function_bicubic,
+    .kernel      = &pl_filter_function_cubic,
     .allowed     = PL_FILTER_ALL,
     .recommended = PL_FILTER_SCALING,
 };
@@ -813,7 +779,7 @@ const struct pl_filter_config pl_filter_bicubic = {
 const struct pl_filter_config pl_filter_catmull_rom = {
     .name        = "catmull_rom",
     .description = "Catmull-Rom",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {0.0, 0.5},
     .allowed     = PL_FILTER_ALL,
 };
@@ -821,7 +787,7 @@ const struct pl_filter_config pl_filter_catmull_rom = {
 const struct pl_filter_config pl_filter_mitchell = {
     .name        = "mitchell",
     .description = "Mitchell-Netravali",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {1/3.0, 1/3.0},
     .allowed     = PL_FILTER_ALL,
     .recommended = PL_FILTER_SCALING,
@@ -830,7 +796,7 @@ const struct pl_filter_config pl_filter_mitchell = {
 const struct pl_filter_config pl_filter_mitchell_clamp = {
     .name        = "mitchell_clamp",
     .description = "Mitchell (clamped)",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {1/3.0, 1/3.0},
     .clamp       = 1.0,
     .allowed     = PL_FILTER_ALL,
@@ -840,7 +806,7 @@ const struct pl_filter_config pl_filter_mitchell_clamp = {
 const struct pl_filter_config pl_filter_robidoux = {
     .name        = "robidoux",
     .description = "Robidoux",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {12 / (19 + 9 * M_SQRT2), 113 / (58 + 216 * M_SQRT2)},
     .allowed     = PL_FILTER_ALL,
 };
@@ -848,7 +814,7 @@ const struct pl_filter_config pl_filter_robidoux = {
 const struct pl_filter_config pl_filter_robidouxsharp = {
     .name        = "robidouxsharp",
     .description = "RobidouxSharp",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {6 / (13 + 7 * M_SQRT2), 7 / (2 + 12 * M_SQRT2)},
     .allowed     = PL_FILTER_ALL,
 };
@@ -856,7 +822,7 @@ const struct pl_filter_config pl_filter_robidouxsharp = {
 const struct pl_filter_config pl_filter_ewa_robidoux = {
     .name        = "ewa_robidoux",
     .description = "EWA Robidoux",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {12 / (19 + 9 * M_SQRT2), 113 / (58 + 216 * M_SQRT2)},
     .polar       = true,
     .allowed     = PL_FILTER_SCALING,
@@ -865,7 +831,7 @@ const struct pl_filter_config pl_filter_ewa_robidoux = {
 const struct pl_filter_config pl_filter_ewa_robidouxsharp = {
     .name        = "ewa_robidouxsharp",
     .description = "EWA RobidouxSharp",
-    .kernel      = &pl_filter_function_bcspline,
+    .kernel      = &pl_filter_function_cubic,
     .params      = {6 / (13 + 7 * M_SQRT2), 7 / (2 + 12 * M_SQRT2)},
     .polar       = true,
     .allowed     = PL_FILTER_SCALING,
@@ -952,12 +918,9 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"sinc",            &pl_filter_function_sinc},
     {"jinc",            &pl_filter_function_jinc},
     {"sphinx",          &pl_filter_function_sphinx},
-    {"bcspline",        &pl_filter_function_bcspline},
-    {"catmull_rom",     &pl_filter_function_catmull_rom},
-    {"mitchell",        &pl_filter_function_mitchell},
-    {"robidoux",        &pl_filter_function_robidoux},
-    {"robidouxsharp",   &pl_filter_function_robidouxsharp},
-    {"bicubic",         &pl_filter_function_bicubic},
+    {"cubic",           &pl_filter_function_cubic},
+    {"bicubic",         &filter_function_bicubic}, // alias
+    {"bcspline",        &filter_function_bcspline}, // alias
     {"spline16",        &pl_filter_function_spline16},
     {"spline36",        &pl_filter_function_spline36},
     {"spline64",        &pl_filter_function_spline64},

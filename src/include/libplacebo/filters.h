@@ -128,21 +128,16 @@ PL_API extern const struct pl_filter_function pl_filter_function_sphinx;
 // functions with two tunable parameters. Does not need to be windowed.
 // Parameter [0]: "B"
 // Parameter [1]: "C"
-// Due to its populariy, this function is available in several variants.
-// B = 0.0,  C = 0.0:  "base" bcspline, AKA Hermite spline (blocky)
+// Some popular variants of this function are:
+// B = 1.0,  C = 0.0:  "base" Cubic (blurry)
+// B = 0.0,  C = 0.0:  Hermite filter (blocky)
 // B = 0.0,  C = 0.5:  Catmull-Rom filter (sharp)
 // B = 1/3,  C = 1/3:  Mitchell-Netravali filter (soft, doesn't ring)
 // B ≈ 0.37, C ≈ 0.31: Robidoux filter (used by ImageMagick)
-// B ≈ 0.26, C ≈ 0.37: RobidouxSharp filter. (sharper variant of Robidoux)
-PL_API extern const struct pl_filter_function pl_filter_function_bcspline;
-PL_API extern const struct pl_filter_function pl_filter_function_catmull_rom;
-PL_API extern const struct pl_filter_function pl_filter_function_mitchell;
-PL_API extern const struct pl_filter_function pl_filter_function_robidoux;
-PL_API extern const struct pl_filter_function pl_filter_function_robidouxsharp;
-
-// Bicubic function: Very smooth and free of ringing, but very blurry. Does not
-// need to be windowed.
-PL_API extern const struct pl_filter_function pl_filter_function_bicubic;
+// B ≈ 0.26, C ≈ 0.37: RobidouxSharp filter (sharper variant of Robidoux)
+PL_API extern const struct pl_filter_function pl_filter_function_cubic;
+#define pl_filter_function_bicubic pl_filter_function_cubic
+#define pl_filter_function_bcspline pl_filter_function_cubic
 
 // Cubic splines with 2/3/4 taps. Referred to as "spline16", "spline36", and
 // "spline64" mainly for historical reasons, based on the number of pixels in
