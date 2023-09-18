@@ -454,24 +454,20 @@ const struct pl_filter_function pl_filter_function_sphinx = {
 
 static double cubic(const struct pl_filter_ctx *f, double x)
 {
-    double b = f->params[0],
-           c = f->params[1];
-    double p0 = (6.0 - 2.0 * b) / 6.0,
-           p2 = (-18.0 + 12.0 * b + 6.0 * c) / 6.0,
-           p3 = (12.0 - 9.0 * b - 6.0 * c) / 6.0,
-           q0 = (8.0 * b + 24.0 * c) / 6.0,
-           q1 = (-12.0 * b - 48.0 * c) / 6.0,
-           q2 = (6.0 * b + 30.0 * c) / 6.0,
-           q3 = (-b - 6.0 * c) / 6.0;
+    const double b = f->params[0], c = f->params[1];
+    double p0 = 6.0 - 2.0 * b,
+           p2 = -18.0 + 12.0 * b + 6.0 * c,
+           p3 = 12.0 - 9.0 * b - 6.0 * c,
+           q0 = 8.0 * b + 24.0 * c,
+           q1 = -12.0 * b - 48.0 * c,
+           q2 = 6.0 * b + 30.0 * c,
+           q3 = -b - 6.0 * c;
 
-    // Needed to ensure the kernel is sanely scaled, i.e. cubic(0.0) = 1.0
-    double scale = 1.0 / p0;
     if (x < 1.0) {
-        return scale * (p0 + x * x * (p2 + x * p3));
-    } else if (x < 2.0) {
-        return scale * (q0 + x * (q1 + x * (q2 + x * q3)));
+        return (p0 + x * x * (p2 + x * p3)) / p0;
+    } else {
+        return (q0 + x * (q1 + x * (q2 + x * q3))) / p0;
     }
-    return 0.0;
 }
 
 const struct pl_filter_function pl_filter_function_cubic = {
