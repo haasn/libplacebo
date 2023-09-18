@@ -224,7 +224,7 @@ const struct pl_filter_preset pl_frame_mixers[] = {
     { "none",           NULL,                       "No frame mixing" },
     { "linear",         &pl_filter_bilinear,        "Linear frame mixing" },
     { "oversample",     &pl_filter_oversample,      "Oversample (AKA SmoothMotion)" },
-    { "mitchell_clamp", &pl_filter_mitchell_clamp,  "Cubic spline (clamped)" },
+    { "mitchell_clamp", &pl_filter_mitchell_clamp,  "Clamped Mitchell spline" },
     { "hermite",        &pl_filter_hermite,         "Cubic spline (Hermite)" },
     {0}
 };
