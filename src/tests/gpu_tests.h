@@ -1371,6 +1371,10 @@ static void pl_render_tests(pl_gpu gpu)
     };
     REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
 
+    // Test empty frame mix
+    mix = (struct pl_frame_mix) {0};
+    REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+
     // Test mixer queue
 #define NUM_MIX_FRAMES 20
     const float frame_duration = 1.0 / 24.0;
