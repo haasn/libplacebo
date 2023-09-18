@@ -800,7 +800,7 @@ const struct pl_filter_config pl_filter_hermite = {
     .description = "Hermite",
     .kernel      = &pl_filter_function_hermite,
     .allowed     = PL_FILTER_ALL,
-    .recommended = PL_FILTER_FRAME_MIXING,
+    .recommended = PL_FILTER_DOWNSCALING | PL_FILTER_FRAME_MIXING,
 };
 
 const struct pl_filter_config pl_filter_catmull_rom = {
