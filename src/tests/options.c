@@ -29,7 +29,7 @@ int main()
     REQUIRE(pl_options_load(test, "preset=fast"));
     REQUIRE_STREQ(pl_options_save(test), "");
 
-    const char *def_opts = "upscaler=spline36,downscaler=mitchell,frame_mixer=oversample,sigmoid=yes,peak_detect=yes,dither=yes";
+    const char *def_opts = "upscaler=spline36,downscaler=hermite,frame_mixer=oversample,sigmoid=yes,peak_detect=yes,dither=yes";
     pl_options_reset(test, &pl_render_default_params);
     REQUIRE_STREQ(pl_options_save(test), def_opts);
     struct pl_options_t def_pre = *test;
@@ -53,9 +53,9 @@ int main()
     REQUIRE_CMP(*(int *) data->value, =, pl_render_default_params.lut_entries, "d");
     REQUIRE_STREQ(data->text, "64");
 
-    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=hermite,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203,contrast_recovery=0.30000001192092896,dither=yes";
+    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=hermite,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203,contrast_recovery=0.30000001192092896,dither=yes";
     // fallback can produce different precision
-    const char *hq_opts2 = "upscaler=ewa_lanczossharp,downscaler=mitchell,frame_mixer=hermite,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,contrast_recovery=0.30000001192092896,dither=yes";
+    const char *hq_opts2 = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=hermite,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,contrast_recovery=0.30000001192092896,dither=yes";
 
     pl_options_reset(test, &pl_render_high_quality_params);
     const char *opts = pl_options_save(test);

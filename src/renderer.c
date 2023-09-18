@@ -201,7 +201,7 @@ const struct pl_render_params pl_render_fast_params = { PL_RENDER_DEFAULTS };
 const struct pl_render_params pl_render_default_params = {
     PL_RENDER_DEFAULTS
     .upscaler           = &pl_filter_spline36,
-    .downscaler         = &pl_filter_mitchell,
+    .downscaler         = &pl_filter_hermite,
     .frame_mixer        = &pl_filter_oversample,
     .sigmoid_params     = &pl_sigmoid_default_params,
     .dither_params      = &pl_dither_default_params,
@@ -211,7 +211,7 @@ const struct pl_render_params pl_render_default_params = {
 const struct pl_render_params pl_render_high_quality_params = {
     PL_RENDER_DEFAULTS
     .upscaler           = &pl_filter_ewa_lanczossharp,
-    .downscaler         = &pl_filter_mitchell,
+    .downscaler         = &pl_filter_hermite,
     .frame_mixer        = &pl_filter_hermite,
     .sigmoid_params     = &pl_sigmoid_default_params,
     .peak_detect_params = &pl_peak_detect_high_quality_params,
