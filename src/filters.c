@@ -105,7 +105,10 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
     pl_assert(!c->kernel->opaque);
     double k = c->kernel->weight(&(const struct pl_filter_ctx) {
         .radius = radius,
-        .params = { c->params[0], c->params[1] },
+        .params = {
+            c->kernel->tunable[0] ? c->params[0] : c->kernel->params[0],
+            c->kernel->tunable[1] ? c->params[1] : c->kernel->params[1],
+        },
     }, kx);
 
     // Apply the optional windowing function
@@ -114,7 +117,10 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
         double wx = x / radius * c->window->radius;
         k *= c->window->weight(&(struct pl_filter_ctx) {
             .radius = c->window->radius,
-            .params = { c->wparams[0], c->wparams[1] },
+            .params = {
+                c->window->tunable[0] ? c->wparams[0] : c->window->params[0],
+                c->window->tunable[1] ? c->wparams[1] : c->window->params[1],
+            },
         }, wx);
     }
 
