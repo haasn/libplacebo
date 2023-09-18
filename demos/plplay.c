@@ -1948,6 +1948,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
         if (nk_tree_push(nk, NK_TREE_NODE, "Debug", NK_MINIMIZED)) {
             nk_layout_row_dynamic(nk, 24, 1);
             nk_checkbox_label(nk, "Preserve mixing cache", &par->preserve_mixing_cache);
+            nk_checkbox_label(nk, "Bypass mixing cache", &par->skip_caching_single_frame);
             nk_checkbox_label(nk, "Show all scaler presets", &p->advanced_scalers);
             nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);
             nk_checkbox_label(nk, "Disable built-in scalers", &par->disable_builtin_scalers);
