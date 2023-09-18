@@ -259,10 +259,10 @@ static double triangle(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_triangle = {
-    .resizable = true,
-    .weight    = triangle,
     .name      = "triangle",
+    .weight    = triangle,
     .radius    = 1.0,
+    .resizable = true,
 };
 
 static double cosine(const struct pl_filter_ctx *f, double x)
@@ -271,8 +271,8 @@ static double cosine(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_cosine = {
-    .weight = cosine,
     .name   = "cosine",
+    .weight = cosine,
     .radius = M_PI / 2.0,
 };
 
@@ -282,8 +282,8 @@ static double hann(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_hann = {
-    .weight = hann,
     .name   = "hann",
+    .weight = hann,
     .radius = 1.0,
 };
 
@@ -299,8 +299,8 @@ static double hamming(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_hamming = {
-    .weight = hamming,
     .name   = "hamming",
+    .weight = hamming,
     .radius = 1.0,
 };
 
@@ -310,8 +310,8 @@ static double welch(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_welch = {
-    .weight = welch,
     .name   = "welch",
+    .weight = welch,
     .radius = 1.0,
 };
 
@@ -337,11 +337,11 @@ static double kaiser(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_kaiser = {
-    .tunable = {true},
-    .weight  = kaiser,
     .name    = "kaiser",
+    .weight  = kaiser,
     .radius  = 1.0,
     .params  = {2.0},
+    .tunable = {true},
 };
 
 static double blackman(const struct pl_filter_ctx *f, double x)
@@ -353,11 +353,11 @@ static double blackman(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_blackman = {
-    .tunable = {true},
-    .weight  = blackman,
     .name    = "blackman",
+    .weight  = blackman,
     .radius  = 1.0,
     .params  = {0.16},
+    .tunable = {true},
 };
 
 static double bohman(const struct pl_filter_ctx *f, double x)
@@ -367,8 +367,8 @@ static double bohman(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_bohman = {
-    .weight = bohman,
     .name   = "bohman",
+    .weight = bohman,
     .radius = 1.0,
 };
 
@@ -378,12 +378,12 @@ static double gaussian(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_gaussian = {
-    .resizable = true,
-    .tunable   = {true},
-    .weight    = gaussian,
     .name      = "gaussian",
+    .weight    = gaussian,
     .radius    = 2.0,
+    .resizable = true,
     .params    = {1.0},
+    .tunable   = {true},
 };
 
 static double quadratic(const struct pl_filter_ctx *f, double x)
@@ -396,8 +396,8 @@ static double quadratic(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_quadratic = {
-    .weight = quadratic,
     .name   = "quadratic",
+    .weight = quadratic,
     .radius = 1.5,
 };
 
@@ -416,10 +416,10 @@ static double sinc(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_sinc = {
-    .resizable = true,
-    .weight    = sinc,
     .name      = "sinc",
+    .weight    = sinc,
     .radius    = 1.0,
+    .resizable = true,
 };
 
 static double jinc(const struct pl_filter_ctx *f, double x)
@@ -431,10 +431,10 @@ static double jinc(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_jinc = {
-    .resizable = true,
-    .weight    = jinc,
     .name      = "jinc",
+    .weight    = jinc,
     .radius    = 1.2196698912665045, // first zero
+    .resizable = true,
 };
 
 static double sphinx(const struct pl_filter_ctx *f, double x)
@@ -446,10 +446,10 @@ static double sphinx(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_sphinx = {
-    .resizable = true,
-    .weight    = sphinx,
     .name      = "sphinx",
+    .weight    = sphinx,
     .radius    = 1.4302966531242027, // first zero
+    .resizable = true,
 };
 
 static double cubic(const struct pl_filter_ctx *f, double x)
@@ -471,32 +471,32 @@ static double cubic(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_cubic = {
-    .tunable = {true, true},
-    .weight  = cubic,
     .name    = "cubic",
+    .weight  = cubic,
     .radius  = 2.0,
     .params  = {1.0, 0.0},
+    .tunable = {true, true},
 };
 
 static const struct pl_filter_function filter_function_bicubic = {
     .name    = "bicubic", // alias
-    .tunable = {true, true},
     .weight  = cubic,
     .radius  = 2.0,
     .params  = {1.0, 0.0},
+    .tunable = {true, true},
 };
 
 static const struct pl_filter_function filter_function_bcspline = {
     .name    = "bcspline", // alias
-    .tunable = {true, true},
     .weight  = cubic,
     .radius  = 2.0,
     .params  = {1.0, 0.0},
+    .tunable = {true, true},
 };
 
 const struct pl_filter_function pl_filter_function_hermite = {
-    .weight  = cubic,
     .name    = "hermite",
+    .weight  = cubic,
     .radius  = 1.0,
     .params  = {0.0, 0.0},
 };
@@ -511,8 +511,8 @@ static double spline16(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_spline16 = {
-    .weight = spline16,
     .name   = "spline16",
+    .weight = spline16,
     .radius = 2.0,
 };
 
@@ -528,8 +528,8 @@ static double spline36(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_spline36 = {
-    .weight = spline36,
     .name   = "spline36",
+    .weight = spline36,
     .radius = 3.0,
 };
 
@@ -547,8 +547,8 @@ static double spline64(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_spline64 = {
-    .weight = spline64,
     .name   = "spline64",
+    .weight = spline64,
     .radius = 4.0,
 };
 
@@ -558,10 +558,10 @@ static double oversample(const struct pl_filter_ctx *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_oversample = {
-    .weight  = oversample,
-    .tunable = {true},
-    .params  = {0.0},
     .name    = "oversample",
+    .weight  = oversample,
+    .params  = {0.0},
+    .tunable = {true},
     .opaque  = true,
 };
 
