@@ -1191,6 +1191,11 @@ static void pl_render_tests(pl_gpu gpu)
     REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     params = pl_render_default_params;
 
+    struct pl_frame inferred_image = image, inferred_target = target;
+    pl_frames_infer(rr, &inferred_image, &inferred_target);
+    REQUIRE(pl_render_image(rr, &inferred_image, &inferred_target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+
     // Test background blending and alpha transparency
     params.blend_against_tiles = true;
     params.corner_rounding = 0.25f;
@@ -1371,8 +1376,18 @@ static void pl_render_tests(pl_gpu gpu)
     };
     REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
 
+    // Test inferring frame mix
+    inferred_target = target;
+    pl_frames_infer_mix(rr, &mix, &inferred_target, &inferred_image);
+    REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+
     // Test empty frame mix
     mix = (struct pl_frame_mix) {0};
+    REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+
+    // Test inferring empty frame mix
+    inferred_target = target;
+    pl_frames_infer_mix(rr, &mix, &inferred_target, &inferred_image);
     REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
 
     // Test mixer queue
