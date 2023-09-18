@@ -780,8 +780,15 @@ const struct pl_filter_config pl_filter_bicubic = {
     .name        = "bicubic",
     .description = "Bicubic",
     .kernel      = &pl_filter_function_cubic,
-    .allowed     = PL_FILTER_ALL,
+    .allowed     = PL_FILTER_SCALING,
     .recommended = PL_FILTER_SCALING,
+};
+
+static const struct pl_filter_config filter_cubic = {
+    .name        = "cubic",
+    .description = "Cubic",
+    .kernel      = &pl_filter_function_cubic,
+    .allowed     = PL_FILTER_FRAME_MIXING,
 };
 
 const struct pl_filter_config pl_filter_hermite = {
@@ -876,6 +883,7 @@ const struct pl_filter_config * const pl_filter_configs[] = {
     &pl_filter_ewa_lanczossharp,
     &pl_filter_ewa_lanczos4sharpest,
     &pl_filter_bicubic,
+    &filter_cubic, // pseudo-alias (frame mixing only)
     &pl_filter_hermite,
     &pl_filter_gaussian,
     &pl_filter_oversample,
