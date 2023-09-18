@@ -570,6 +570,7 @@ struct sh_sampler_obj {
     pl_filter filter;
     pl_shader_obj lut;
     pl_shader_obj pass2; // for pl_shader_sample_ortho
+    bool linear_sampling; // for ortho
 };
 
 static void sh_sampler_uninit(pl_gpu gpu, void *ptr)
@@ -908,10 +909,24 @@ static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
 {
     const struct sh_sampler_obj *obj = params->priv;
     pl_filter filt = obj->filter;
-    size_t entries = filt->params.lut_entries * filt->row_stride;
 
-    pl_assert(params->width * params->height * params->comps == entries);
-    memcpy(data, filt->weights, entries * sizeof(float));
+    if (obj->linear_sampling) {
+        for (int n = 0; n < filt->params.lut_entries; n++) {
+            const float *weights = filt->weights + n * filt->row_stride;
+            float *row = (float *) data + n * filt->row_stride;
+            pl_assert(filt->row_size % 2 == 0);
+            for (int i = 0; i < filt->row_size; i += 2) {
+                const float w0 = weights[i], w1 = weights[i+1];
+                assert(w0 + w1 >= 0.0f);
+                row[i] = w0 + w1;
+                row[i+1] = w1 / (w0 + w1);
+            }
+        }
+    } else {
+        size_t entries = filt->params.lut_entries * filt->row_stride;
+        pl_assert(params->width * params->height * params->comps == entries);
+        memcpy(data, filt->weights, entries * sizeof(float));
+    }
 }
 
 enum {
@@ -937,7 +952,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     ident_t src_tex, pos, pt;
     if (!setup_src(sh, src, &src_tex, &pos, &pt,
                    &ratio[SEP_HORIZ], &ratio[SEP_VERT],
-                   &comps, &scale, false, FASTEST))
+                   &comps, &scale, false, LINEAR))
         return false;
 
 
@@ -999,6 +1014,17 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
             SH_FAIL(sh, "Failed initializing separated filter!");
             return false;
         }
+
+        // Check to see if we can speed up the LUT using linear trick
+        obj->linear_sampling = true;
+        for (int n = 0; obj->linear_sampling && n < lut_entries; n++) {
+            for (int i = 0; i < obj->filter->row_size; i++) {
+                if (obj->filter->weights[n * obj->filter->row_stride + i] < 0.0) {
+                    obj->linear_sampling = false;
+                    break;
+                }
+            }
+        }
     }
 
     int N = obj->filter->row_size; // number of samples to convolve
@@ -1045,6 +1071,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     float fcoord = dot(fcoord2, dir);                                           \
     vec2 base = pos - fcoord * pt - pt * vec2(${const float:N / 2 - 1});        \
     vec4 ws;                                                                    \
+    float off;                                                                  \
     ${vecType: comps} c, ca = ${vecType: comps}(0.0);                           \
     @if (use_ar) {                                                              \
         ${vecType: comps} hi = ${vecType: comps}(0.0);                          \
@@ -1059,9 +1086,17 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
             lo = min(lo, c);                                                    \
             hi = max(hi, c);                                                    \
         @} else {                                                               \
-            ca += ws[@n % 4] * textureLod($src_tex,                             \
-                                          base + pt * vec2(@n.0),               \
-                                          0.0).${swizzle: comps};               \
+            @if (obj->linear_sampling) {                                        \
+                @if @(n % 2 == 0) {                                             \
+                    off = @n.0 + ws[@n % 4 + 1];                                \
+                    ca += ws[@n % 4] * textureLod($src_tex, base + pt * off,    \
+                                                  0.0).${swizzle: comps};       \
+                @}                                                              \
+            @} else {                                                           \
+                ca += ws[@n % 4] * textureLod($src_tex,                         \
+                                              base + pt * vec2(@n.0),           \
+                                              0.0).${swizzle: comps};           \
+            @}                                                                  \
         @}                                                                      \
     @}                                                                          \
     @if (use_ar)                                                                \
