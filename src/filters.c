@@ -825,7 +825,6 @@ const struct pl_filter_config pl_filter_mitchell_clamp = {
     .params      = {1/3.0, 1/3.0},
     .clamp       = 1.0,
     .allowed     = PL_FILTER_ALL,
-    .recommended = PL_FILTER_FRAME_MIXING,
 };
 
 const struct pl_filter_config pl_filter_robidoux = {
