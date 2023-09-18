@@ -782,6 +782,7 @@ const struct pl_filter_config pl_filter_bicubic = {
     .name        = "bicubic",
     .description = "Bicubic",
     .kernel      = &pl_filter_function_cubic,
+    .params      = {1.0, 0.0},
     .allowed     = PL_FILTER_SCALING,
     .recommended = PL_FILTER_SCALING,
 };
@@ -790,6 +791,7 @@ static const struct pl_filter_config filter_cubic = {
     .name        = "cubic",
     .description = "Cubic",
     .kernel      = &pl_filter_function_cubic,
+    .params      = {1.0, 0.0},
     .allowed     = PL_FILTER_FRAME_MIXING,
 };
 
