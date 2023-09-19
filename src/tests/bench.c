@@ -127,6 +127,8 @@ static void benchmark(pl_gpu gpu, const char *name,
 
     start = pl_clock_now();
     do {
+        while (pl_tex_poll(gpu, fbos[index], UINT64_MAX))
+            ; // do nothing
         frames++;
         run_bench(gpu, dp, &state, src, fbos[index], timer, bench);
         pl_gpu_flush(gpu);
