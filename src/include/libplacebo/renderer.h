@@ -352,7 +352,7 @@ struct pl_render_params {
     // --- Deprecated/removed fields
     bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
     const struct pl_icc_params *icc_params PL_DEPRECATED; // use pl_frame.icc
-    bool ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
+    bool ignore_icc_profiles PL_DEPRECATED; // non-functional, just set pl_frame.icc to NULL
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest
