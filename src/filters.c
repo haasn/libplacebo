@@ -131,7 +131,6 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
 // by the indicated subpixel offset. Writes `f->row_size` values to `out`.
 static void compute_row(struct pl_filter_t *f, double offset, float *out)
 {
-    const float radius = filter_radius(&f->params.config);
     double wsum = 0.0;
     for (int i = 0; i < f->row_size; i++) {
         // For the example of a filter with row size 4 and offset 0.3, we have:
@@ -143,10 +142,7 @@ static void compute_row(struct pl_filter_t *f, double offset, float *out)
         pl_assert(f->row_size % 2 == 0);
         const int base = f->row_size / 2 - 1; // index to the left of the center
         const double center = base + offset; // offset of center relative to idx 0
-        double x = i - center;
-
-        // Stretch/squish the kernel by readjusting the value range
-        double w = pl_filter_sample(&f->params.config, x / f->radius * radius);
+        double w = pl_filter_sample(&f->params.config, i - center);
         out[i] = w;
         wsum += w;
     }
