@@ -9,7 +9,7 @@
 #define TEX_SIZE 2048
 #define CUBE_SIZE 64
 #define NUM_FBOS 16
-#define BENCH_DUR 3
+#define BENCH_DUR 1.0
 
 static pl_tex create_test_img(pl_gpu gpu)
 {
@@ -133,9 +133,7 @@ static void benchmark(pl_gpu gpu, const char *name,
         run_bench(gpu, dp, &state, src, fbos[index], timer, bench);
         pl_gpu_flush(gpu);
         index = (index + 1) % NUM_FBOS;
-        if (index == 0) {
-            stop = pl_clock_now();
-        }
+        stop = pl_clock_now();
         while ((gputime = pl_timer_query(gpu, timer))) {
             gputime_total += gputime;
             gputime_count++;
