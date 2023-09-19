@@ -900,6 +900,7 @@ struct pl_tex_transfer_params {
                         // multiple of `tex->params.format->texel_size`
     // 2. Transferring to/from host memory directly:
     void *ptr;          // address of data
+    bool no_import;     // always use memcpy, bypassing host ptr import
 
     // Note: The contents of the memory region / buffer must exactly match the
     // texture format; i.e. there is no explicit conversion between formats.
