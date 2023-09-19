@@ -497,7 +497,7 @@ static void describe_filter(pl_shader sh, const struct pl_filter_config *cfg,
 // If `in` is set, takes the pixel from inX[idx] where X is the component,
 // `in` is the given identifier, and `idx` must be defined by the caller
 static void polar_sample(pl_shader sh, pl_filter filter,
-                         ident_t tex, ident_t lut, ident_t cutoff, ident_t radius,
+                         ident_t tex, ident_t lut, ident_t radius,
                          int x, int y, uint8_t comp_mask, ident_t in,
                          bool use_ar, float scale)
 {
@@ -507,11 +507,11 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     int xx = x > 0 ? x-1 : x;
     float dmin = sqrt(xx*xx + yy*yy);
     // Skip samples definitely outside the radius
-    if (dmin >= filter->radius_cutoff)
+    if (dmin >= filter->radius)
         return;
 
     // Check for samples that might be skippable
-    bool maybe_skippable = dmin >= filter->radius_cutoff - M_SQRT2;
+    bool maybe_skippable = dmin >= filter->radius - M_SQRT2;
 
     // Check for samples that definitely won't contribute to anti-ringing
     const float ar_radius = filter->radius_zero;
@@ -521,7 +521,7 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     offset = ivec2(${const int: x}, ${const int: y});           \
     d = length(vec2(offset) - fcoord);                          \
     @if (maybe_skippable)                                       \
-        if (d < $cutoff) {                                      \
+        if (d < $radius) {                                      \
     w = $lut(d * 1.0 / $radius);                                \
     wsum += w;                                                  \
     @if (in != NULL_IDENT) {                                    \
@@ -649,7 +649,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
             vec2 ar@c = vec2(0.0), wwsum@c = vec2(0.0);
     }
 
-    int bound   = ceil(obj->filter->radius_cutoff);
+    int bound   = ceil(obj->filter->radius);
     int offset  = bound - 1; // padding top/left
     int padding = offset + bound; // total padding
 
@@ -699,7 +699,6 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         return false;
     }
 
-    ident_t cutoff_c = sh_const_float(sh, "radius_cutoff", obj->filter->radius_cutoff);
     ident_t radius_c = sh_const_float(sh, "radius", obj->filter->radius);
     ident_t in = sh_fresh(sh, "in");
 
@@ -760,7 +759,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
             for (int x = 1 - bound; x <= bound; x++) {
                 GLSL("idx = "$" * rel.y + rel.x + "$" * %d + %d; \n",
                      sizew_c, sizew_c, y + offset, x + offset);
-                polar_sample(sh, obj->filter, src_tex, lut, cutoff_c, radius_c,
+                polar_sample(sh, obj->filter, src_tex, lut, radius_c,
                              x, y, cmask, in, use_ar, scale);
             }
         }
@@ -779,12 +778,12 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         // pixels in the next row were already gathered by the previous
         // row.
         uint32_t gathered_cur = 0x0, gathered_next = 0x0;
-        const float radius2 = PL_SQUARE(obj->filter->radius_cutoff);
+        const float radius2 = PL_SQUARE(obj->filter->radius);
         const int base = bound - 1;
 
         if (base + bound >= 8 * sizeof(gathered_cur)) {
             SH_FAIL(sh, "Polar radius %f exceeds implementation capacity!",
-                    obj->filter->radius_cutoff);
+                    obj->filter->radius);
             return false;
         }
 
@@ -818,9 +817,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
                 if (!use_gather) {
                     // Switch to direct sampling instead
-                    polar_sample(sh, obj->filter, src_tex, lut, cutoff_c,
-                                 radius_c, x, y, cmask, NULL_IDENT, use_ar,
-                                 scale);
+                    polar_sample(sh, obj->filter, src_tex, lut, radius_c,
+                                 x, y, cmask, NULL_IDENT, use_ar, scale);
                     continue;
                 }
 
@@ -859,9 +857,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                         continue; // next subpixel
 
                     GLSL("idx = %d;\n", p);
-                    polar_sample(sh, obj->filter, src_tex, lut, cutoff_c,
-                                 radius_c, x+xo[p], y+yo[p], cmask, in, use_ar,
-                                 scale);
+                    polar_sample(sh, obj->filter, src_tex, lut, radius_c,
+                                 x+xo[p], y+yo[p], cmask, in, use_ar, scale);
                 }
 
                 // Mark the other next row's pixels as already gathered
