@@ -34,8 +34,13 @@ int main()
         pl_filter flt = pl_filter_generate(log, pl_filter_params(
             .config      = *conf,
             .lut_entries = 256,
+            .cutoff      = 1e-3,
         ));
         REQUIRE(flt);
+        const float radius = PL_DEF(conf->radius, conf->kernel->radius);
+        REQUIRE_CMP(flt->radius, <=, radius, "f");
+        REQUIRE_CMP(flt->radius_zero, >, 0.0, "f");
+        REQUIRE_CMP(flt->radius_zero, <=, flt->radius, "f");
 
         if (conf->polar) {
 
