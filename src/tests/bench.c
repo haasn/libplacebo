@@ -128,10 +128,10 @@ static void benchmark(pl_gpu gpu, const char *name,
     start = pl_clock_now();
     do {
         frames++;
-        run_bench(gpu, dp, &state, src, fbos[index++], timer, bench);
-        index %= NUM_FBOS;
+        run_bench(gpu, dp, &state, src, fbos[index], timer, bench);
+        pl_gpu_flush(gpu);
+        index = (index + 1) % NUM_FBOS;
         if (index == 0) {
-            pl_gpu_flush(gpu);
             stop = pl_clock_now();
         }
         while ((gputime = pl_timer_query(gpu, timer))) {
