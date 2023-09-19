@@ -829,6 +829,7 @@ const struct pl_filter_config pl_filter_catmull_rom = {
     .kernel      = &pl_filter_function_cubic,
     .params      = {0.0, 0.5},
     .allowed     = PL_FILTER_ALL,
+    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_mitchell = {
