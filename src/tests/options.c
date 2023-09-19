@@ -29,7 +29,7 @@ int main()
     REQUIRE(pl_options_load(test, "preset=fast"));
     REQUIRE_STREQ(pl_options_save(test), "");
 
-    const char *def_opts = "upscaler=spline36,downscaler=hermite,frame_mixer=oversample,sigmoid=yes,peak_detect=yes,dither=yes";
+    const char *def_opts = "upscaler=lanczos,downscaler=hermite,frame_mixer=oversample,sigmoid=yes,peak_detect=yes,dither=yes";
     pl_options_reset(test, &pl_render_default_params);
     REQUIRE_STREQ(pl_options_save(test), def_opts);
     struct pl_options_t def_pre = *test;

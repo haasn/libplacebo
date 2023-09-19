@@ -200,7 +200,7 @@ void pl_renderer_flush_cache(pl_renderer rr)
 const struct pl_render_params pl_render_fast_params = { PL_RENDER_DEFAULTS };
 const struct pl_render_params pl_render_default_params = {
     PL_RENDER_DEFAULTS
-    .upscaler           = &pl_filter_spline36,
+    .upscaler           = &pl_filter_lanczos,
     .downscaler         = &pl_filter_hermite,
     .frame_mixer        = &pl_filter_oversample,
     .sigmoid_params     = &pl_sigmoid_default_params,
