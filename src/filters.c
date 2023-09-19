@@ -838,7 +838,7 @@ const struct pl_filter_config pl_filter_mitchell = {
     .kernel      = &pl_filter_function_cubic,
     .params      = {1/3.0, 1/3.0},
     .allowed     = PL_FILTER_ALL,
-    .recommended = PL_FILTER_SCALING,
+    .recommended = PL_FILTER_DOWNSCALING,
 };
 
 const struct pl_filter_config pl_filter_mitchell_clamp = {
