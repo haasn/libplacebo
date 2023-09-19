@@ -533,7 +533,7 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     @for (c : comp_mask)                                        \
         color[@c] += w * c[@c];                                 \
     @if (use_ar) {                                              \
-        if (d <= ${const float: ar_radius} && w > 0.0) {        \
+        if (d <= ${const float: ar_radius}) {                   \
             @for (c : comp_mask) {                              \
                 cc = vec2(${float: scale} * c[@c]);             \
                 cc.x = 1.0 - cc.x;                              \
