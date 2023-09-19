@@ -27,7 +27,7 @@ int main()
 
     for (int c = 0; c < pl_num_filter_configs; c++) {
         const struct pl_filter_config *conf = pl_filter_configs[c];
-        if (conf->kernel->opaque || conf->polar)
+        if (conf->kernel->opaque)
             continue;
 
         printf("Testing filter config '%s'\n", conf->name);
@@ -35,18 +35,38 @@ int main()
             .config      = *conf,
             .lut_entries = 256,
         ));
-
-        // Ensure the weights for each row add up to unity
         REQUIRE(flt);
-        for (int i = 0; i < flt->params.lut_entries; i++) {
-            float sum = 0.0;
-            REQUIRE(flt->row_size);
-            REQUIRE_CMP(flt->row_stride, >=, flt->row_size, "d");
-            for (int n = 0; n < flt->row_size; n++) {
-                float w = flt->weights[i * flt->row_stride + n];
-                sum += w;
+
+        if (conf->polar) {
+
+            // Test LUT accuracy
+            const int range = flt->params.lut_entries - 1;
+            double scale = flt->weights[0] / pl_filter_sample(conf, 0.0);
+            double err = 0.0;
+            for (float k = 0.0; k <= 1.0; k += 1e-3f) {
+                double ref = scale * pl_filter_sample(conf, k * flt->radius);
+                double idx = k * range;
+                int base = floorf(idx);
+                double fpart = idx - base;
+                int next = PL_MIN(base + 1, range);
+                double interp = PL_MIX(flt->weights[base], flt->weights[next], fpart);
+                err = fmaxf(err, fabs(interp - ref));
             }
-            REQUIRE_FEQ(sum, 1.0, 1e-6);
+            REQUIRE_CMP(err, <=, 1e-4, "g");
+
+        } else {
+
+            // Ensure the weights for each row add up to unity
+            for (int i = 0; i < flt->params.lut_entries; i++) {
+                const float *row = flt->weights + i * flt->row_stride;
+                float sum = 0.0;
+                REQUIRE(flt->row_size);
+                REQUIRE_CMP(flt->row_stride, >=, flt->row_size, "d");
+                for (int n = 0; n < flt->row_size; n++)
+                    sum += row[n];
+                REQUIRE_FEQ(sum, 1.0, 1e-6);
+            }
+
         }
 
         pl_filter_free(&flt);
