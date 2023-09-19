@@ -181,8 +181,8 @@ PL_API const struct pl_filter_function_preset *pl_find_filter_function_preset(co
 // Different usage domains for a filter
 enum pl_filter_usage {
     PL_FILTER_UPSCALING    = (1 << 0),
-    PL_FILTER_DOWNSCALING  = (1 << 0),
-    PL_FILTER_FRAME_MIXING = (1 << 1),
+    PL_FILTER_DOWNSCALING  = (1 << 1),
+    PL_FILTER_FRAME_MIXING = (1 << 2),
 
     PL_FILTER_SCALING = PL_FILTER_UPSCALING | PL_FILTER_DOWNSCALING,
     PL_FILTER_ALL     = PL_FILTER_SCALING | PL_FILTER_FRAME_MIXING,
