@@ -644,7 +644,6 @@ const struct pl_filter_config pl_filter_spline36 = {
     .description = "Spline (3 taps)",
     .kernel      = &pl_filter_function_spline36,
     .allowed     = PL_FILTER_ALL,
-    .recommended = PL_FILTER_SCALING,
 };
 
 const struct pl_filter_config pl_filter_spline64 = {
