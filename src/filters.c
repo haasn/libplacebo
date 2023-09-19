@@ -127,6 +127,33 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
     return k < 0 ? (1 - c->clamp) * k : k;
 }
 
+static void filter_cutoffs(const struct pl_filter_config *c, float cutoff,
+                           float *out_radius, float *out_radius_zero)
+{
+    const float bound = filter_radius(c);
+    float prev = 0.0, fprev = pl_filter_sample(c, prev);
+    bool found_root = false;
+
+    const float step = 1e-2f;
+    for (float x = 0.0; x < bound + step; x += step) {
+        float fx = pl_filter_sample(c, x);
+        if ((fprev > cutoff && fx <= cutoff) || (fprev < -cutoff && fx >= -cutoff)) {
+            // Found zero crossing
+            float root = x - fx * (x - prev) / (fx - fprev); // secant method
+            root = fminf(root, bound);
+            *out_radius = root;
+            if (!found_root) // first root
+                *out_radius_zero = root;
+            found_root = true;
+        }
+        prev = x;
+        fprev = fx;
+    }
+
+    if (!found_root)
+        *out_radius_zero = *out_radius = bound;
+}
+
 // Compute a single row of weights for a given filter in one dimension, indexed
 // by the indicated subpixel offset. Writes `f->row_size` values to `out`.
 static void compute_row(struct pl_filter_t *f, double offset, float *out)
@@ -184,20 +211,18 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
     f->params = *params;
     f->params.config.kernel = dupfilter(f, params->config.kernel);
     f->params.config.window = dupfilter(f, params->config.window);
-    f->radius = filter_radius(&params->config);
+
+    // Compute main lobe and total filter size
+    filter_cutoffs(&params->config, params->cutoff, &f->radius, &f->radius_zero);
+    f->radius_cutoff = f->radius; // backwards compatibility
 
     float *weights;
     if (params->config.polar) {
         // Compute a 1D array indexed by radius
         weights = pl_alloc(f, params->lut_entries * sizeof(float));
-        f->radius_cutoff = f->radius_zero = 0.0;
         for (int i = 0; i < params->lut_entries; i++) {
             double x = f->radius * i / (params->lut_entries - 1);
             weights[i] = pl_filter_sample(&params->config, x);
-            if (fabsf(weights[i]) > params->cutoff)
-                f->radius_cutoff = x;
-            if (weights[i] < params->cutoff && !f->radius_zero)
-                f->radius_zero = x;
         }
     } else {
         // Pick the most appropriate row size

@@ -366,10 +366,13 @@ typedef const struct pl_filter_t {
     struct pl_filter_params params;
 
     // Contains the true radius of the computed filter. This may be
-    // larger than `config.kernel->radius` depending on the `scale` passed to
-    // pl_filter_generate. This is only relevant for polar filters, where it
-    // affects the value range of *weights.
+    // smaller than the configured radius depending on the exact filter
+    // parameters used. Mainly relevant for polar filters, since
+    // it affects the value range of *weights.
     float radius;
+
+    // Radius of the first zero crossing (main lobe size).
+    float radius_zero;
 
     // The computed look-up table (LUT). For polar filters, this is interpreted
     // as a 1D array with dimensions [lut_entries] containing the raw filter
@@ -384,18 +387,6 @@ typedef const struct pl_filter_t {
     // of phase), you would use the values from weights[lut_entries/2].
     const float *weights;
 
-    // --- polar filters only (params.config.polar)
-
-    // Contains the effective cut-off radius for this filter. Samples outside
-    // of this cutoff radius may be discarded. Computed based on the `cutoff`
-    // value specified at filter generation. Only relevant for polar filters
-    // since skipping samples outside of the radius can be a significant
-    // performance gain for EWA sampling.
-    float radius_cutoff;
-
-    // Radius of the first zero crossing (main lobe size).
-    float radius_zero;
-
     // --- separable filters only (!params.config.polar)
 
     // The number of source texels to convolve over for each row. This value
@@ -407,6 +398,9 @@ typedef const struct pl_filter_t {
     // The separation (in *weights) between each row of the filter. Always
     // a multiple of params.row_stride_align.
     int row_stride;
+
+    // --- deprecated / removed fields
+    float radius_cutoff PL_DEPRECATED; // identical to `radius`
 } *pl_filter;
 
 // Generate (compute) a filter instance based on a given filter configuration.
