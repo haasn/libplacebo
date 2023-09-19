@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '335': 'remove {pl_render_params,pl_sample_filter_params}.{lut_entries,polar_cutoff}',
       '334': 'add pl_tex_transfer_params.no_import',
       '333': 'add pl_shader_sample_{hermite,gaussian}',
       '332': 'add pl_filter_function_hermite and pl_filter_hermite',

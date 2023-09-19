@@ -156,17 +156,14 @@ PL_API bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src
 struct pl_sample_filter_params {
     // The filter to use for sampling.
     struct pl_filter_config filter;
-    // The precision of the LUT. Defaults to 64 if unspecified.
-    int lut_entries;
-    // See `pl_filter_params.cutoff`. Defaults to 0.001 if unspecified. Only
-    // relevant for polar filters.
-    float cutoff;
+
     // Antiringing strength. A value of 0.0 disables antiringing, and a value
     // of 1.0 enables full-strength antiringing. Defaults to 0.0 if
     // unspecified.
     //
     // Note: Ignored if `filter.antiring` is already set to something nonzero.
     float antiring;
+
     // Disable the use of compute shaders (e.g. if rendering to non-storable tex)
     bool no_compute;
     // Disable the use of filter widening / anti-aliasing (for downscaling)
@@ -177,6 +174,10 @@ struct pl_sample_filter_params {
     // to re-use the same LUT for different filter configurations or scaling
     // ratios. Must be set to a valid pointer, and the target NULL-initialized.
     pl_shader_obj *lut;
+
+    // Deprecated / removed fields
+    int lut_entries PL_DEPRECATED; // hard-coded as 256
+    float cutoff PL_DEPRECATED; // hard-coded as 1e-3
 };
 
 #define pl_sample_filter_params(...) (&(struct pl_sample_filter_params) { __VA_ARGS__ })

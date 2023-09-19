@@ -721,8 +721,6 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
     pl_assert(lut);
     struct pl_sample_filter_params fparams = {
         .filter      = *info.config,
-        .lut_entries = params->lut_entries,
-        .cutoff      = params->polar_cutoff,
         .antiring    = params->antiringing_strength,
         .no_widening = params->skip_anti_aliasing && usage != SAMPLER_CONTRAST,
         .lut         = lut,

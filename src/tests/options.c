@@ -48,10 +48,10 @@ int main()
     REQUIRE_CMP(num, ==, 6, "d");
 
     pl_opt_data data;
-    REQUIRE((data = pl_options_get(test, "lut_entries")));
-    REQUIRE_STREQ(data->opt->key, "lut_entries");
-    REQUIRE_CMP(*(int *) data->value, =, pl_render_default_params.lut_entries, "d");
-    REQUIRE_STREQ(data->text, "64");
+    REQUIRE((data = pl_options_get(test, "tile_size")));
+    REQUIRE_STREQ(data->opt->key, "tile_size");
+    REQUIRE_CMP(*(int *) data->value, =, pl_render_default_params.tile_size, "d");
+    REQUIRE_STREQ(data->text, "32");
 
     const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=hermite,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203,contrast_recovery=0.30000001192092896,dither=yes";
     // fallback can produce different precision

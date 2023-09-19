@@ -492,19 +492,6 @@ static void describe_filter(pl_shader sh, const struct pl_filter_config *cfg,
     }
 }
 
-static bool filter_compat(pl_filter filter, int lut_entries, float cutoff,
-                          const struct pl_filter_config *params)
-{
-    if (!filter)
-        return false;
-    if (filter->params.lut_entries != lut_entries)
-        return false;
-    if (filter->params.cutoff != cutoff)
-        return false;
-
-    return pl_filter_config_eq(&filter->params.config, params);
-}
-
 // Subroutine for computing and adding an individual texel contribution
 // If `in` is NULL, samples directly
 // If `in` is set, takes the pixel from inX[idx] where X is the component,
@@ -573,6 +560,9 @@ struct sh_sampler_obj {
     bool linear_sampling; // for ortho
 };
 
+#define SCALER_LUT_SIZE     256
+#define SCALER_LUT_CUTOFF   1e-3f
+
 static void sh_sampler_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_sampler_obj *obj = ptr;
@@ -617,18 +607,16 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     if (params->no_widening)
         inv_scale = 1.0;
 
-    int lut_entries = PL_DEF(params->lut_entries, 64);
-    float cutoff = PL_DEF(params->cutoff, 0.001);
     struct pl_filter_config cfg = params->filter;
     cfg.antiring = PL_DEF(cfg.antiring, params->antiring);
     cfg.blur = PL_DEF(cfg.blur, 1.0f) * inv_scale;
-    bool update = !filter_compat(obj->filter, lut_entries, cutoff, &cfg);
+    bool update = !obj->filter || !pl_filter_config_eq(&obj->filter->params.config, &cfg);
     if (update) {
         pl_filter_free(&obj->filter);
         obj->filter = pl_filter_generate(sh->log, pl_filter_params(
             .config         = cfg,
-            .lut_entries    = lut_entries,
-            .cutoff         = cutoff,
+            .lut_entries    = SCALER_LUT_SIZE,
+            .cutoff         = SCALER_LUT_CUTOFF,
         ));
 
         if (!obj->filter) {
@@ -699,7 +687,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         .lut_type   = SH_LUT_TEXTURE,
         .var_type   = PL_VAR_FLOAT,
         .method     = SH_LUT_LINEAR,
-        .width      = lut_entries,
+        .width      = SCALER_LUT_SIZE,
         .comps      = 1,
         .update     = update,
         .fill       = fill_polar_lut,
@@ -911,7 +899,7 @@ static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
     pl_filter filt = obj->filter;
 
     if (obj->linear_sampling) {
-        for (int n = 0; n < filt->params.lut_entries; n++) {
+        for (int n = 0; n < SCALER_LUT_SIZE; n++) {
             const float *weights = filt->weights + n * filt->row_stride;
             float *row = (float *) data + n * filt->row_stride;
             pl_assert(filt->row_size % 2 == 0);
@@ -923,7 +911,7 @@ static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
             }
         }
     } else {
-        size_t entries = filt->params.lut_entries * filt->row_stride;
+        size_t entries = SCALER_LUT_SIZE * filt->row_stride;
         pl_assert(params->width * params->height * params->comps == entries);
         memcpy(data, filt->weights, entries * sizeof(float));
     }
@@ -994,17 +982,16 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     if (params->no_widening)
         inv_scale = 1.0;
 
-    int lut_entries = PL_DEF(params->lut_entries, 64);
     struct pl_filter_config cfg = params->filter;
     cfg.antiring = PL_DEF(cfg.antiring, params->antiring);
     cfg.blur = PL_DEF(cfg.blur, 1.0f) * inv_scale;
-    bool update = !filter_compat(obj->filter, lut_entries, 0.0, &cfg);
+    bool update = !obj->filter || !pl_filter_config_eq(&obj->filter->params.config, &cfg);
 
     if (update) {
         pl_filter_free(&obj->filter);
         obj->filter = pl_filter_generate(sh->log, pl_filter_params(
             .config             = cfg,
-            .lut_entries        = lut_entries,
+            .lut_entries        = SCALER_LUT_SIZE,
             .max_row_size       = gpu->limits.max_tex_2d_dim / 4,
             .row_stride_align   = 4,
         ));
@@ -1017,7 +1004,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
 
         // Check to see if we can speed up the LUT using linear trick
         obj->linear_sampling = true;
-        for (int n = 0; obj->linear_sampling && n < lut_entries; n++) {
+        for (int n = 0; obj->linear_sampling && n < SCALER_LUT_SIZE; n++) {
             for (int i = 0; i < obj->filter->row_size; i++) {
                 if (obj->filter->weights[n * obj->filter->row_stride + i] < 0.0) {
                     obj->linear_sampling = false;
@@ -1034,7 +1021,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         .var_type   = PL_VAR_FLOAT,
         .method     = SH_LUT_LINEAR,
         .width      = width,
-        .height     = lut_entries,
+        .height     = SCALER_LUT_SIZE,
         .comps      = 4,
         .update     = update,
         .fill       = fill_ortho_lut,

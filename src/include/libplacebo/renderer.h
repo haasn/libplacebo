@@ -142,9 +142,6 @@ struct pl_render_params {
     const struct pl_filter_config *plane_upscaler;
     const struct pl_filter_config *plane_downscaler;
 
-    // The number of entries for the scaler LUTs. Defaults to 64 if left unset.
-    int lut_entries;
-
     // The anti-ringing strength to apply to filters. See the equivalent option
     // in `pl_sample_filter_params` for more information.
     float antiringing_strength;
@@ -277,10 +274,6 @@ struct pl_render_params {
     // Significantly speeds up downscaling with high downscaling ratios.
     bool skip_anti_aliasing;
 
-    // Cutoff value for polar sampling. See the equivalent option in
-    // `pl_sample_filter_params` for more information.
-    float polar_cutoff;
-
     // Normally, when the size of the `target` used with `pl_render_image_mix`
     // changes, or the render parameters are updated, the internal cache of
     // mixed frames must be discarded in order to re-render all required
@@ -353,6 +346,8 @@ struct pl_render_params {
     bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
     const struct pl_icc_params *icc_params PL_DEPRECATED; // use pl_frame.icc
     bool ignore_icc_profiles PL_DEPRECATED; // non-functional, just set pl_frame.icc to NULL
+    int lut_entries PL_DEPRECATED; // hard-coded as 256
+    float polar_cutoff PL_DEPRECATED; // hard-coded as 1e-3
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest
@@ -360,11 +355,9 @@ struct pl_render_params {
 #define PL_RENDER_DEFAULTS                              \
     .color_map_params   = &pl_color_map_default_params, \
     .color_adjustment   = &pl_color_adjustment_neutral, \
-    .lut_entries        = 64,                           \
     .tile_colors        = {{0.93, 0.93, 0.93},          \
                            {0.87, 0.87, 0.87}},         \
-    .tile_size          = 32,                           \
-    .polar_cutoff       = 0.001,
+    .tile_size          = 32,
 
 #define pl_render_params(...) (&(struct pl_render_params) { PL_RENDER_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_render_params pl_render_fast_params;

@@ -33,7 +33,7 @@ int main()
         printf("Testing filter config '%s'\n", conf->name);
         pl_filter flt = pl_filter_generate(log, pl_filter_params(
             .config      = *conf,
-            .lut_entries = 128,
+            .lut_entries = 256,
         ));
 
         // Ensure the weights for each row add up to unity

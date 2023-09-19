@@ -917,7 +917,6 @@ const struct pl_opt_t pl_option_list[] = {
     SCALE_OPTS("plane_upscaler", "Plane upscaler", plane_upscaler),
     SCALE_OPTS("plane_downscaler", "Plane downscaler", plane_downscaler),
     SCALE_OPTS("frame_mixer", "Frame mixer", frame_mixer),
-    OPT_INT("lut_entries", "Scaler LUT entries", params.lut_entries, .max = 256),
     OPT_FLOAT("antiringing_strength", "Anti-ringing strength", params.antiringing_strength, .max = 1.0),
 
     // Debanding
@@ -1138,7 +1137,8 @@ const struct pl_opt_t pl_option_list[] = {
 
     // Performance / quality trade-offs and debugging options
     OPT_BOOL("skip_anti_aliasing", "Skip anti-aliasing", params.skip_anti_aliasing),
-    OPT_FLOAT("polar_cutoff", "Polar LUT cutoff", params.polar_cutoff, .max = 1.0),
+    OPT_INT("lut_entries", "Scaler LUT entries", params.lut_entries, .max = 256, .deprecated = true),
+    OPT_FLOAT("polar_cutoff", "Polar LUT cutoff", params.polar_cutoff, .max = 1.0, .deprecated = true),
     OPT_BOOL("preserve_mixing_cache", "Preserve mixing cache", params.preserve_mixing_cache),
     OPT_BOOL("skip_caching_single_frame", "Skip caching single frame", params.skip_caching_single_frame),
     OPT_BOOL("disable_linear_scaling", "Disable linear scaling", params.disable_linear_scaling),
