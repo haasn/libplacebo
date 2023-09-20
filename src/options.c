@@ -924,9 +924,9 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_PRESET("deband_preset", "Debanding preset", deband_params, LIST(
                {"default", &pl_deband_default_params})),
     OPT_INT("deband_iterations", "Debanding iterations", deband_params.iterations, .max = 16),
-    OPT_FLOAT("deband_threshold", "Debanding threshold", deband_params.threshold, .max = 1024.0),
-    OPT_FLOAT("deband_radius", "Debanding radius", deband_params.radius, .max = 1024.0),
-    OPT_FLOAT("deband_grain", "Debanding grain", deband_params.grain, .max = 1024.0),
+    OPT_FLOAT("deband_threshold", "Debanding threshold", deband_params.threshold, .max = 1000.0),
+    OPT_FLOAT("deband_radius", "Debanding radius", deband_params.radius, .max = 1000.0),
+    OPT_FLOAT("deband_grain", "Debanding grain", deband_params.grain, .max = 1000.0),
     OPT_FLOAT("deband_grain_neutral_r", "Debanding grain neutral R", deband_params.grain_neutral[0]),
     OPT_FLOAT("deband_grain_neutral_g", "Debanding grain neutral G", deband_params.grain_neutral[1]),
     OPT_FLOAT("deband_grain_neutral_b", "Debanding grain neutral B", deband_params.grain_neutral[2]),
