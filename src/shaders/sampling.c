@@ -557,7 +557,6 @@ struct sh_sampler_obj {
     pl_filter filter;
     pl_shader_obj lut;
     pl_shader_obj pass2; // for pl_shader_sample_ortho
-    bool linear_sampling; // for ortho
 };
 
 #define SCALER_LUT_SIZE     256
@@ -895,7 +894,9 @@ static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
     const struct sh_sampler_obj *obj = params->priv;
     pl_filter filt = obj->filter;
 
-    if (obj->linear_sampling) {
+    if (filt->radius == filt->radius_zero) {
+        // Main lobe covers entire radius, so all weights are positive, meaning
+        // we can use the linear resampling trick
         for (int n = 0; n < SCALER_LUT_SIZE; n++) {
             const float *weights = filt->weights + n * filt->row_stride;
             float *row = (float *) data + n * filt->row_stride;
@@ -998,17 +999,6 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
             SH_FAIL(sh, "Failed initializing separated filter!");
             return false;
         }
-
-        // Check to see if we can speed up the LUT using linear trick
-        obj->linear_sampling = true;
-        for (int n = 0; obj->linear_sampling && n < SCALER_LUT_SIZE; n++) {
-            for (int i = 0; i < obj->filter->row_size; i++) {
-                if (obj->filter->weights[n * obj->filter->row_stride + i] < 0.0) {
-                    obj->linear_sampling = false;
-                    break;
-                }
-            }
-        }
     }
 
     int N = obj->filter->row_size; // number of samples to convolve
@@ -1043,6 +1033,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
 
     float denom = PL_MAX(1, width - 1); // avoid division by zero
     bool use_ar = cfg.antiring > 0 && ratio[pass] > 1.0;
+    bool use_linear = obj->filter->radius == obj->filter->radius_zero;
 
 #pragma GLSL /* pl_shader_sample_ortho */                                       \
     vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                                      \
@@ -1070,7 +1061,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
             lo = min(lo, c);                                                    \
             hi = max(hi, c);                                                    \
         @} else {                                                               \
-            @if (obj->linear_sampling) {                                        \
+            @if (use_linear) {                                                  \
                 @if @(n % 2 == 0) {                                             \
                     off = @n.0 + ws[@n % 4 + 1];                                \
                     ca += ws[@n % 4] * textureLod($src_tex, base + pt * off,    \
