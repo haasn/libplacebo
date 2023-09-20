@@ -72,7 +72,7 @@ struct pl_deband_params {
 
     // The debanding filter's cut-off threshold. Higher numbers increase the
     // debanding strength dramatically, but progressively diminish image
-    // details. Defaults to 2.0.
+    // details. Defaults to 3.0.
     float threshold;
 
     // The debanding filter's initial radius. The radius increases linearly
@@ -86,7 +86,7 @@ struct pl_deband_params {
     // result in a very big change to the brightness level. It's recommended to
     // either scale this value down or disable it entirely for HDR.
     //
-    // Defaults to 6.0, which is very mild.
+    // Defaults to 4.0, which is very mild.
     float grain;
 
     // 'Neutral' grain value for each channel being debanded (sorted in order
@@ -98,9 +98,9 @@ struct pl_deband_params {
 
 #define PL_DEBAND_DEFAULTS  \
     .iterations = 1,        \
-    .threshold  = 2.0,      \
+    .threshold  = 3.0,      \
     .radius     = 16.0,     \
-    .grain      = 6.0,
+    .grain      = 4.0,
 
 #define pl_deband_params(...) (&(struct pl_deband_params) {PL_DEBAND_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_deband_params pl_deband_default_params;
