@@ -212,7 +212,7 @@ const struct pl_render_params pl_render_high_quality_params = {
     PL_RENDER_DEFAULTS
     .upscaler           = &pl_filter_ewa_lanczossharp,
     .downscaler         = &pl_filter_hermite,
-    .frame_mixer        = &pl_filter_hermite,
+    .frame_mixer        = &pl_filter_oversample,
     .sigmoid_params     = &pl_sigmoid_default_params,
     .peak_detect_params = &pl_peak_detect_high_quality_params,
     .color_map_params   = &pl_color_map_high_quality_params,
