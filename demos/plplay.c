@@ -659,6 +659,7 @@ int main(int argc, char *argv[])
         .use_icc_luma = true,
         .fps = 60.0,
         .args = {
+            .preset = &pl_render_default_params,
             .verbosity = PL_LOG_INFO,
         },
     };
