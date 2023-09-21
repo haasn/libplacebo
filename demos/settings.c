@@ -1,4 +1,5 @@
 #include <stdatomic.h>
+#include <getopt.h>
 
 #include <libavutil/file.h>
 
@@ -15,6 +16,78 @@
 
 #ifdef HAVE_NUKLEAR
 #include "ui.h"
+
+bool parse_args(struct plplay_args *args, int argc, char *argv[])
+{
+    static struct option long_options[] = {
+        {"verbose", no_argument,        NULL, 'v'},
+        {"quiet",   no_argument,        NULL, 'q'},
+        {"preset",  required_argument,  NULL, 'p'},
+        {"hwdec",   no_argument,        NULL, 'H'},
+        {"window",  required_argument,  NULL, 'w'},
+        {0}
+    };
+
+    int option;
+    while ((option = getopt_long(argc, argv, "vqp:Hw:", long_options, NULL)) != -1) {
+        switch (option) {
+            case 'v':
+                if (args->verbosity < PL_LOG_TRACE)
+                    args->verbosity++;
+                break;
+            case 'q':
+                if (args->verbosity > PL_LOG_NONE)
+                    args->verbosity--;
+                break;
+            case 'p':
+                if (!strcmp(optarg, "default")) {
+                    args->preset = &pl_render_default_params;
+                } else if (!strcmp(optarg, "fast")) {
+                    args->preset = &pl_render_fast_params;
+                } else if (!strcmp(optarg, "highquality") || !strcmp(optarg, "hq")) {
+                    args->preset = &pl_render_high_quality_params;
+                } else {
+                    fprintf(stderr, "Invalid value for -p/--preset: '%s'\n", optarg);
+                    goto error;
+                }
+                break;
+            case 'H':
+                args->hwdec = true;
+                break;
+            case 'w':
+                args->window_impl = optarg;
+                break;
+            case '?':
+            default:
+                goto error;
+        }
+    }
+
+    // Check for the required filename argument
+    if (optind < argc) {
+        args->filename = argv[optind++];
+    } else {
+        fprintf(stderr, "Missing filename!\n");
+        goto error;
+    }
+
+    if (optind != argc) {
+        fprintf(stderr, "Superfluous argument: %s\n", argv[optind]);
+        goto error;
+    }
+
+    return true;
+
+error:
+    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [--hwdec] [-w/--window <api>] <filename>\n", argv[0]);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -v, --verbose   Increase verbosity\n");
+    fprintf(stderr, "  -q, --quiet     Decrease verbosity\n");
+    fprintf(stderr, "  -p, --preset    Set the rendering preset (default|fast|hq|highquality)\n");
+    fprintf(stderr, "  -H, --hwdec     Enable hardware decoding\n");
+    fprintf(stderr, "  -w, --window    Specify the windowing API\n");
+    return false;
+}
 
 static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *path)
 {

@@ -85,6 +85,18 @@ static void uninit(struct plplay *p)
 
 static bool open_file(struct plplay *p, const char *filename)
 {
+    static const int av_log_level[] = {
+        [PL_LOG_NONE]  = AV_LOG_QUIET,
+        [PL_LOG_FATAL] = AV_LOG_PANIC,
+        [PL_LOG_ERR]   = AV_LOG_ERROR,
+        [PL_LOG_WARN]  = AV_LOG_WARNING,
+        [PL_LOG_INFO]  = AV_LOG_INFO,
+        [PL_LOG_DEBUG] = AV_LOG_VERBOSE,
+        [PL_LOG_TRACE] = AV_LOG_DEBUG,
+    };
+
+    av_log_set_level(av_log_level[p->args.verbosity]);
+
     printf("Opening file: '%s'\n", filename);
     if (avformat_open_input(&p->format, filename, NULL, NULL) != 0) {
         fprintf(stderr, "libavformat: Failed opening file!\n");
@@ -158,7 +170,7 @@ static bool init_codec(struct plplay *p)
     printf("Codec: %s (%s)\n", codec->name, codec->long_name);
 
     const AVCodecHWConfig *hwcfg = 0;
-    if (!p->software_decoding) {
+    if (p->args.hwdec) {
         for (int i = 0; (hwcfg = avcodec_get_hw_config(codec, i)); i++) {
             if (!pl_test_pixfmt(p->win->gpu, hwcfg->pix_fmt))
                 continue;
@@ -640,67 +652,27 @@ static void info_callback(void *priv, const struct pl_render_info *info)
 
 static struct plplay state;
 
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
-    pl_log log = pl_log_create(PL_API_VER, pl_log_params(
-        .log_cb    = pl_log_color,
-        .log_level = PL_LOG_INFO,
-    ));
-
     state = (struct plplay) {
-        .log = log,
-        .opts = pl_options_alloc(log),
         .target_override = true,
         .use_icc_luma = true,
         .fps = 60.0,
+        .args = {
+            .verbosity = PL_LOG_INFO,
+        },
     };
 
-    const char *filename = NULL;
-    bool print_help = false;
-    const char *win_tag = NULL;
-    pl_options opts = state.opts;
-
-    for (char **arg = argv + 1; !print_help && *arg; ++arg) {
-        if ((*arg)[0] != '-') {
-            filename = *arg++;
-            while (*arg)
-                fprintf(stderr, "Ignored trailing arg: %s\n", *arg++);
-            break;
-        }
-        switch ((*arg)[1]) {
-        case 's': state.software_decoding = true; break;
-        case 'v': pl_log_level_update(log, PL_LOG_DEBUG); break;
-        case 'a':
-            win_tag = *++arg;
-            if (!win_tag)
-                print_help = true;
-            break;
-        case 'h':
-            pl_options_reset(opts, &pl_render_high_quality_params);
-            break;
-        default:
-            fprintf(stderr, "Invalid arg: %s\n", *arg);
-            print_help = true;
-            break;
-        }
-    }
-
-    if (print_help || !filename) {
-        fprintf(stderr,
-            "Usage: %s [-a] [-h] [-s] [-v] <filename>\n\n"
-            "Options:\n"
-            "\t-a api\twindow api selection [glfw-vk, glfw-gl, glfw-d3d11, sdl2-vk, sdl2-gl]\n"
-            "\t-h\thigh quality defaults\n"
-            "\t-s\tsoftware decoding\n"
-            "\t-v\tverbose\n"
-        , argv[0]);
+    if (!parse_args(&state.args, argc, argv))
         return -1;
-    }
 
-    if (log->params.log_level == PL_LOG_DEBUG)
-        av_log_set_level(AV_LOG_VERBOSE);
-    else
-        av_log_set_level(AV_LOG_INFO);
+    state.log = pl_log_create(PL_API_VER, pl_log_params(
+        .log_cb    = pl_log_color,
+        .log_level = state.args.verbosity,
+    ));
+
+    pl_options opts = state.opts = pl_options_alloc(state.log);
+    pl_options_reset(opts, state.args.preset);
 
     // Enable this by default to save one click
     opts->params.cone_params = &opts->cone_params;
@@ -714,7 +686,7 @@ int main(int argc, char **argv)
     opts->params.info_priv = &state;
 
     struct plplay *p = &state;
-    if (!open_file(p, filename))
+    if (!open_file(p, state.args.filename))
         goto error;
 
     const AVCodecParameters *par = p->stream->codecpar;
@@ -726,7 +698,7 @@ int main(int argc, char **argv)
         .title = "plplay",
         .width = par->width,
         .height = par->height,
-        .forced_impl = win_tag,
+        .forced_impl = state.args.window_impl,
     };
 
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {

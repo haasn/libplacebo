@@ -25,7 +25,18 @@ enum {
     ZOOM_COUNT,
 };
 
+struct plplay_args {
+    const struct pl_render_params *preset;
+    enum pl_log_level verbosity;
+    const char *window_impl;
+    const char *filename;
+    bool hwdec;
+};
+
+bool parse_args(struct plplay_args *args, int argc, char *argv[]);
+
 struct plplay {
+    struct plplay_args args;
     struct window *win;
     struct ui *ui;
     char cache_file[512];
@@ -52,7 +63,6 @@ struct plplay {
     bool colorspace_hint_dynamic;
     bool ignore_dovi;
     bool toggle_fullscreen;
-    bool software_decoding;
     bool advanced_scalers;
 
     bool target_override; // if false, fields below are ignored
