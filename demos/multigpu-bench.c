@@ -31,11 +31,11 @@ enum {
     ASYNC_COMP = 1,
 
     // Buffer configuration
-    PAGE_SIZE    = 4096,
+    PTR_ALIGN    = 4096,
     PIXEL_PITCH  = DEPTH / 8,
     ROW_PITCH    = ALIGN2(WIDTH * PIXEL_PITCH, 256),
     IMAGE_SIZE   = ROW_PITCH * HEIGHT,
-    BUFFER_SIZE  = IMAGE_SIZE + PAGE_SIZE - 1,
+    BUFFER_SIZE  = IMAGE_SIZE + PTR_ALIGN - 1,
 
     // Test configuration
     TEST_MS    = 1500,
@@ -45,7 +45,7 @@ enum {
 
 static uint8_t* page_align(uint8_t *data)
 {
-    return (uint8_t *) ALIGN2((uintptr_t) data, PAGE_SIZE);
+    return (uint8_t *) ALIGN2((uintptr_t) data, PTR_ALIGN);
 }
 
 enum mem_owner {
