@@ -136,7 +136,7 @@ else
     if host_machine.system() == 'windows'
       plplay_deps += cc.find_library('shlwapi', required: true)
     endif
-    plplay_sources = ['plplay.c']
+    plplay_sources = ['plplay.c', 'settings.c']
     if host_machine.system() == 'windows'
       windows = import('windows')
       plplay_sources += windows.compile_resources(demos_rc, depends: version_h,
