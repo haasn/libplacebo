@@ -26,8 +26,6 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 
 #include <libplacebo/utils/libav.h>
 
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
 static inline void log_time(struct timing *t, double ts)
 {
     t->sum += ts;
@@ -185,7 +183,7 @@ static bool init_codec(struct plplay *p)
     if (!hwcfg)
         printf("Using software decoding\n");
 
-    p->codec->thread_count = MIN(av_cpu_count() + 1, 16);
+    p->codec->thread_count = FFMIN(av_cpu_count() + 1, 16);
     p->codec->get_buffer2 = pl_get_buffer2;
     p->codec->opaque = &p->win->gpu;
 #if LIBAVCODEC_VERSION_MAJOR < 60
