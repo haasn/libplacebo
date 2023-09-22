@@ -245,11 +245,16 @@ static void bench_polar_nocompute(pl_shader sh, pl_shader_obj *state, pl_tex src
     REQUIRE(pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params));
 }
 
-
 static void bench_hdr_peak(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
-    REQUIRE(pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL));
+    REQUIRE(pl_shader_detect_peak(sh, pl_color_space_hdr10, state, &pl_peak_detect_default_params));
+}
+
+static void bench_hdr_peak_hq(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
+    REQUIRE(pl_shader_detect_peak(sh, pl_color_space_hdr10, state, &pl_peak_detect_high_quality_params));
 }
 
 static void bench_hdr_lut(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -500,8 +505,10 @@ int main()
     benchmark(vk->gpu, "dither_ordered_fixed", BENCH_SH(bench_dither_ordered_fix));
 
     // HDR peak detection
-    if (vk->gpu->glsl.compute)
-        benchmark(vk->gpu, "hdr_peakdetect", BENCH_SH(bench_hdr_peak));
+    if (vk->gpu->glsl.compute) {
+        benchmark(vk->gpu, "hdr_peakdetect",    BENCH_SH(bench_hdr_peak));
+        benchmark(vk->gpu, "hdr_peakdetect_hq", BENCH_SH(bench_hdr_peak_hq));
+    }
 
     // Tone mapping
     benchmark(vk->gpu, "hdr_lut", BENCH_SH(bench_hdr_lut));
