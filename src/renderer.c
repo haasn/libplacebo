@@ -3265,6 +3265,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     pl_dispatch_mark_dynamic(rr->dp, params->dynamic_constants);
 
     require(images->num_frames >= 1);
+    require(images->vsync_duration > 0.0);
     for (int i = 0; i < images->num_frames - 1; i++)
         require(images->timestamps[i] <= images->timestamps[i+1]);
 
