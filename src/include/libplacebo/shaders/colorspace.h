@@ -134,7 +134,8 @@ struct pl_peak_detect_params {
     float percentile;
 
     // Allows the peak detection result to be delayed by up to a single frame,
-    // which can sometimes improve thoughpout. Disabled by default.
+    // which can sometimes improve thoughput, at the cost of introducing the
+    // possibility of 1-frame flickers on transitions. Disabled by default.
     bool allow_delayed;
 
     // --- Deprecated / removed fields
@@ -237,9 +238,10 @@ struct pl_color_map_params {
     // Gamut mapping 3DLUT size, for channels ICh. Defaults to {48, 32, 256}
     int lut3d_size[3];
 
-    // Use higher quality tricubic interpolation for gamut mapping 3DLUTs.
-    // Off by default for performance reasons, but may substantially improve
-    // the 3DLUT gamut mapping accuracy.
+    // Use higher quality, but slower, tricubic interpolation for gamut mapping
+    // 3DLUTs. May substantially improve the 3DLUT gamut mapping accuracy, in
+    // particular at smaller 3DLUT sizes. Shouldn't have much effect at the
+    // default size.
     bool lut3d_tricubic;
 
     // If true, allows the gamut mapping function to expand the gamut, in
@@ -268,7 +270,7 @@ struct pl_color_map_params {
     // Tone mapping LUT size. Defaults to 256.
     int lut_size;
 
-    // Contrast recovery strength. If set to a value above 0.0, the source
+    // HDR contrast recovery strength. If set to a value above 0.0, the source
     // image will be divided into high-frequency and low-frequency components,
     // and a portion of the high-frequency image is added back onto the
     // tone-mapped output. May cause excessive ringing artifacts for some HDR

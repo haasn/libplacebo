@@ -41,15 +41,14 @@ enum pl_dither_method {
 
     // The same as `PL_DITHER_ORDERED_LUT`, but uses fixed function math instead
     // of a LUT. This is faster, but only supports a fixed dither matrix size
-    // of 16x16 (equal to a `lut_size` of 4). Requires GLSL 130+.
+    // of 16x16 (equal to a `lut_size` of 4).
     PL_DITHER_ORDERED_FIXED,
 
     // Dither with white noise. This does not require a LUT and is fairly cheap
     // to compute. Unlike the other modes it doesn't show any repeating
     // patterns either spatially or temporally, but the downside is that this
     // is visually fairly jarring due to the presence of low frequencies in the
-    // noise spectrum. Used as a fallback when the above methods are not
-    // available.
+    // noise spectrum.
     PL_DITHER_WHITE_NOISE,
 
     PL_DITHER_METHOD_COUNT,
