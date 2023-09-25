@@ -809,8 +809,10 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
     if (!params->radius)
         return oversample(p, mix, params);
 
-    double min_pts = params->pts - params->radius * p->fps.estimate,
-           max_pts = params->pts + params->radius * p->fps.estimate;
+    pl_assert(p->fps.estimate && p->vps.estimate);
+    float radius = params->radius * fmaxf(1.0f, p->vps.estimate / p->fps.estimate);
+    double min_pts = params->pts - radius * p->fps.estimate,
+           max_pts = params->pts + radius * p->fps.estimate;
 
     enum pl_queue_status ret;
     switch ((ret = advance(p, min_pts, params))) {
