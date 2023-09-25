@@ -82,7 +82,7 @@ PL_API void pl_renderer_reset_errors(pl_renderer rr,
 enum pl_lut_type {
     PL_LUT_UNKNOWN = 0,
     PL_LUT_NATIVE,      // applied to raw image contents (after fixing bit depth)
-    PL_LUT_NORMALIZED,  // applied to normalized RGB values
+    PL_LUT_NORMALIZED,  // applied to normalized (HDR) RGB values
     PL_LUT_CONVERSION,  // LUT fully replaces color conversion
 
     // Note: When using a PL_LUT_CONVERSION to replace the YUV->RGB conversion,
