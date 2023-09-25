@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '338': 'split pl_filter_nearest into pl_filter_nearest and pl_filter_box',
       '337': 'fix PL_FILTER_DOWNSCALING constant',
       '336': 'deprecate pl_filter.radius_cutoff in favor of pl_filter.radius',
       '335': 'remove {pl_render_params,pl_sample_filter_params}.{lut_entries,polar_cutoff}',

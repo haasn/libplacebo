@@ -266,6 +266,7 @@ PL_API extern const struct pl_filter_config pl_filter_spline16;    // 2 taps
 PL_API extern const struct pl_filter_config pl_filter_spline36;    // 3 taps
 PL_API extern const struct pl_filter_config pl_filter_spline64;    // 4 taps
 PL_API extern const struct pl_filter_config pl_filter_nearest;
+PL_API extern const struct pl_filter_config pl_filter_box;
 PL_API extern const struct pl_filter_config pl_filter_bilinear;
 PL_API extern const struct pl_filter_config pl_filter_gaussian;
 // Sinc family (all configured to 3 taps):
@@ -292,7 +293,6 @@ PL_API extern const struct pl_filter_config pl_filter_ewa_robidouxsharp;
 PL_API extern const struct pl_filter_config pl_filter_oversample;
 
 // Backwards compatibility
-#define pl_filter_box               pl_filter_nearest
 #define pl_filter_triangle          pl_filter_bilinear
 #define pl_oversample_frame_mixer   pl_filter_oversample
 

@@ -650,8 +650,17 @@ const struct pl_filter_config pl_filter_nearest = {
     .description = "Nearest neighbor",
     .kernel      = &pl_filter_function_box,
     .radius      = 0.5,
+    .allowed     = PL_FILTER_UPSCALING,
+    .recommended = PL_FILTER_UPSCALING,
+};
+
+const struct pl_filter_config pl_filter_box = {
+    .name        = "box",
+    .description = "Box averaging",
+    .kernel      = &pl_filter_function_box,
+    .radius      = 0.5,
     .allowed     = PL_FILTER_SCALING,
-    .recommended = PL_FILTER_SCALING,
+    .recommended = PL_FILTER_DOWNSCALING,
 };
 
 const struct pl_filter_config pl_filter_bilinear = {
