@@ -785,7 +785,10 @@ struct pl_frame_mix {
     // "next" frames.
 };
 
-// Helper function to calculate the frame mixing radius.
+// Helper function to calculate the base frame mixing radius.
+//
+// Note: When the source FPS exceeds the display FPS, this radius must be
+// increased by the corresponding ratio.
 static inline float pl_frame_mix_radius(const struct pl_render_params *params)
 {
     // For backwards compatibility, allow !frame_mixer->kernel

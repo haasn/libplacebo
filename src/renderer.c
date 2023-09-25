@@ -3301,6 +3301,21 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     for (int i = 0; i < rr->frames.num; i++)
         rr->frames.elem[i].evict = true;
 
+    // Blur frame mixer according to vsync ratio (source / display)
+    struct pl_filter_config mixer;
+    if (params->frame_mixer) {
+        mixer = *params->frame_mixer;
+        mixer.blur = PL_DEF(mixer.blur, 1.0);
+        for (int i = 1; i < images->num_frames; i++) {
+            if (images->timestamps[i] >= 0.0 && images->timestamps[i - 1] < 0) {
+                float frame_dur = images->timestamps[i] - images->timestamps[i - 1];
+                if (!params->skip_anti_aliasing)
+                    mixer.blur *= images->vsync_duration / frame_dur;
+                break;
+            }
+        }
+    }
+
     // Traverse the input frames and determine/prepare the ones we need
     bool single_frame = !params->frame_mixer || images->num_frames == 1;
 retry:
@@ -3318,7 +3333,6 @@ retry:
         }
 
         float weight;
-        const struct pl_filter_config *mixer = params->frame_mixer;
         if (single_frame) {
 
             // Only render the refimg, ignore others
@@ -3330,7 +3344,7 @@ retry:
             }
 
         // For backwards compatibility, treat !kernel as oversample
-        } else if (!mixer->kernel || mixer->kernel == &pl_filter_function_oversample) {
+        } else if (!mixer.kernel || mixer.kernel == &pl_filter_function_oversample) {
 
             // Compute the visible interval [rts, end] of this frame
             float end = i+1 < images->num_frames ? images->timestamps[i+1] : INFINITY;
@@ -3348,21 +3362,21 @@ retry:
             PL_TRACE(rr, "  -> Frame [%f, %f] intersects [%f, %f] = weight %f",
                      rts, end, 0.0, images->vsync_duration, weight);
 
-            if (weight < mixer->kernel->params[0]) {
+            if (weight < mixer.kernel->params[0]) {
                 PL_TRACE(rr, "     (culling due to threshold)");
                 weight = 0.0;
             }
 
         } else {
 
-            if (fabsf(rts) >= mixer->kernel->radius) {
-                PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)",
-                         mixer->kernel->radius);
+            const float radius = pl_filter_radius_bound(&mixer);
+            if (fabsf(rts) >= radius) {
+                PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)", radius);
                 continue;
             }
 
             // Weight is directly sampled from the filter
-            weight = pl_filter_sample(mixer, rts);
+            weight = pl_filter_sample(&mixer, rts);
             PL_TRACE(rr, "  -> Filter offset %f = weight %f", rts, weight);
 
         }
