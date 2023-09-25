@@ -894,7 +894,7 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
     OPT_SCALER_PRESET(PREFIX"_preset", NAME "preset", FIELD),                         \
     OPT_NAMED(PREFIX"_kernel", NAME" kernel", FIELD.kernel, pl_filter_functions),     \
     OPT_NAMED(PREFIX"_window", NAME" window", FIELD.window, pl_filter_functions),     \
-    OPT_FLOAT(PREFIX"_radius", NAME" radius", FIELD.radius, .min = 1.0, .max = 16.0), \
+    OPT_FLOAT(PREFIX"_radius", NAME" radius", FIELD.radius, .min = 0.0, .max = 16.0), \
     OPT_FLOAT(PREFIX"_clamp", NAME" clamping", FIELD.clamp, .max = 1.0),              \
     OPT_FLOAT(PREFIX"_blur", NAME" blur factor", FIELD.blur, .max = 100.0),           \
     OPT_FLOAT(PREFIX"_taper", NAME" taper factor", FIELD.taper, .max = 1.0),          \
