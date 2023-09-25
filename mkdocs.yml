@@ -35,6 +35,8 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.snippets
   - pymdownx.superfences
+  - toc:
+      toc_depth: 3
 
 nav:
   - 'Using':
