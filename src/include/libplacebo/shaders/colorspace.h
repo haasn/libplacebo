@@ -318,6 +318,7 @@ struct pl_color_map_params {
     .metadata               = PL_HDR_METADATA_ANY,              \
     .lut3d_size             = {48, 32, 256},                    \
     .lut_size               = 256,                              \
+    .visualize_rect         = {0, 0, 1, 1},                     \
     .contrast_smoothness    = 3.5f,
 
 #define PL_COLOR_MAP_HQ_DEFAULTS                                \
