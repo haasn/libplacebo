@@ -207,21 +207,20 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_st2094_40;
 PL_API extern const struct pl_tone_map_function pl_tone_map_st2094_10;
 
 // EETF from the ITU-R Report BT.2390, a hermite spline roll-off with linear
-// segment. The knee point offset is configurable. Note that this defaults to
-// 1.0, rather than the value of 0.5 from the ITU-R spec.
+// segment.
 PL_API extern const struct pl_tone_map_function pl_tone_map_bt2390;
 
 // EETF from ITU-R Report BT.2446, method A. Can be used for both forward
-// and inverse tone mapping. Not configurable.
+// and inverse tone mapping.
 PL_API extern const struct pl_tone_map_function pl_tone_map_bt2446a;
 
 // Simple spline consisting of two polynomials, joined by a single pivot point,
 // which is tuned based on the source scene average brightness (taking into
-// account HDR10+ metadata if available). This function can be used
+// account dynamic metadata if available). This function can be used
 // for both forward and inverse tone mapping.
 PL_API extern const struct pl_tone_map_function pl_tone_map_spline;
 
-// Simple non-linear, global tone mapping algorithm. Named after Erik Reinhard.
+// Very simple non-linear curve. Named after Erik Reinhard.
 PL_API extern const struct pl_tone_map_function pl_tone_map_reinhard;
 
 // Generalization of the reinhard tone mapping algorithm to support an
@@ -234,13 +233,13 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_mobius;
 // Popularized by its use in video games with HDR rendering. Preserves both
 // dark and bright details very well, but comes with the drawback of changing
 // the average brightness quite significantly. This is sort of similar to
-// pl_tone_map_reinhard with parameter 0.24.
+// pl_tone_map_reinhard with `reinhard_contrast=0.24`.
 PL_API extern const struct pl_tone_map_function pl_tone_map_hable;
 
 // Fits a gamma (power) function to transfer between the source and target
 // color spaces, effectively resulting in a perceptual hard-knee joining two
-// roughly linear sections. This preserves details at all scales fairly
-// accurately, but can result in an image with a muted or dull appearance.
+// roughly linear sections. This preserves details at all scales, but can result
+// in an image with a muted or dull appearance.
 PL_API extern const struct pl_tone_map_function pl_tone_map_gamma;
 
 // Linearly stretches the input range to the output range, in PQ space. This
@@ -249,9 +248,9 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_gamma;
 // addition to regular tone-mapping.
 PL_API extern const struct pl_tone_map_function pl_tone_map_linear;
 
-// Like `pl_tone_map_linear`, but in linear light (instead of perceptually
-// linear). Works well for small range adjustments but may cause severe
-// darkening when downconverting from e.g. 10k nits to SDR.
+// Like `pl_tone_map_linear`, but in linear light (instead of PQ). Works well
+// for small range adjustments but may cause severe darkening when
+// downconverting from e.g. 10k nits to SDR.
 PL_API extern const struct pl_tone_map_function pl_tone_map_linear_light;
 
 // A list of built-in tone mapping functions, terminated by NULL
