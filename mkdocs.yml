@@ -24,6 +24,9 @@ theme:
   features:
     - content.code.annotate
 
+extra_css:
+  - style.css
+
 markdown_extensions:
   - admonition
   - footnotes
