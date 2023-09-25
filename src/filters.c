@@ -75,17 +75,9 @@ bool pl_filter_config_eq(const struct pl_filter_config *a,
     return eq;
 }
 
-static inline float filter_radius(const struct pl_filter_config *c)
-{
-    float radius = c->radius && c->kernel->resizable ? c->radius : c->kernel->radius;
-    if (c->blur > 0.0)
-        radius *= c->blur;
-    return radius;
-}
-
 double pl_filter_sample(const struct pl_filter_config *c, double x)
 {
-    const float radius = filter_radius(c);
+    const float radius = pl_filter_radius_bound(c);
 
     // All filters are symmetric, and in particular only need to be defined
     // for [0, radius].
@@ -130,7 +122,7 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
 static void filter_cutoffs(const struct pl_filter_config *c, float cutoff,
                            float *out_radius, float *out_radius_zero)
 {
-    const float bound = filter_radius(c);
+    const float bound = pl_filter_radius_bound(c);
     float prev = 0.0, fprev = pl_filter_sample(c, prev);
     bool found_root = false;
 

@@ -19,6 +19,12 @@
 
 #include <libplacebo/filters.h>
 
+static inline float pl_filter_radius_bound(const struct pl_filter_config *c)
+{
+    const float r = c->radius && c->kernel->resizable ? c->radius : c->kernel->radius;
+    return c->blur > 0.0 ? r * c->blur : r;
+}
+
 #define COMMON_FILTER_PRESETS                                                   \
     /* Highest priority / recommended filters */                                \
     {"bilinear",            &pl_filter_bilinear,    "Bilinear"},                \
