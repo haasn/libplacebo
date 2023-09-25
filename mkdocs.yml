@@ -44,5 +44,6 @@ nav:
     - basic-rendering.md
     - renderer.md
     - custom-shaders.md
+    - options.md
   - 'Developing':
     - glsl.md
