@@ -9,7 +9,7 @@ project('libplacebo', ['c', 'cpp'],
   meson_version: '>=0.63',
   version: '@0@.@1@.@2@'.format(
     # Major version
-    6,
+    7,
     # API version
     {
       '338': 'split pl_filter_nearest into pl_filter_nearest and pl_filter_box',
