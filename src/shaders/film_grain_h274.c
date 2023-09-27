@@ -290,8 +290,10 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
              "float scale = "$" * float(int(val >> 16));    \n"
              // Add randomness
              "uint rand = pcg[%d];                          \n"
-             "offset.y += (rand >> 16u) %% 52u;             \n"
-             "offset.x += (rand & 0xFFFFu) %% 56u;          \n"
+             "offset.x += (rand >> 16u) %% 52u;             \n"
+             "offset.y += (rand & 0xFFFFu) %% 56u;          \n"
+             "offset.x &= 0xFFFCu;                          \n"
+             "offset.y &= 0xFFF8u;                          \n"
              "if ((rand & 1u) == 1u) scale = -scale;        \n"
              // Add local offset and compute grain
              "offset += 8u * (gl_WorkGroupID.xy %% 2u);     \n"
