@@ -139,8 +139,8 @@ struct pl_peak_detect_params {
     bool allow_delayed;
 
     // --- Deprecated / removed fields
-    float overshoot_margin PL_DEPRECATED;
-    float minimum_peak PL_DEPRECATED;
+    PL_DEPRECATED_IN(v5.256) float overshoot_margin;
+    PL_DEPRECATED_IN(v6.313) float minimum_peak;
 };
 
 #define PL_PEAK_DETECT_DEFAULTS         \
@@ -191,8 +191,8 @@ PL_API bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
 // return false.
 //
 // Deprecated in favor of `pl_get_detected_hdr_metadata`
-PL_DEPRECATED PL_API bool pl_get_detected_peak(const pl_shader_obj state,
-                                               float *out_cll, float *out_fall);
+PL_DEPRECATED_IN(v5.255) PL_API bool
+pl_get_detected_peak(const pl_shader_obj state, float *out_cll, float *out_fall);
 
 // Resets the peak detection state in a given tone mapping state object. This
 // is not equal to `pl_shader_obj_destroy`, because it does not destroy any
@@ -208,20 +208,20 @@ PL_API void pl_shader_extract_features(pl_shader sh, struct pl_color_space csp);
 // hybrid tone-mapping, mixing together the intensity (I) and per-channel (LMS)
 // results.
 enum pl_tone_map_mode {
-    PL_TONE_MAP_AUTO    PL_DEPRECATED_ENUMERATOR,
-    PL_TONE_MAP_RGB     PL_DEPRECATED_ENUMERATOR,
-    PL_TONE_MAP_MAX     PL_DEPRECATED_ENUMERATOR,
-    PL_TONE_MAP_HYBRID  PL_DEPRECATED_ENUMERATOR,
-    PL_TONE_MAP_LUMA    PL_DEPRECATED_ENUMERATOR,
+    PL_TONE_MAP_AUTO    PL_DEPRECATED_ENUM_IN(v6.269),
+    PL_TONE_MAP_RGB     PL_DEPRECATED_ENUM_IN(v6.269),
+    PL_TONE_MAP_MAX     PL_DEPRECATED_ENUM_IN(v6.269),
+    PL_TONE_MAP_HYBRID  PL_DEPRECATED_ENUM_IN(v6.269),
+    PL_TONE_MAP_LUMA    PL_DEPRECATED_ENUM_IN(v6.269),
     PL_TONE_MAP_MODE_COUNT,
 };
 
 // Deprecated by <libplacebo/gamut_mapping.h>
 enum pl_gamut_mode {
-    PL_GAMUT_CLIP       PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_clip
-    PL_GAMUT_WARN       PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_highlight
-    PL_GAMUT_DARKEN     PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_darken
-    PL_GAMUT_DESATURATE PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_desaturate
+    PL_GAMUT_CLIP       PL_DEPRECATED_ENUM_IN(v6.269), // pl_gamut_map_clip
+    PL_GAMUT_WARN       PL_DEPRECATED_ENUM_IN(v6.269), // pl_gamut_map_highlight
+    PL_GAMUT_DARKEN     PL_DEPRECATED_ENUM_IN(v6.269), // pl_gamut_map_darken
+    PL_GAMUT_DESATURATE PL_DEPRECATED_ENUM_IN(v6.269), // pl_gamut_map_desaturate
     PL_GAMUT_MODE_COUNT,
 };
 
@@ -304,12 +304,12 @@ struct pl_color_map_params {
     bool show_clipping;
 
     // --- Deprecated fields
-    enum pl_tone_map_mode tone_mapping_mode PL_DEPRECATED; // removed
-    float tone_mapping_param PL_DEPRECATED;         // see `tone_constants`
-    float tone_mapping_crosstalk PL_DEPRECATED;     // now hard-coded as 0.04
-    enum pl_rendering_intent intent PL_DEPRECATED;  // see `gamut_mapping`
-    enum pl_gamut_mode gamut_mode PL_DEPRECATED;    // see `gamut_mapping`
-    float hybrid_mix PL_DEPRECATED;                 // removed
+    PL_DEPRECATED_IN(v6.269) enum pl_tone_map_mode tone_mapping_mode; // removed
+    PL_DEPRECATED_IN(v6.311) float tone_mapping_param;        // see `tone_constants`
+    PL_DEPRECATED_IN(v6.269) float tone_mapping_crosstalk;    // now hard-coded as 0.04
+    PL_DEPRECATED_IN(v6.269) enum pl_rendering_intent intent; // see `gamut_mapping`
+    PL_DEPRECATED_IN(v6.269) enum pl_gamut_mode gamut_mode;   // see `gamut_mapping`
+    PL_DEPRECATED_IN(v6.290) float hybrid_mix;                // removed
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \

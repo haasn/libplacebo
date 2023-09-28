@@ -343,11 +343,11 @@ struct pl_render_params {
     void *info_priv;
 
     // --- Deprecated/removed fields
-    bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
-    const struct pl_icc_params *icc_params PL_DEPRECATED; // use pl_frame.icc
-    bool ignore_icc_profiles PL_DEPRECATED; // non-functional, just set pl_frame.icc to NULL
-    int lut_entries PL_DEPRECATED; // hard-coded as 256
-    float polar_cutoff PL_DEPRECATED; // hard-coded as 1e-3
+    PL_DEPRECATED_IN(v6.254) bool allow_delayed_peak_detect; // moved to pl_peak_detect_params
+    PL_DEPRECATED_IN(v6.327) const struct pl_icc_params *icc_params; // use pl_frame.icc
+    PL_DEPRECATED_IN(v6.328) bool ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
+    PL_DEPRECATED_IN(v6.335) int lut_entries; // hard-coded as 256
+    PL_DEPRECATED_IN(v6.335) float polar_cutoff; // hard-coded as 1e-3
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest
@@ -839,8 +839,8 @@ PL_API extern const int pl_num_scale_filters; // excluding trailing {0}
 
 // Deprecated in favor of `pl_cache_save/pl_cache_load` on the `pl_cache`
 // associated with the `pl_gpu` this renderer is using.
-PL_DEPRECATED PL_API size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
-PL_DEPRECATED PL_API void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
+PL_DEPRECATED_IN(v6.323) PL_API size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
+PL_DEPRECATED_IN(v6.323) PL_API void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
 
 PL_API_END
 

@@ -37,11 +37,11 @@
 @extra_defs@
 
 // Extra compiler-specific stuff
-#ifndef PL_DEPRECATED
+#ifndef PL_DEPRECATED_IN
 # if defined(_MSC_VER)
-# define PL_DEPRECATED
+# define PL_DEPRECATED_IN(VER)
 # else
-# define PL_DEPRECATED __attribute__((deprecated))
+# define PL_DEPRECATED_IN(VER) __attribute__((deprecated))
 # endif
 #endif
 
@@ -49,11 +49,11 @@
 #define __has_feature(x) 0
 #endif
 
-#ifndef PL_DEPRECATED_ENUMERATOR
+#ifndef PL_DEPRECATED_ENUM_IN
 # if (defined(__GNUC__) && (__GNUC__ >= 6)) || __has_feature(enumerator_attributes)
-# define PL_DEPRECATED_ENUMERATOR PL_DEPRECATED
+# define PL_DEPRECATED_ENUM_IN(VER) PL_DEPRECATED_IN(VER)
 # else
-# define PL_DEPRECATED_ENUMERATOR
+# define PL_DEPRECATED_ENUM_IN(VER)
 # endif
 #endif
 

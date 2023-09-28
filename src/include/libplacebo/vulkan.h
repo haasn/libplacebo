@@ -155,8 +155,8 @@ struct pl_vulkan_t {
     // form. This list does not contain duplicates, nor any extra queues
     // enabled at device creation time. Deprecated in favor of querying
     // `vkGetPhysicalDeviceQueueFamilyProperties` directly.
-    const struct pl_vulkan_queue *queues PL_DEPRECATED;
-    int num_queues PL_DEPRECATED;
+    PL_DEPRECATED_IN(v6.271) const struct pl_vulkan_queue *queues;
+    PL_DEPRECATED_IN(v6.271) int num_queues;
 };
 
 struct pl_vulkan_params {
@@ -627,12 +627,12 @@ PL_API VkSemaphore pl_vulkan_sem_create(pl_gpu gpu, const struct pl_vulkan_sem_p
 PL_API void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore);
 
 // Backwards-compatibility wrappers for older versions of the API.
-PL_DEPRECATED PL_API bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                                         pl_vulkan_sem sem_out);
-PL_DEPRECATED PL_API bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *out_layout,
-                                             pl_vulkan_sem sem_out);
-PL_DEPRECATED PL_API void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                                            pl_vulkan_sem sem_in);
+PL_DEPRECATED_IN(v5.237) PL_API bool
+pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout, pl_vulkan_sem sem_out);
+PL_DEPRECATED_IN(v5.237) PL_API bool
+pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *out_layout, pl_vulkan_sem sem_out);
+PL_DEPRECATED_IN(v5.237) PL_API void
+pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout, pl_vulkan_sem sem_in);
 
 PL_API_END
 

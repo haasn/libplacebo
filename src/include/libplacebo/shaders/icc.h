@@ -65,9 +65,9 @@ struct pl_icc_params {
     pl_cache cache;
 
     // Deprecated legacy caching API. Replaced by `cache`.
-    PL_DEPRECATED void *cache_priv;
-    PL_DEPRECATED void (*cache_save)(void *priv, uint64_t sig, const uint8_t *cache, size_t size);
-    PL_DEPRECATED bool (*cache_load)(void *priv, uint64_t sig, uint8_t *cache, size_t size);
+    PL_DEPRECATED_IN(v6.321) void *cache_priv;
+    PL_DEPRECATED_IN(v6.321) void (*cache_save)(void *priv, uint64_t sig, const uint8_t *cache, size_t size);
+    PL_DEPRECATED_IN(v6.321) bool (*cache_load)(void *priv, uint64_t sig, uint8_t *cache, size_t size);
 };
 
 #define PL_ICC_DEFAULTS                         \

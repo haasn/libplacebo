@@ -1235,8 +1235,8 @@ struct pl_pass_params {
     bool load_target;
 
     // --- Deprecated / removed fields.
-    PL_DEPRECATED const uint8_t *cached_program; // Non-functional
-    PL_DEPRECATED size_t cached_program_len;
+    PL_DEPRECATED_IN(v6.322) const uint8_t *cached_program; // Non-functional
+    PL_DEPRECATED_IN(v6.322) size_t cached_program_len;
 };
 
 #define pl_pass_params(...) (&(struct pl_pass_params) { __VA_ARGS__ })
@@ -1427,7 +1427,8 @@ typedef const struct pl_sync_t {
 //
 // Deprecated in favor of API-specific semaphore creation operations such as
 // `pl_vulkan_sem_create`.
-PL_DEPRECATED PL_API pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
+PL_DEPRECATED_IN(v5.237) PL_API pl_sync
+pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
 
 // Destroy a `pl_sync`. Note that this invalidates the externally imported
 // semaphores. Users should therefore make sure that all operations that
@@ -1436,7 +1437,7 @@ PL_DEPRECATED PL_API pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type hand
 //
 // Despite this, it's safe to destroy a `pl_sync` if the only pending
 // operations that involve it are internal to libplacebo.
-PL_DEPRECATED PL_API void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
+PL_DEPRECATED_IN(v5.237) PL_API void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
 
 // Initiates a texture export operation, allowing a texture to be accessed by
 // an external API. Returns whether successful. After this operation
@@ -1456,8 +1457,8 @@ PL_DEPRECATED PL_API void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
 //
 // Deprecated in favor of API-specific synchronization mechanisms such as
 // `pl_vulkan_hold/release_ex`.
-PL_DEPRECATED PL_API bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
-
+PL_DEPRECATED_IN(v5.237) PL_API bool
+pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
 
 PL_API_END
 

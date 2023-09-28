@@ -62,7 +62,7 @@ struct pl_filter_function {
 };
 
 // Deprecated function, merely checks a->weight == b->weight
-PL_DEPRECATED PL_API bool
+PL_DEPRECATED_IN(v6.303) PL_API bool
 pl_filter_function_eq(const struct pl_filter_function *a,
                       const struct pl_filter_function *b);
 
@@ -353,7 +353,7 @@ struct pl_filter_params {
     int row_stride_align;
 
     // --- Deprecated options
-    float filter_scale PL_DEPRECATED; // no effect, use `config.blur` instead
+    PL_DEPRECATED_IN(v6.316) float filter_scale; // no effect, use `config.blur` instead
 };
 
 #define pl_filter_params(...) (&(struct pl_filter_params) { __VA_ARGS__ })
@@ -387,7 +387,7 @@ typedef const struct pl_filter_t {
     // of phase), you would use the values from weights[lut_entries/2].
     const float *weights;
 
-    // --- separable filters only (!params.config.polar)
+    // --- Separable filters only (!params.config.polar)
 
     // The number of source texels to convolve over for each row. This value
     // will never exceed the given `max_row_size`. If the filter ends up
@@ -399,8 +399,8 @@ typedef const struct pl_filter_t {
     // a multiple of params.row_stride_align.
     int row_stride;
 
-    // --- deprecated / removed fields
-    float radius_cutoff PL_DEPRECATED; // identical to `radius`
+    // --- Deprecated / removed fields
+    PL_DEPRECATED_IN(v6.336) float radius_cutoff; // identical to `radius`
 } *pl_filter;
 
 // Generate (compute) a filter instance based on a given filter configuration.

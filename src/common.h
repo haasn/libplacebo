@@ -52,7 +52,7 @@
 
 #include "config_internal.h"
 
-#define PL_DEPRECATED
+#define PL_DEPRECATED_IN(VER)
 
 #include <libplacebo/config.h>
 

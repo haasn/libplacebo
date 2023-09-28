@@ -231,8 +231,8 @@ PL_API void pl_dispatch_abort(pl_dispatch dp, pl_shader *sh);
 
 // Deprecated in favor of `pl_cache_save/pl_cache_load` on the `pl_cache`
 // associated with the `pl_gpu` this dispatch is using.
-PL_DEPRECATED PL_API size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out_cache);
-PL_DEPRECATED PL_API void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache);
+PL_DEPRECATED_IN(v6.323) PL_API size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out_cache);
+PL_DEPRECATED_IN(v6.323) PL_API void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache);
 
 PL_API_END
 

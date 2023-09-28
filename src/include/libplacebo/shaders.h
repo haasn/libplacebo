@@ -180,10 +180,10 @@ struct pl_shader_res {
     int num_constants;
 
     // --- Deprecated fields (see `info`)
-    struct pl_shader_params params PL_DEPRECATED;
-    const char **steps PL_DEPRECATED;
-    int num_steps PL_DEPRECATED;
-    const char *description PL_DEPRECATED;
+    PL_DEPRECATED_IN(v6.266) struct pl_shader_params params;
+    PL_DEPRECATED_IN(v6.266) const char **steps;
+    PL_DEPRECATED_IN(v6.266) int num_steps;
+    PL_DEPRECATED_IN(v6.266) const char *description;
 };
 
 // Represents a vertex attribute. The four values will be bound to the four

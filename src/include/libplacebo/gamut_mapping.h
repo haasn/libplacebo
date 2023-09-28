@@ -100,7 +100,7 @@ struct pl_gamut_map_params {
     int lut_stride;
 
     // -- Removed parameters
-    float chroma_margin PL_DEPRECATED; // non-functional
+    PL_DEPRECATED_IN(v6.289) float chroma_margin; // non-functional
 };
 
 #define pl_gamut_map_params(...) (&(struct pl_gamut_map_params) {   \

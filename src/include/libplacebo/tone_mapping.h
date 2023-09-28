@@ -52,10 +52,10 @@ struct pl_tone_map_function {
     void *priv;
 
     // --- Deprecated fields
-    const char *param_desc PL_DEPRECATED;
-    float param_min PL_DEPRECATED;
-    float param_def PL_DEPRECATED;
-    float param_max PL_DEPRECATED;
+    PL_DEPRECATED_IN(v6.311) const char *param_desc;
+    PL_DEPRECATED_IN(v6.311) float param_min;
+    PL_DEPRECATED_IN(v6.311) float param_def;
+    PL_DEPRECATED_IN(v6.311) float param_max;
 };
 
 struct pl_tone_map_constants {
@@ -160,7 +160,7 @@ struct pl_tone_map_params {
     struct pl_hdr_metadata hdr;
 
     // --- Deprecated fields
-    float param PL_DEPRECATED; // see `constants`
+    PL_DEPRECATED_IN(v6.311) float param; // see `constants`
 };
 
 #define pl_tone_map_params(...) (&(struct pl_tone_map_params) { __VA_ARGS__ });
