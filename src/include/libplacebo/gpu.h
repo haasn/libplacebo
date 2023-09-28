@@ -1256,9 +1256,6 @@ typedef const struct pl_pass_t {
 // Compile a shader and create a render pass. This is a rare/expensive
 // operation and may take a significant amount of time, even if a cached
 // program is used. Returns NULL on failure.
-//
-// The resulting pl_pass->params.cached_program will be initialized by
-// this function to point to a new, valid cached program (if any).
 PL_API pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params);
 PL_API void pl_pass_destroy(pl_gpu gpu, pl_pass *pass);
 
