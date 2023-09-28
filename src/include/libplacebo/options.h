@@ -58,13 +58,21 @@ typedef struct pl_options_t {
 } *pl_options;
 
 // Allocate a new set of render params, with internally backed storage for
-// all parameters. Defaults to an empty config (PL_RENDER_DEFAULTS).
+// all parameters. Initialized to an "empty" config (PL_RENDER_DEFAULTS),
+// equivalent to `&pl_render_fast_paramsh`. To initialize the struct instead to
+// the recommended default parameters, use `pl_options_reset` with
+// `pl_render_default_params`.
 //
 // If `log` is provided, errors related to parsing etc. will be logged there.
 PL_API pl_options pl_options_alloc(pl_log log);
 PL_API void pl_options_free(pl_options *opts);
 
-// Resets all options to their default values from a given struct. (Optional)
+// Resets all options to their default values from a given struct. If `preset`
+// is NULL, `opts` is instead reset back to the initial "empty" configuration,
+// with all options disabled, as if it was freshly allocated.
+//
+// Note: This function will also reset structs which were not included in
+// `preset`, such as any custom upscalers.
 PL_API void pl_options_reset(pl_options opts, const struct pl_render_params *preset);
 
 typedef const struct pl_opt_data_t {
