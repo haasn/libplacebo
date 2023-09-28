@@ -59,7 +59,7 @@ typedef struct pl_options_t {
 
 // Allocate a new set of render params, with internally backed storage for
 // all parameters. Initialized to an "empty" config (PL_RENDER_DEFAULTS),
-// equivalent to `&pl_render_fast_paramsh`. To initialize the struct instead to
+// equivalent to `&pl_render_fast_params`. To initialize the struct instead to
 // the recommended default parameters, use `pl_options_reset` with
 // `pl_render_default_params`.
 //
