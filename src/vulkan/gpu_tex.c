@@ -79,11 +79,6 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     for (int i = 0; i < tex_vk->ext_deps.num; i++)
         vk_cmd_dep(cmd, stage, tex_vk->ext_deps.elem[i]);
     tex_vk->ext_deps.num = 0;
-
-    if (tex_vk->ext_sync) {
-        vk_cmd_callback(cmd, (vk_cb) vk_sync_deref, gpu, tex_vk->ext_sync);
-        tex_vk->ext_sync = NULL;
-    }
 }
 
 static void vk_tex_destroy(pl_gpu gpu, struct pl_tex_t *tex)
@@ -95,7 +90,6 @@ static void vk_tex_destroy(pl_gpu gpu, struct pl_tex_t *tex)
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
-    vk_sync_deref(gpu, tex_vk->ext_sync);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, PL_VK_ALLOC);
     vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
     for (int i = 0; i < tex_vk->num_planes; i++)
@@ -1153,43 +1147,6 @@ skip_blocking:
             return true;
     }
 
-    return false;
-}
-
-bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
-{
-    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-
-    if (tex_vk->num_planes) {
-        PL_ERR(gpu, "`pl_tex_export` cannot be called on planar textures."
-               "Please see `pl_vulkan_hold_ex` for a replacement.");
-        return false;
-    }
-
-    struct vk_cmd *cmd = CMD_BEGIN(ANY);
-    if (!cmd)
-        goto error;
-
-    vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_NONE,
-                   0, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_EXTERNAL);
-
-    // Make the next barrier appear as though coming from a different queue
-    tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
-
-    vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, (pl_vulkan_sem){ sync_vk->wait });
-    if (!CMD_SUBMIT(&cmd))
-        goto error;
-
-    // Remember the other dependency and hold on to the sync object
-    PL_ARRAY_APPEND(tex, tex_vk->ext_deps, (pl_vulkan_sem){ sync_vk->signal });
-    pl_rc_ref(&sync_vk->rc);
-    tex_vk->ext_sync = sync;
-    tex_vk->qf = VK_QUEUE_FAMILY_EXTERNAL;
-    return true;
-
-error:
-    PL_ERR(gpu, "Failed exporting shared texture!");
     return false;
 }
 

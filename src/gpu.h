@@ -51,7 +51,6 @@ struct pl_gpu_fns {
     void (*tex_destroy)(pl_gpu, pl_tex);
     void (*buf_destroy)(pl_gpu, pl_buf);
     void (*pass_destroy)(pl_gpu, pl_pass);
-    void (*sync_destroy)(pl_gpu, pl_sync);
     void (*timer_destroy)(pl_gpu, pl_timer);
 
     GPU_PFN(tex_create);
@@ -70,8 +69,6 @@ struct pl_gpu_fns {
     GPU_PFN(desc_namespace);
     GPU_PFN(pass_create);
     GPU_PFN(pass_run);
-    GPU_PFN(sync_create); // optional if !gpu->export_caps.sync
-    GPU_PFN(tex_export); // optional if !gpu->export_caps.sync
     GPU_PFN(timer_create); // optional
     GPU_PFN(timer_query); // optional
     GPU_PFN(gpu_flush); // optional

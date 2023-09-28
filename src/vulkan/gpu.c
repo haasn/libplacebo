@@ -605,133 +605,6 @@ error:
     return NULL;
 }
 
-static void vk_sync_destroy(pl_gpu gpu, pl_sync sync)
-{
-    if (!sync)
-        return;
-
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-
-#ifdef PL_HAVE_UNIX
-    if (sync->handle_type == PL_HANDLE_FD) {
-        if (sync->wait_handle.fd > -1)
-            close(sync->wait_handle.fd);
-        if (sync->signal_handle.fd > -1)
-            close(sync->signal_handle.fd);
-    }
-#endif
-#ifdef PL_HAVE_WIN32
-    if (sync->handle_type == PL_HANDLE_WIN32) {
-        if (sync->wait_handle.handle != NULL)
-            CloseHandle(sync->wait_handle.handle);
-        if (sync->signal_handle.handle != NULL)
-            CloseHandle(sync->signal_handle.handle);
-    }
-    // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
-#endif
-
-    vk->DestroySemaphore(vk->dev, sync_vk->wait, PL_VK_ALLOC);
-    vk->DestroySemaphore(vk->dev, sync_vk->signal, PL_VK_ALLOC);
-
-    pl_free((void *) sync);
-}
-
-void vk_sync_deref(pl_gpu gpu, pl_sync sync)
-{
-    if (!sync)
-        return;
-
-    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-    if (pl_rc_deref(&sync_vk->rc))
-        vk_sync_destroy(gpu, sync);
-}
-
-static pl_sync vk_sync_create(pl_gpu gpu, enum pl_handle_type handle_type)
-{
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-
-    struct pl_sync_t *sync = pl_zalloc_obj(NULL, sync, struct pl_sync_vk);
-    sync->handle_type = handle_type;
-
-    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-    pl_rc_init(&sync_vk->rc);
-
-    VkExportSemaphoreCreateInfoKHR einfo = {
-        .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR,
-        .handleTypes = vk_sync_handle_type(handle_type),
-    };
-
-    switch (handle_type) {
-    case PL_HANDLE_FD:
-        sync->wait_handle.fd = -1;
-        sync->signal_handle.fd = -1;
-        break;
-    case PL_HANDLE_WIN32:
-    case PL_HANDLE_WIN32_KMT:
-        sync->wait_handle.handle = NULL;
-        sync->signal_handle.handle = NULL;
-        break;
-    case PL_HANDLE_DMA_BUF:
-    case PL_HANDLE_HOST_PTR:
-    case PL_HANDLE_MTL_TEX:
-    case PL_HANDLE_IOSURFACE:
-        pl_unreachable();
-    }
-
-    const VkSemaphoreCreateInfo sinfo = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = &einfo,
-    };
-
-    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sync_vk->wait));
-    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sync_vk->signal));
-    PL_VK_NAME(SEMAPHORE, sync_vk->wait, "sync wait");
-    PL_VK_NAME(SEMAPHORE, sync_vk->signal, "sync signal");
-
-#ifdef PL_HAVE_UNIX
-    if (handle_type == PL_HANDLE_FD) {
-        VkSemaphoreGetFdInfoKHR finfo = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
-            .semaphore = sync_vk->wait,
-            .handleType = einfo.handleTypes,
-        };
-
-        VK(vk->GetSemaphoreFdKHR(vk->dev, &finfo, &sync->wait_handle.fd));
-
-        finfo.semaphore = sync_vk->signal;
-        VK(vk->GetSemaphoreFdKHR(vk->dev, &finfo, &sync->signal_handle.fd));
-    }
-#endif
-
-#ifdef PL_HAVE_WIN32
-    if (handle_type == PL_HANDLE_WIN32 ||
-        handle_type == PL_HANDLE_WIN32_KMT)
-    {
-        VkSemaphoreGetWin32HandleInfoKHR handle_info = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR,
-            .semaphore = sync_vk->wait,
-            .handleType = einfo.handleTypes,
-        };
-
-        VK(vk->GetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
-                                          &sync->wait_handle.handle));
-
-        handle_info.semaphore = sync_vk->signal;
-        VK(vk->GetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
-                                          &sync->signal_handle.handle));
-    }
-#endif
-
-    return sync;
-
-error:
-    vk_sync_destroy(gpu, sync);
-    return NULL;
-}
-
 void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore)
 {
     VkSemaphore sem = *semaphore;
@@ -899,7 +772,6 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .tex_upload             = vk_tex_upload,
     .tex_download           = vk_tex_download,
     .tex_poll               = vk_tex_poll,
-    .tex_export             = vk_tex_export,
     .buf_create             = vk_buf_create,
     .buf_destroy            = vk_buf_deref,
     .buf_write              = vk_buf_write,
@@ -911,8 +783,6 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .pass_create            = vk_pass_create,
     .pass_destroy           = vk_pass_destroy,
     .pass_run               = vk_pass_run,
-    .sync_create            = vk_sync_create,
-    .sync_destroy           = vk_sync_deref,
     .timer_create           = vk_timer_create,
     .timer_destroy          = vk_timer_destroy,
     .timer_query            = vk_timer_query,

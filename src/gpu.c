@@ -1273,42 +1273,6 @@ bool pl_gpu_is_failed(pl_gpu gpu)
     return impl->gpu_is_failed(gpu);
 }
 
-pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type)
-{
-    require(handle_type);
-    require(handle_type & gpu->export_caps.sync);
-    require(PL_ISPOT(handle_type));
-
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    return impl->sync_create(gpu, handle_type);
-
-error:
-    return NULL;
-}
-
-void pl_sync_destroy(pl_gpu gpu, pl_sync *sync)
-{
-    if (!*sync)
-        return;
-
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    impl->sync_destroy(gpu, *sync);
-    *sync = NULL;
-}
-
-bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
-{
-    require(tex->params.import_handle || tex->params.export_handle);
-
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    return impl->tex_export(gpu, tex, sync);
-
-error:
-    if (tex->params.debug_tag)
-        PL_ERR(gpu, "  for texture: %s", tex->params.debug_tag);
-    return false;
-}
-
 pl_timer pl_timer_create(pl_gpu gpu)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);

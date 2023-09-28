@@ -29,42 +29,6 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
     if (!fmt)
         return;
 
-    if (gpu->export_caps.sync & handle_type) {
-        pl_sync sync = pl_sync_create(gpu, handle_type);
-        pl_tex tex = pl_tex_create(gpu, pl_tex_params(
-            .w = 32,
-            .h = 32,
-            .format = fmt,
-            .blit_dst = true,
-        ));
-
-        REQUIRE(sync);
-        REQUIRE(tex);
-
-        // Note: For testing purposes, we have to fool pl_tex_export into
-        // thinking this texture is actually exportable. Just hack it in
-        // horribly.
-        ((struct pl_tex_params *) &tex->params)->export_handle = PL_HANDLE_DMA_BUF;
-
-        REQUIRE(pl_tex_export(gpu, tex, sync));
-
-        // Re-use our internal helpers to signal this VkSemaphore
-        struct vk_ctx *vk = PL_PRIV(pl_vk);
-        struct vk_cmd *cmd = vk_cmd_begin(vk->pool_graphics, NULL);
-        REQUIRE(cmd);
-        struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-        vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_NONE, (pl_vulkan_sem){ sync_vk->signal });
-        REQUIRE(vk_cmd_submit(&cmd));
-
-        // Do something with the image again to "import" it
-        pl_tex_clear(gpu, tex, (float[4]){0});
-        pl_gpu_finish(gpu);
-        REQUIRE(!pl_tex_poll(gpu, tex, 0));
-
-        pl_sync_destroy(gpu, &sync);
-        pl_tex_destroy(gpu, &tex);
-    }
-
     // Test interop API
     if (gpu->export_caps.tex & handle_type) {
         VkSemaphore sem = pl_vulkan_sem_create(gpu, pl_vulkan_sem_params(
