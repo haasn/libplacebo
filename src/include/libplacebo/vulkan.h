@@ -496,7 +496,7 @@ struct pl_vulkan_wrap_params {
 
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image
 // is considered "held" by the user and must be released before calling any
-// pl_tex_* API calls on it (see `pl_vulkan_release`).
+// pl_tex_* API calls on it (see `pl_vulkan_release_ex`).
 //
 // This wrapper can be destroyed by simply calling `pl_tex_destroy` on it,
 // which will not destroy the underlying VkImage. If a pl_tex wrapper is
@@ -514,7 +514,7 @@ PL_API pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *par
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying
 // VkImage to the user. Unlike `pl_vulkan_wrap`, this `pl_tex` is *not*
 // considered held after calling this function - the user must explicitly
-// `pl_vulkan_hold` before accessing the VkImage.
+// `pl_vulkan_hold_ex` before accessing the VkImage.
 //
 // `out_format` and `out_flags` will be updated to hold the VkImage's
 // format and usage flags. (Optional)
@@ -625,14 +625,6 @@ struct pl_vulkan_sem_params {
 // VK_NULL_HANDLE on failure.
 PL_API VkSemaphore pl_vulkan_sem_create(pl_gpu gpu, const struct pl_vulkan_sem_params *params);
 PL_API void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore);
-
-// Backwards-compatibility wrappers for older versions of the API.
-PL_DEPRECATED_IN(v5.237) PL_API bool
-pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout, pl_vulkan_sem sem_out);
-PL_DEPRECATED_IN(v5.237) PL_API bool
-pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *out_layout, pl_vulkan_sem sem_out);
-PL_DEPRECATED_IN(v5.237) PL_API void
-pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout, pl_vulkan_sem sem_in);
 
 PL_API_END
 
