@@ -388,8 +388,8 @@ cc = meson.get_compiler('c')
 cxx = meson.get_compiler('cpp')
 
 c_opts = [
-  '-D_ISOC99_SOURCE', '-D_ISOC11_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
-  '-U__STRICT_ANSI__', '-Wmissing-prototypes',
+  '-D_ISOC99_SOURCE', '-D_ISOC11_SOURCE', '-D_GNU_SOURCE', '-U__STRICT_ANSI__',
+  '-Wmissing-prototypes',
 
   # Warnings to ignore
   '-Wno-sign-compare', '-Wno-unused-parameter',
