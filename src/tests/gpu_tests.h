@@ -653,8 +653,8 @@ static void pl_shader_tests(pl_gpu gpu)
             .height = fbo->params.h,
         }));
 
-        float peak, avg;
-        REQUIRE(pl_get_detected_peak(peak_state, &peak, &avg));
+        struct pl_hdr_metadata hdr;
+        REQUIRE(pl_get_detected_hdr_metadata(peak_state, &hdr));
 
         float real_peak = 0, real_avg = 0;
         for (int y = 0; y < FBO_H; y++) {
@@ -669,11 +669,8 @@ static void pl_shader_tests(pl_gpu gpu)
             }
         }
         real_avg = real_avg / (FBO_W * FBO_H);
-
-        real_avg  = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, real_avg);
-        real_peak = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, real_peak);
-        REQUIRE_FEQ(peak, real_peak, 1e-3);
-        REQUIRE_FEQ(avg, real_avg, 1e-2);
+        REQUIRE_FEQ(hdr.max_pq_y, real_peak, 1e-4);
+        REQUIRE_FEQ(hdr.avg_pq_y, real_avg,  1e-3);
     }
 
     pl_dispatch_abort(dp, &sh);

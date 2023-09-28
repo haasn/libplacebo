@@ -1410,19 +1410,6 @@ bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
     return true;
 }
 
-bool pl_get_detected_peak(const pl_shader_obj state,
-                          float *out_peak, float *out_avg)
-{
-    struct pl_hdr_metadata data;
-    if (!pl_get_detected_hdr_metadata(state, &data))
-        return false;
-
-    // Preserves old behavior
-    *out_peak = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, data.max_pq_y);
-    *out_avg  = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, data.avg_pq_y);
-    return true;
-}
-
 void pl_reset_detected_peak(pl_shader_obj state)
 {
     if (!state || state->type != PL_SHADER_OBJ_COLOR_MAP)

@@ -246,12 +246,6 @@ PL_API extern const struct pl_distort_params pl_distort_default_params;
 PL_API void pl_shader_distort(pl_shader sh, pl_tex tex, int out_w, int out_h,
                               const struct pl_distort_params *params);
 
-enum PL_DEPRECATED_IN(v5.229) { // for `int pass`
-    PL_SEP_VERT = 0,
-    PL_SEP_HORIZ,
-    PL_SEP_PASSES
-};
-
 PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_SAMPLING_H_

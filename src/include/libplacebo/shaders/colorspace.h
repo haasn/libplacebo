@@ -139,7 +139,6 @@ struct pl_peak_detect_params {
     bool allow_delayed;
 
     // --- Deprecated / removed fields
-    PL_DEPRECATED_IN(v5.256) float overshoot_margin;
     PL_DEPRECATED_IN(v6.313) float minimum_peak;
 };
 
@@ -184,15 +183,6 @@ PL_API bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 // not block, depending on the previous setting of `allow_delayed`.
 PL_API bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
                                          struct pl_hdr_metadata *metadata);
-
-// After dispatching the above shader, this function *may* be used to read out
-// the detected CLL and FALL directly (in PL_HDR_NORM units). If the shader
-// has never been dispatched yet, i.e. no information is available, this will
-// return false.
-//
-// Deprecated in favor of `pl_get_detected_hdr_metadata`
-PL_DEPRECATED_IN(v5.255) PL_API bool
-pl_get_detected_peak(const pl_shader_obj state, float *out_cll, float *out_fall);
 
 // Resets the peak detection state in a given tone mapping state object. This
 // is not equal to `pl_shader_obj_destroy`, because it does not destroy any
