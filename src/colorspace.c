@@ -592,18 +592,6 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
         *params->out_avg = avg_luma;
 }
 
-void pl_color_space_nominal_luma(const struct pl_color_space *csp,
-                                 float *out_min, float *out_max)
-{
-    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
-        .color      = csp,
-        .metadata   = PL_HDR_METADATA_ANY,
-        .scaling    = PL_HDR_NORM,
-        .out_min    = out_min,
-        .out_max    = out_max,
-    ));
-}
-
 void pl_color_space_infer(struct pl_color_space *space)
 {
     if (!space->primaries)

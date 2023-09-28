@@ -479,11 +479,6 @@ struct pl_nominal_luma_params {
 // Returns the effective luminance described by a pl_color_space.
 PL_API void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params);
 
-// Backwards compatibility wrapper for `pl_color_space_nominal_luma_ex`
-PL_DEPRECATED_IN(v5.259) PL_API void
-pl_color_space_nominal_luma(const struct pl_color_space *csp,
-                            float *out_min, float *out_max);
-
 // Replaces unknown values in the first struct by those of the second struct.
 PL_API void pl_color_space_merge(struct pl_color_space *orig,
                                  const struct pl_color_space *update);
