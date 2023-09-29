@@ -31,11 +31,11 @@
      (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED < 100000) || \
      (defined(__TV_OS_VERSION_MIN_REQUIRED)     && __TV_OS_VERSION_MIN_REQUIRED     < 100000) || \
      (defined(__WATCH_OS_VERSION_MIN_REQUIRED)  && __WATCH_OS_VERSION_MIN_REQUIRED  < 30000)  || \
-     !defined(CLOCK_MONOTONIC_RAW)
+     !defined(CLOCK_UPTIME_RAW)
 #  include <mach/mach_time.h>
 #  define PL_CLOCK_MACH
 # else
-#  define PL_CLOCK_MONOTONIC_RAW
+#  define PL_CLOCK_UPTIME_RAW
 # endif
 #elif defined(CLOCK_MONOTONIC_RAW)
 # define PL_CLOCK_MONOTONIC_RAW
@@ -64,6 +64,8 @@ static inline pl_clock_t pl_clock_now(void)
     struct timespec tp = { .tv_sec = 0, .tv_nsec = 0 };
 #if defined(PL_CLOCK_MONOTONIC_RAW)
     clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
+#elif defined(PL_CLOCK_UPTIME_RAW)
+    clock_gettime(CLOCK_UPTIME_RAW, &tp);
 #elif defined(PL_CLOCK_TIMESPEC_GET)
     timespec_get(&tp, TIME_UTC);
 #endif
