@@ -339,9 +339,15 @@ struct sh_lut_params {
     // Note: Interpretation of `data` is according to `type` and `fmt`.
     void (*fill)(void *data, const struct sh_lut_params *params);
     void *priv;
+
+    // Debug tag to track LUT source
+    pl_debug_tag debug_tag;
 };
 
-#define sh_lut_params(...) (&(struct sh_lut_params) { __VA_ARGS__ })
+#define sh_lut_params(...) (&(struct sh_lut_params) {   \
+        .debug_tag = PL_DEBUG_TAG,                      \
+        __VA_ARGS__                                     \
+    })
 
 // Makes a table of values available as a shader variable, using an a given
 // method (falling back if needed). The resulting identifier can be sampled
