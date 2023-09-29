@@ -54,35 +54,49 @@ int main()
     REQUIRE_CMP(pl_cache_size(test), ==, 7, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 2, "d");
 
-    static const uint8_t ref[] = {
-        'p', 'l', '_', 'c',         // cache magic
-        'a', 'c', 'h', 'e',
-        0x1, 0, 0, 0,               // cache version
-        0x2, 0, 0, 0,               // number of objects
-        // object 3
-        0x3, 0, 0, 0, 0, 0, 0, 0,   // key
-        0x4, 0, 0, 0, 0, 0, 0, 0,   // size
+    uint8_t ref[72];
+    memset(ref, 0xbe, sizeof(ref));
+    uint8_t *refp = ref;
+
+#define PAD_ALIGN(x) PL_ALIGN2(x, sizeof(uint32_t))
+#define W(type, ...)                                    \
+    do {                                                \
+        size_t sz = sizeof((type){__VA_ARGS__});        \
+        pl_assert(ref + sizeof(ref) - refp >= sz);      \
+        memcpy(refp, &(type){__VA_ARGS__}, sz);         \
+        refp += sz;                                     \
+        size_t pad_sz = PAD_ALIGN(sz) - sz;             \
+        pl_assert(ref + sizeof(ref) - refp >= pad_sz);  \
+        memcpy(refp, &(char[PAD_ALIGN(1)]){0}, pad_sz); \
+        refp += pad_sz;                                 \
+    } while (0)
+
+    W(char[], 'p', 'l', '_', 'c', 'a', 'c', 'h', 'e');  // cache magic
+    W(uint32_t, 1);                                     // cache version
+    W(uint32_t, 2);                                     // number of objects
+
+    // object 3
+    W(uint64_t, 3);                   // key
+    W(uint64_t, 4);                   // size
 #ifdef PL_HAVE_XXHASH
-        0xbe, 0xe8, 0xbe, 0x3f,     // checksum
-        0xef, 0x12, 0x36, 0xd4,
+    W(uint64_t, 0xd43612ef3fbee8be);  // hash
 #else
-        0x17, 0x11, 0x47, 0x5e,
-        0x4e, 0x88, 0x18, 0xec,
+    W(uint64_t, 0xec18884e5e471117);  // hash
 #endif
-        'x', 'y', 'z', 'w',         // data
-        // object 1
-        0x1, 0, 0, 0, 0, 0, 0, 0,   // key
-        0x3, 0, 0, 0, 0, 0, 0, 0,   // size
+    W(char[], 'x', 'y', 'z', 'w');    // data
+
+    // object 1
+    W(uint64_t, 1);                   // key
+    W(uint64_t, 3);                   // size
 #ifdef PL_HAVE_XXHASH
-        0x50, 0x39, 0x2f, 0x89,     // checksum
-        0x94, 0x5f, 0xaf, 0x78,
+    W(uint64_t, 0x78af5f94892f3950);  // hash
 #else
-        0x77, 0x2d, 0x2e, 0x8a,
-        0x40, 0x4d, 0x20, 0x3a,
+    W(uint64_t, 0x3a204d408a2e2d77);  // hash
 #endif
-        'a', 'b', 'c',              // data
-        0,                          // padding
-    };
+    W(char[], 'a', 'b', 'c');         // data
+
+#undef W
+#undef PAD_ALIGN
 
     uint8_t data[100];
     pl_static_assert(sizeof(data) >= sizeof(ref));
