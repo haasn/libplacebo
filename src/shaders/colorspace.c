@@ -1282,16 +1282,6 @@ retry_ssbo:
         .num_buffer_vars = PL_ARRAY_SIZE(peak_buf_vars),
     });
 
-    sh_describe(sh, "peak detection");
-    GLSL("// pl_shader_detect_peak                                      \n"
-         "{                                                             \n"
-         "const uint wg_size = gl_WorkGroupSize.x * gl_WorkGroupSize.y; \n"
-         "uint wg_idx = gl_WorkGroupID.y * gl_NumWorkGroups.x +         \n"
-         "              gl_WorkGroupID.x;                               \n"
-         "uint slice = wg_idx %% %du;                                   \n"
-         "vec4 color_orig = color;                                      \n",
-         SLICES);
-
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.
     ident_t wg_sum   = sh_fresh(sh, "wg_sum"),
@@ -1302,94 +1292,93 @@ retry_ssbo:
     if (use_histogram) {
         wg_hist = sh_fresh(sh, "wg_hist");
         GLSLH("shared uint "$"[%u]; \n", wg_hist, HIST_BINS);
-        GLSL("for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
-             "    "$"[i] = 0u;                                              \n",
-             HIST_BINS, wg_hist);
     }
-    GLSL($" = 0u; "$" = 0u; "$" = 0u; \n"
-         "barrier();                  \n",
-         wg_sum, wg_max, wg_black);
+
+    sh_describe(sh, "peak detection");
+#pragma GLSL /* pl_shader_detect_peak */                                        \
+    {                                                                           \
+    const uint wg_size = gl_WorkGroupSize.x * gl_WorkGroupSize.y;               \
+    const uint wg_idx = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;\
+    const uint local_idx = gl_LocalInvocationIndex;                             \
+    const uint slice = wg_idx % ${const uint: SLICES};                          \
+    const uint hist_base = slice * ${const uint: HIST_BINS};                    \
+    const vec4 color_orig = color;                                              \
+    $wg_sum = $wg_max = $wg_black = 0u;                                         \
+    @if (use_histogram) {                                                       \
+        for (uint i = local_idx; i < ${const uint: HIST_BINS}; i += wg_size)    \
+            $wg_hist[i] = 0u;                                                   \
+    @}                                                                          \
+    barrier();
 
     // Decode color into linear light representation
     pl_color_space_infer(&csp);
     pl_shader_linearize(sh, &csp);
 
-    // Measure luminance as N-bit PQ
-    GLSL("float luma = dot("$", color.rgb);             \n"
-         "luma *= %f;                                   \n"
-         "luma = pow(clamp(luma, 0.0, 1.0), %f);        \n"
-         "luma = (%f + %f * luma) / (1.0 + %f * luma);  \n"
-         "luma = pow(luma, %f);                         \n"
-         "uint y_pq = uint(%d.0 * luma);                \n",
-         sh_luma_coeffs(sh, &csp),
-         PL_COLOR_SDR_WHITE / 10000.0,
-         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
-         PQ_MAX);
-
-    // Update the work group's shared atomics
     bool has_subgroups = sh_glsl(sh).subgroup_size > 0;
-    if (use_histogram) {
-        GLSL("int bin = (int(y_pq) >> %d) - %d; \n"
-             "bin = clamp(bin, 0, %d);          \n",
-             PQ_BITS - HIST_BITS, HIST_BIAS,
-             HIST_BINS - 1);
-        if (has_subgroups) {
-            // Optimize for the very common case of identical histogram bins
-            GLSL("if (subgroupAllEqual(bin)) {                  \n"
-                 "    if (subgroupElect())                      \n"
-                 "        atomicAdd("$"[bin], gl_SubgroupSize); \n"
-                 "} else {                                      \n"
-                 "    atomicAdd("$"[bin], 1u);                  \n"
-                 "}                                             \n",
-                 wg_hist, wg_hist);
-        } else {
-            GLSL("atomicAdd("$"[bin], 1u); \n", wg_hist);
-        }
+#pragma GLSL /* Measure luminance as N-bit PQ */                                \
+    float luma = dot(${sh_luma_coeffs(sh, &csp)}, color.rgb);                   \
+    luma *= ${const float: PL_COLOR_SDR_WHITE / 10000.0};                       \
+    luma = pow(clamp(luma, 0.0, 1.0), ${const float: PQ_M1});                   \
+    luma = (${const float: PQ_C1} + ${const float: PQ_C2} * luma) /             \
+           (1.0 + ${const float: PQ_C3} * luma);                                \
+    luma = pow(luma, ${const float: PQ_M2});                                    \
+    uint y_pq = uint(${const float: PQ_MAX} * luma);                            \
+                                                                                \
+    /* Update the work group's shared atomics */                                \
+    @if (use_histogram) {                                                       \
+        int bin = int(y_pq) >> ${const int: PQ_BITS - HIST_BITS};               \
+        bin -= ${const int: HIST_BIAS};                                         \
+        bin = clamp(bin, 0, ${const int: HIST_BINS - 1});                       \
+        @if (has_subgroups) {                                                   \
+            /* Optimize for the very common case of identical histogram bins */ \
+            if (subgroupAllEqual(bin)) {                                        \
+                if (subgroupElect())                                            \
+                    atomicAdd($wg_hist[bin], gl_SubgroupSize);                  \
+            } else {                                                            \
+                atomicAdd($wg_hist[bin], 1u);                                   \
+            }                                                                   \
+        @} else {                                                               \
+            atomicAdd($wg_hist[bin], 1u);                                       \
+        @}                                                                      \
+    @}                                                                          \
+                                                                                \
+    @if (has_subgroups) {                                                       \
+        uint group_sum = subgroupAdd(y_pq);                                     \
+        uint group_max = subgroupMax(y_pq);                                     \
+        uvec4 b = subgroupBallot(y_pq == 0u);                                   \
+        if (subgroupElect()) {                                                  \
+            atomicAdd($wg_sum, group_sum);                                      \
+            atomicMax($wg_max, group_max);                                      \
+            atomicAdd($wg_black, subgroupBallotBitCount(b));                    \
+        }                                                                       \
+    @} else {                                                                   \
+        atomicAdd($wg_sum, y_pq);                                               \
+        atomicMax($wg_max, y_pq);                                               \
+        if (y_pq == 0u)                                                         \
+            atomicAdd($wg_black, 1u);                                           \
+    @}                                                                          \
+    barrier();                                                                  \
+                                                                                \
+    @if (use_histogram) {                                                       \
+        /* Update the histogram with a cooperative loop */                      \
+        if (gl_LocalInvocationIndex == 0u)                                      \
+            $wg_hist[0] -= $wg_black;                                           \
+        for (uint i = local_idx; i < ${const uint: HIST_BINS}; i += wg_size)    \
+            atomicAdd(frame_hist[hist_base + i], $wg_hist[i]);                  \
+    @}                                                                          \
+                                                                                \
+    /* Have one thread per work group update the global atomics */              \
+    if (gl_LocalInvocationIndex == 0u) {                                        \
+        uint num = wg_size - $wg_black;                                         \
+        atomicAdd(frame_wg_count[slice], 1u);                                   \
+        atomicAdd(frame_wg_active[slice], min(num, 1u));                        \
+        if (num > 0u) {                                                         \
+            atomicAdd(frame_sum_pq[slice], $wg_sum / num);                      \
+            atomicMax(frame_max_pq[slice], $wg_max);                            \
+        }                                                                       \
+    }                                                                           \
+    color = color_orig;                                                         \
     }
-
-    if (has_subgroups) {
-        GLSL("uint group_sum = subgroupAdd(y_pq);           \n"
-             "uint group_max = subgroupMax(y_pq);           \n"
-             "uvec4 b = subgroupBallot(y_pq == 0u);         \n"
-             "if (subgroupElect()) {                        \n"
-             "    atomicAdd("$", group_sum);                \n"
-             "    atomicMax("$", group_max);                \n"
-             "    atomicAdd("$", subgroupBallotBitCount(b));\n"
-             "}                                             \n"
-             "barrier();                                    \n",
-             wg_sum, wg_max, wg_black);
-    } else {
-        GLSL("atomicAdd("$", y_pq);     \n"
-             "atomicMax("$", y_pq);     \n"
-             "if (y_pq == 0u)           \n"
-             "    atomicAdd("$", 1u);   \n"
-             "barrier();                \n",
-             wg_sum, wg_max, wg_black);
-    }
-
-    if (use_histogram) {
-        GLSL("if (gl_LocalInvocationIndex == 0u)                            \n"
-             "    "$"[0] -= "$";                                            \n"
-             "for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
-             "    atomicAdd(frame_hist[slice * %du + i], "$"[i]);           \n",
-             wg_hist, wg_black,
-             HIST_BINS,
-             HIST_BINS, wg_hist);
-    }
-
-    // Have one thread per work group update the global atomics
-    GLSL("if (gl_LocalInvocationIndex == 0u) {                  \n"
-         "    uint num = wg_size - "$";                         \n"
-         "    atomicAdd(frame_wg_count[slice], 1u);             \n"
-         "    atomicAdd(frame_wg_active[slice], min(num, 1u));  \n"
-         "    if (num > 0u) {                                   \n"
-         "        atomicAdd(frame_sum_pq[slice], "$" / num);    \n"
-         "        atomicMax(frame_max_pq[slice], "$");          \n"
-         "    }                                                 \n"
-         "}                                                     \n"
-         "color = color_orig;                                   \n"
-         "}                                                     \n",
-         wg_black, wg_sum, wg_max);
 
     return true;
 }
