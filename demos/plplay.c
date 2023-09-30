@@ -383,7 +383,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
 
         // Update ICC profile parameters dynamically
         float target_luma = 0.0f;
-        if (p->use_icc_luma) {
+        if (!p->use_icc_luma) {
             pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
                 .metadata = PL_HDR_METADATA_HDR10, // use only static HDR nits
                 .scaling  = PL_HDR_NITS,
