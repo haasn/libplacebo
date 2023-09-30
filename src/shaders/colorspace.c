@@ -1315,6 +1315,7 @@ retry_ssbo:
     pl_shader_linearize(sh, &csp);
 
     bool has_subgroups = sh_glsl(sh).subgroup_size > 0;
+    const float cutoff = fmaxf(params->black_cutoff, 0.0f) * 1e-2f;
 #pragma GLSL /* Measure luminance as N-bit PQ */                                \
     float luma = dot(${sh_luma_coeffs(sh, &csp)}, color.rgb);                   \
     luma *= ${const float: PL_COLOR_SDR_WHITE / 10000.0};                       \
@@ -1322,6 +1323,8 @@ retry_ssbo:
     luma = (${const float: PQ_C1} + ${const float: PQ_C2} * luma) /             \
            (1.0 + ${const float: PQ_C3} * luma);                                \
     luma = pow(luma, ${const float: PQ_M2});                                    \
+    @if (cutoff)                                                                \
+        luma *= smoothstep(0.0, ${float: cutoff}, luma);                        \
     uint y_pq = uint(${const float: PQ_MAX} * luma);                            \
                                                                                 \
     /* Update the work group's shared atomics */                                \
@@ -1345,24 +1348,30 @@ retry_ssbo:
     @if (has_subgroups) {                                                       \
         uint group_sum = subgroupAdd(y_pq);                                     \
         uint group_max = subgroupMax(y_pq);                                     \
-        uvec4 b = subgroupBallot(y_pq == 0u);                                   \
+        @if (cutoff)                                                            \
+            uvec4 b = subgroupBallot(y_pq == 0u);                               \
         if (subgroupElect()) {                                                  \
             atomicAdd($wg_sum, group_sum);                                      \
             atomicMax($wg_max, group_max);                                      \
-            atomicAdd($wg_black, subgroupBallotBitCount(b));                    \
+            @if (cutoff)                                                        \
+                atomicAdd($wg_black, subgroupBallotBitCount(b));                \
         }                                                                       \
     @} else {                                                                   \
         atomicAdd($wg_sum, y_pq);                                               \
         atomicMax($wg_max, y_pq);                                               \
-        if (y_pq == 0u)                                                         \
-            atomicAdd($wg_black, 1u);                                           \
+        @if (cutoff) {                                                          \
+            if (y_pq == 0u)                                                     \
+                atomicAdd($wg_black, 1u);                                       \
+        @}                                                                      \
     @}                                                                          \
     barrier();                                                                  \
                                                                                 \
     @if (use_histogram) {                                                       \
+        @if (cutoff) {                                                          \
+            if (gl_LocalInvocationIndex == 0u)                                  \
+                $wg_hist[0] -= $wg_black;                                       \
+        @}                                                                      \
         /* Update the histogram with a cooperative loop */                      \
-        if (gl_LocalInvocationIndex == 0u)                                      \
-            $wg_hist[0] -= $wg_black;                                           \
         for (uint i = local_idx; i < ${const uint: HIST_BINS}; i += wg_size)    \
             atomicAdd(frame_hist[hist_base + i], $wg_hist[i]);                  \
     @}                                                                          \

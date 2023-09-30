@@ -133,6 +133,14 @@ struct pl_peak_detect_params {
     // cause no major issues in typical content.
     float percentile;
 
+    // Black cutoff strength. To prevent unnatural pixel shimmer and excessive
+    // darkness in mostly black scenes, as well as avoid black bars from
+    // affecting the content, (smoothly) cut off any value below this (PQ%)
+    // threshold. Defaults to 1.0, or 1% PQ.
+    //
+    // Setting this to 0.0 (or a negative value) disables this functionality.
+    float black_cutoff;
+
     // Allows the peak detection result to be delayed by up to a single frame,
     // which can sometimes improve thoughput, at the cost of introducing the
     // possibility of 1-frame flickers on transitions. Disabled by default.
@@ -146,7 +154,8 @@ struct pl_peak_detect_params {
     .smoothing_period       = 20.0f,    \
     .scene_threshold_low    = 1.0f,     \
     .scene_threshold_high   = 3.0f,     \
-    .percentile             = 100.0f,
+    .percentile             = 100.0f,   \
+    .black_cutoff           = 1.0f,
 
 #define PL_PEAK_DETECT_HQ_DEFAULTS      \
     PL_PEAK_DETECT_DEFAULTS             \

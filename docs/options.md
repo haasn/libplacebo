@@ -316,6 +316,15 @@ highlights.
 Defaults to `100.0`. The `high_quality` preset instead sets this to `99.995`,
 which is very conservative and should cause no major issues in typical content.
 
+### `black_cutoff=<0.0..100.0>`
+
+Black cutoff strength. To prevent unnatural pixel shimmer and excessive
+darkness in mostly black scenes, as well as avoid black bars from affecting the
+content, (smoothly) cut off any value below this (PQ%) threshold. Defaults to
+`1.0`, or 1% PQ.
+
+Setting this to `0.0` (or a negative value) disables this functionality.
+
 ### `allow_delayed_peak=<yes|no>`
 
 Allows the peak detection result to be delayed by up to a single frame, which
