@@ -1068,8 +1068,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
                                                   0.0).${swizzle: comps};       \
                 @}                                                              \
             @} else {                                                           \
-                ca += ws[@n % 4] * textureLod($src_tex,                         \
-                                              base + pt * vec2(@n.0),           \
+                ca += ws[@n % 4] * textureLod($src_tex, base + pt * @n.0,       \
                                               0.0).${swizzle: comps};           \
             @}                                                                  \
         @}                                                                      \
