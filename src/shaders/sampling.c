@@ -1034,6 +1034,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     float denom = PL_MAX(1, width - 1); // avoid division by zero
     bool use_ar = cfg.antiring > 0 && ratio[pass] > 1.0;
     bool use_linear = obj->filter->radius == obj->filter->radius_zero;
+    use_ar &= !use_linear; // filter has no negative weights
 
 #pragma GLSL /* pl_shader_sample_ortho */                                       \
     vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                                      \
