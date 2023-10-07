@@ -497,6 +497,7 @@ int pl_tex_transfer_slices(pl_gpu gpu, pl_fmt texel_fmt,
         for (int y = 0; y < pl_rect_h(params->rc); y += slice_h) {
             for (int x = 0; x < pl_rect_w(params->rc); x += slice_w) {
                 struct pl_tex_transfer_params slice = *params;
+                slice.callback = NULL;
                 slice.rc.x0 = params->rc.x0 + x;
                 slice.rc.y0 = params->rc.y0 + y;
                 slice.rc.z0 = params->rc.z0 + z;
