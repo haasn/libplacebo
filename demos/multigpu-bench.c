@@ -26,7 +26,7 @@ enum {
     COMPS   = 1,
 
     // Queue configuration
-    NUM_QUEUES = 16,
+    NUM_QUEUES = NUM_TEX,
     ASYNC_TX   = 1,
     ASYNC_COMP = 1,
 
