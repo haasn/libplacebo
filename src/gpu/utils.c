@@ -528,11 +528,13 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (params->buf)
         return pl_tex_upload(gpu, params);
 
-    pl_buf buf = NULL;
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
         .debug_tag = PL_DEBUG_TAG,
     };
+
+    struct pl_tex_transfer_params fixed = *params;
+    fixed.ptr = NULL;
 
     // If we can import host pointers directly, and the function is being used
     // asynchronously, then we can use host pointer import to skip a memcpy. In
@@ -553,28 +555,24 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         // Suppress errors for this test because it may fail, in which case we
         // want to silently fall back.
         pl_log_level_cap(gpu->log, PL_LOG_DEBUG);
-        buf = pl_buf_create(gpu, &bufparams);
+        fixed.buf = pl_buf_create(gpu, &bufparams);
         pl_log_level_cap(gpu->log, PL_LOG_NONE);
     }
 
-    if (!buf) {
+    if (!fixed.buf) {
         bufparams.import_handle = 0;
         bufparams.host_writable = true;
-        buf = pl_buf_create(gpu, &bufparams);
+        fixed.buf = pl_buf_create(gpu, &bufparams);
+        if (!fixed.buf)
+            return false;
+        pl_buf_write(gpu, fixed.buf, 0, params->ptr, bufparams.size);
+        if (params->callback)
+            params->callback(params->priv);
+        fixed.callback = NULL;
     }
 
-    if (!buf)
-        return false;
-
-    if (!bufparams.import_handle)
-        pl_buf_write(gpu, buf, 0, params->ptr, buf->params.size);
-
-    struct pl_tex_transfer_params newparams = *params;
-    newparams.buf = buf;
-    newparams.ptr = NULL;
-
-    bool ok = pl_tex_upload(gpu, &newparams);
-    pl_buf_destroy(gpu, &buf);
+    bool ok = pl_tex_upload(gpu, &fixed);
+    pl_buf_destroy(gpu, &fixed.buf);
     return ok;
 }
 
