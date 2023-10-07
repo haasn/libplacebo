@@ -19,6 +19,7 @@ enum {
 
     // Test configuration
     TEST_MS     = 1000,
+    WARMUP_MS   = 500,
 };
 
 static pl_tex create_test_img(pl_gpu gpu)
@@ -126,40 +127,51 @@ static void benchmark(pl_gpu gpu, const char *name,
     pl_gpu_finish(gpu);
 
     // Perform the actual benchmark
-    pl_clock_t start = 0, stop = 0;
-    unsigned long frames = 0;
-    int index = 0;
+    pl_clock_t start_warmup = 0, start_test = 0;
+    unsigned long frames = 0, frames_warmup = 0;
 
     pl_timer timer = pl_timer_create(gpu);
     uint64_t gputime_total = 0;
     unsigned long gputime_count = 0;
     uint64_t gputime;
 
-    start = pl_clock_now();
+    start_warmup = pl_clock_now();
     do {
-        while (pl_tex_poll(gpu, fbos[index], UINT64_MAX))
+        const int idx = frames % NUM_TEX;
+        while (pl_tex_poll(gpu, fbos[idx], UINT64_MAX))
             ; // do nothing
-        frames++;
-        run_bench(gpu, dp, &state, src, fbos[index], timer, bench);
+        run_bench(gpu, dp, &state, src, fbos[idx], start_test ? timer : NULL, bench);
         pl_gpu_flush(gpu);
-        index = (index + 1) % NUM_TEX;
-        stop = pl_clock_now();
-        while ((gputime = pl_timer_query(gpu, timer))) {
-            gputime_total += gputime;
-            gputime_count++;
+        frames++;
+
+        if (start_test) {
+            while ((gputime = pl_timer_query(gpu, timer))) {
+                gputime_total += gputime;
+                gputime_count++;
+            }
         }
-    } while (pl_clock_diff(stop, start) < TEST_MS * 1e-3);
+
+        pl_clock_t now = pl_clock_now();
+        if (start_test) {
+            if (pl_clock_diff(now, start_test) > TEST_MS * 1e-3)
+                break;
+        } else if (pl_clock_diff(now, start_warmup) > WARMUP_MS * 1e-3) {
+            start_test = now;
+            frames_warmup = frames;
+        }
+    } while (true);
 
     // Force the GPU to finish execution and re-measure the final stop time
     pl_gpu_finish(gpu);
 
-    stop = pl_clock_now();
+    pl_clock_t stop = pl_clock_now();
     while ((gputime = pl_timer_query(gpu, timer))) {
         gputime_total += gputime;
         gputime_count++;
     }
 
-    double secs = pl_clock_diff(stop, start);
+    frames -= frames_warmup;
+    double secs = pl_clock_diff(stop, start_test);
     printf("'%s':\t%4lu frames in %1.6f seconds => %2.6f ms/frame (%5.2f FPS)",
           name, frames, secs, 1000 * secs / frames, frames / secs);
     if (gputime_count)
