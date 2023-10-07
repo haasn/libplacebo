@@ -6,10 +6,20 @@
 #include <libplacebo/shaders/deinterlacing.h>
 #include <libplacebo/shaders/sampling.h>
 
-#define TEX_SIZE 2048
-#define CUBE_SIZE 64
-#define NUM_FBOS 16
-#define BENCH_DUR 1.0
+enum {
+    // Image configuration
+    NUM_TEX     = 16,
+    TEX_SIZE    = 2048,
+    CUBE_SIZE   = 64,
+
+    // Queue configuration
+    NUM_QUEUES  = NUM_TEX,
+    ASYNC_TX    = 1,
+    ASYNC_COMP  = 1,
+
+    // Test configuration
+    TEST_MS     = 1000,
+};
 
 static pl_tex create_test_img(pl_gpu gpu)
 {
@@ -94,8 +104,8 @@ static void benchmark(pl_gpu gpu, const char *name,
                              PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
     REQUIRE(fmt);
 
-    pl_tex fbos[NUM_FBOS] = {0};
-    for (int i = 0; i < NUM_FBOS; i++) {
+    pl_tex fbos[NUM_TEX] = {0};
+    for (int i = 0; i < NUM_TEX; i++) {
         fbos[i] = pl_tex_create(gpu, pl_tex_params(
             .format         = fmt,
             .w              = TEX_SIZE,
@@ -132,13 +142,13 @@ static void benchmark(pl_gpu gpu, const char *name,
         frames++;
         run_bench(gpu, dp, &state, src, fbos[index], timer, bench);
         pl_gpu_flush(gpu);
-        index = (index + 1) % NUM_FBOS;
+        index = (index + 1) % NUM_TEX;
         stop = pl_clock_now();
         while ((gputime = pl_timer_query(gpu, timer))) {
             gputime_total += gputime;
             gputime_count++;
         }
-    } while (pl_clock_diff(stop, start) < BENCH_DUR);
+    } while (pl_clock_diff(stop, start) < TEST_MS * 1e-3);
 
     // Force the GPU to finish execution and re-measure the final stop time
     pl_gpu_finish(gpu);
@@ -160,7 +170,7 @@ static void benchmark(pl_gpu gpu, const char *name,
     pl_shader_obj_destroy(&state);
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);
-    for (int i = 0; i < NUM_FBOS; i++)
+    for (int i = 0; i < NUM_TEX; i++)
         pl_tex_destroy(gpu, &fbos[i]);
 }
 
@@ -467,14 +477,15 @@ int main()
 
     pl_vulkan vk = pl_vulkan_create(log, pl_vulkan_params(
         .allow_software = true,
-        .async_transfer = false,
-        .queue_count = NUM_FBOS,
+        .async_transfer = ASYNC_TX,
+        .async_compute  = ASYNC_COMP,
+        .queue_count    = NUM_QUEUES,
     ));
 
     if (!vk)
         return SKIP;
 
-#define BENCH_SH(fn) &(struct bench) { .run_sh = fn }
+#define BENCH_SH(fn)  &(struct bench) { .run_sh = fn }
 #define BENCH_TEX(fn) &(struct bench) { .run_tex = fn }
 
     printf("= Running benchmarks =\n");
