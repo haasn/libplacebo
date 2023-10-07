@@ -11,6 +11,8 @@ enum {
     NUM_TEX     = 16,
     TEX_SIZE    = 2048,
     CUBE_SIZE   = 64,
+    DEPTH       = 16,
+    COMPS       = 4,
 
     // Queue configuration
     NUM_QUEUES  = NUM_TEX,
@@ -24,14 +26,14 @@ enum {
 
 static pl_tex create_test_img(pl_gpu gpu)
 {
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32, PL_FMT_CAP_LINEAR);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, COMPS, DEPTH, 32, PL_FMT_CAP_LINEAR);
     REQUIRE(fmt);
 
     int cube_stride = TEX_SIZE / CUBE_SIZE;
     int cube_count  = cube_stride * cube_stride;
 
     assert(cube_count * CUBE_SIZE * CUBE_SIZE == TEX_SIZE * TEX_SIZE);
-    float *data = malloc(TEX_SIZE * TEX_SIZE * sizeof(float[4]));
+    float *data = malloc(TEX_SIZE * TEX_SIZE * COMPS * sizeof(float));
     REQUIRE(data);
     for (int n = 0; n < cube_count; n++) {
         int xbase = (n % cube_stride) * CUBE_SIZE;
@@ -42,11 +44,13 @@ static pl_tex create_test_img(pl_gpu gpu)
                 int ypos = ybase + g;
                 assert(xpos < TEX_SIZE && ypos < TEX_SIZE);
 
-                float *color = &data[(ypos * TEX_SIZE + xpos) * 4];
-                color[0] = (float) r / CUBE_SIZE;
-                color[1] = (float) g / CUBE_SIZE;
-                color[2] = (float) n / cube_count;
-                color[3] = 1.0;
+                float *color = &data[(ypos * TEX_SIZE + xpos) * COMPS];
+                switch (COMPS) {
+                case 4: color[3] = 1.0;
+                case 3: color[2] = (float) n / cube_count;
+                case 2: color[1] = (float) g / CUBE_SIZE;
+                case 1: color[0] = (float) r / CUBE_SIZE;
+                }
             }
         }
     }
@@ -101,7 +105,7 @@ static void benchmark(pl_gpu gpu, const char *name,
     pl_tex src = create_test_img(gpu);
 
     // Create the FBOs
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, COMPS, DEPTH, 32,
                              PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
     REQUIRE(fmt);
 
@@ -439,7 +443,7 @@ static void bench_reshape_mmr(pl_shader sh, pl_shader_obj *state, pl_tex src)
     pl_shader_dovi_reshape(sh, &dovi_meta); // this includes MMR
 }
 
-static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
+static float data[TEX_SIZE * TEX_SIZE * COMPS + 8192];
 
 static void bench_download(pl_gpu gpu, pl_tex tex)
 {
