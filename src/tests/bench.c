@@ -9,8 +9,8 @@
 enum {
     // Image configuration
     NUM_TEX     = 16,
-    TEX_SIZE    = 2048,
-    CUBE_SIZE   = 64,
+    WIDTH       = 2048,
+    HEIGHT      = 2048,
     DEPTH       = 16,
     COMPS       = 4,
 
@@ -29,36 +29,32 @@ static pl_tex create_test_img(pl_gpu gpu)
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, COMPS, DEPTH, 32, PL_FMT_CAP_LINEAR);
     REQUIRE(fmt);
 
-    int cube_stride = TEX_SIZE / CUBE_SIZE;
-    int cube_count  = cube_stride * cube_stride;
-
-    assert(cube_count * CUBE_SIZE * CUBE_SIZE == TEX_SIZE * TEX_SIZE);
-    float *data = malloc(TEX_SIZE * TEX_SIZE * COMPS * sizeof(float));
-    REQUIRE(data);
-    for (int n = 0; n < cube_count; n++) {
-        int xbase = (n % cube_stride) * CUBE_SIZE;
-        int ybase = (n / cube_stride) * CUBE_SIZE;
-        for (int g = 0; g < CUBE_SIZE; g++) {
-            for (int r = 0; r < CUBE_SIZE; r++) {
-                int xpos = xbase + r;
-                int ypos = ybase + g;
-                assert(xpos < TEX_SIZE && ypos < TEX_SIZE);
-
-                float *color = &data[(ypos * TEX_SIZE + xpos) * COMPS];
-                switch (COMPS) {
-                case 4: color[3] = 1.0;
-                case 3: color[2] = (float) n / cube_count;
-                case 2: color[1] = (float) g / CUBE_SIZE;
-                case 1: color[0] = (float) r / CUBE_SIZE;
-                }
+    const float xc = (WIDTH  - 1) / 2.0f;
+    const float yc = (HEIGHT - 1) / 2.0f;
+    const float kf = 0.5f / sqrtf(xc * xc + yc * yc);
+    const float invphi = 0.61803398874989;
+    const float freqR = kf * M_PI * 0.2f;
+    const float freqG = freqR * invphi;
+    const float freqB = freqG * invphi;
+    float *data = malloc(WIDTH * HEIGHT * COMPS * sizeof(float));
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            float *color = &data[(y * WIDTH + x) * COMPS];
+            float xx = x - xc, yy = y - yc;
+            float r2 = xx * xx + yy * yy;
+            switch (COMPS) {
+            case 4: color[3] = 1.0;
+            case 3: color[2] = 0.5f * sinf(freqB * r2) + 0.5f;;
+            case 2: color[1] = 0.5f * sinf(freqG * r2) + 0.5f;;
+            case 1: color[0] = 0.5f * sinf(freqR * r2) + 0.5f;;
             }
         }
     }
 
     pl_tex tex = pl_tex_create(gpu, pl_tex_params(
         .format         = fmt,
-        .w              = TEX_SIZE,
-        .h              = TEX_SIZE,
+        .w              = WIDTH,
+        .h              = HEIGHT,
         .sampleable     = true,
         .initial_data   = data,
     ));
@@ -113,8 +109,8 @@ static void benchmark(pl_gpu gpu, const char *name,
     for (int i = 0; i < NUM_TEX; i++) {
         fbos[i] = pl_tex_create(gpu, pl_tex_params(
             .format         = fmt,
-            .w              = TEX_SIZE,
-            .h              = TEX_SIZE,
+            .w              = WIDTH,
+            .h              = HEIGHT,
             .renderable     = true,
             .blit_dst       = true,
             .host_writable  = true,
@@ -443,7 +439,7 @@ static void bench_reshape_mmr(pl_shader sh, pl_shader_obj *state, pl_tex src)
     pl_shader_dovi_reshape(sh, &dovi_meta); // this includes MMR
 }
 
-static float data[TEX_SIZE * TEX_SIZE * COMPS + 8192];
+static float data[WIDTH * HEIGHT * COMPS + 8192];
 
 static void bench_download(pl_gpu gpu, pl_tex tex)
 {
