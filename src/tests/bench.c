@@ -9,8 +9,8 @@
 enum {
     // Image configuration
     NUM_TEX     = 16,
-    WIDTH       = 2048,
-    HEIGHT      = 2048,
+    WIDTH       = 1920,
+    HEIGHT      = 1080,
     DEPTH       = 16,
     COMPS       = 4,
 
