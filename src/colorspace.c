@@ -955,16 +955,15 @@ pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim)
     pl_matrix3x3 out = {{{0}}};
     float S[3], X[4], Z[4];
 
-    // Convert from CIE xyY to XYZ. Note that Y=1 holds true for all primaries
-    X[0] = prim->red.x   / prim->red.y;
-    X[1] = prim->green.x / prim->green.y;
-    X[2] = prim->blue.x  / prim->blue.y;
-    X[3] = prim->white.x / prim->white.y;
+    X[0] = pl_cie_X(prim->red);
+    X[1] = pl_cie_X(prim->green);
+    X[2] = pl_cie_X(prim->blue);
+    X[3] = pl_cie_X(prim->white);
 
-    Z[0] = (1 - prim->red.x   - prim->red.y)   / prim->red.y;
-    Z[1] = (1 - prim->green.x - prim->green.y) / prim->green.y;
-    Z[2] = (1 - prim->blue.x  - prim->blue.y)  / prim->blue.y;
-    Z[3] = (1 - prim->white.x - prim->white.y) / prim->white.y;
+    Z[0] = pl_cie_Z(prim->red);
+    Z[1] = pl_cie_Z(prim->green);
+    Z[2] = pl_cie_Z(prim->blue);
+    Z[3] = pl_cie_Z(prim->white);
 
     // S = XYZ^-1 * W
     for (int i = 0; i < 3; i++) {
