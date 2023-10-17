@@ -1320,6 +1320,7 @@ retry_ssbo:
          "luma = pow(clamp(luma, 0.0, 1.0), %f);        \n"
          "luma = (%f + %f * luma) / (1.0 + %f * luma);  \n"
          "luma = pow(luma, %f);                         \n"
+         "luma *= smoothstep(0.0, 1e-2, luma);          \n"
          "uint y_pq = uint(%d.0 * luma);                \n",
          sh_luma_coeffs(sh, &csp),
          PL_COLOR_SDR_WHITE / 10000.0,
