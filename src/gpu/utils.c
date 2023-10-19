@@ -143,6 +143,10 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
     // Verification
     pl_assert(gpu->limits.max_tex_2d_dim);
     pl_assert(gpu->limits.max_variable_comps || gpu->limits.max_ubo_size);
+    pl_assert(gpu->limits.max_ubo_size    <= gpu->limits.max_buf_size);
+    pl_assert(gpu->limits.max_ssbo_size   <= gpu->limits.max_buf_size);
+    pl_assert(gpu->limits.max_vbo_size    <= gpu->limits.max_buf_size);
+    pl_assert(gpu->limits.max_mapped_size <= gpu->limits.max_buf_size);
 
     for (int n = 0; n < gpu->num_formats; n++) {
         pl_fmt fmt = gpu->formats[n];
