@@ -470,13 +470,13 @@ int pl_tex_transfer_slices(pl_gpu gpu, pl_fmt texel_fmt,
                            struct pl_tex_transfer_params **out_slices)
 {
     PL_ARRAY(struct pl_tex_transfer_params) slices = {0};
-    size_t max_size = gpu->limits.max_ssbo_size;
+    size_t max_size = params->buf ? gpu->limits.max_buf_size : SIZE_MAX;
 
     pl_fmt fmt = params->tex->params.format;
     if (fmt->emulated) {
         pl_assert(texel_fmt);
         size_t max_texel = gpu->limits.max_buffer_texels * texel_fmt->texel_size;
-        max_size = PL_MIN(max_size, max_texel);
+        max_size = PL_MIN(gpu->limits.max_ssbo_size, max_texel);
     }
 
     if (max_size < fmt->texel_size)
