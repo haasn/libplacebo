@@ -880,11 +880,6 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         // Create all slice buffers first, to early-fail if OOM, and to avoid
         // blocking unnecessarily on waiting for these buffers to get read from
         num_slices = pl_tex_transfer_slices(gpu, tex_vk->texel_fmt, params, &slices);
-        if (!num_slices) {
-            PL_ERR(gpu, "Cannot split tex upload fallback into slices!");
-            goto error;
-        }
-
         for (int i = 0; i < num_slices; i++) {
             slices[i].buf = pl_buf_create(gpu, pl_buf_params(
                 .memory_type = PL_BUF_MEM_DEVICE,
@@ -1014,11 +1009,6 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (fmt->emulated || unaligned) {
 
         num_slices = pl_tex_transfer_slices(gpu, tex_vk->texel_fmt, params, &slices);
-        if (!num_slices) {
-            PL_ERR(gpu, "Cannot split tex download fallback into slices!");
-            goto error;
-        }
-
         for (int i = 0; i < num_slices; i++) {
             slices[i].buf = pl_buf_create(gpu, pl_buf_params(
                 .memory_type = PL_BUF_MEM_DEVICE,
