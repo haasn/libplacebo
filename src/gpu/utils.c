@@ -473,8 +473,7 @@ int pl_tex_transfer_slices(pl_gpu gpu, pl_fmt texel_fmt,
     size_t max_size = params->buf ? gpu->limits.max_buf_size : SIZE_MAX;
 
     pl_fmt fmt = params->tex->params.format;
-    if (fmt->emulated) {
-        pl_assert(texel_fmt);
+    if (fmt->emulated && texel_fmt) {
         size_t max_texel = gpu->limits.max_buffer_texels * texel_fmt->texel_size;
         max_size = PL_MIN(gpu->limits.max_ssbo_size, max_texel);
     }
