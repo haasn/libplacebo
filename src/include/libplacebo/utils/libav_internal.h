@@ -1341,8 +1341,10 @@ PL_LIBAV_API bool pl_download_avframe(pl_gpu gpu,
     return true;
 }
 
-#define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
+#define PL_DIV_UP(x, y) (((x) + (y) - 1) / (y))
+#define PL_ALIGN(x, align) ((align) ? PL_DIV_UP(x, align) * (align) : (x))
 #define PL_MAX(x, y) ((x) > (y) ? (x) : (y))
+#define PL_LCM(x, y) ((x) * ((y) / av_gcd(x, y)))
 
 static inline void pl_avalloc_free(void *opaque, uint8_t *data)
 {
@@ -1388,10 +1390,11 @@ PL_LIBAV_API int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
     if ((ret = av_image_fill_linesizes(pic->linesize, pic->format, width)))
         return ret;
 
-    for (int p = 0; p < 4; p++) {
-        alignment[p] = PL_ALIGN2(alignment[p], gpu->limits.align_tex_xfer_pitch);
-        alignment[p] = PL_ALIGN2(alignment[p], gpu->limits.align_tex_xfer_offset);
-        pic->linesize[p] = PL_ALIGN2(pic->linesize[p], alignment[p]);
+    for (int p = 0; p < planes; p++) {
+        alignment[p] = PL_LCM(alignment[p], gpu->limits.align_tex_xfer_pitch);
+        alignment[p] = PL_LCM(alignment[p], gpu->limits.align_tex_xfer_offset);
+        alignment[p] = PL_LCM(alignment[p], data[p].pixel_stride);
+        pic->linesize[p] = PL_ALIGN(pic->linesize[p], alignment[p]);
     }
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 56, 100)
@@ -1439,7 +1442,7 @@ PL_LIBAV_API int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
             return AVERROR(ENOMEM);
         }
 
-        pic->data[p] = (uint8_t *) PL_ALIGN2((uintptr_t) alloc->buf->data, alignment[p]);
+        pic->data[p] = (uint8_t *) PL_ALIGN((uintptr_t) alloc->buf->data, alignment[p]);
         pic->buf[p] = av_buffer_create(alloc->buf->data, buf_size, pl_avalloc_free, alloc, 0);
         if (!pic->buf[p]) {
             pl_buf_destroy(gpu, &alloc->buf);
