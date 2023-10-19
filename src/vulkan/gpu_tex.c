@@ -1066,7 +1066,8 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     } else {
 
-        pl_assert(fmt->texel_align == fmt->texel_size);
+        pl_assert(params->row_pitch % fmt->texel_size == 0);
+        pl_assert(params->depth_pitch % params->row_pitch == 0);
         const VkBufferImageCopy region = {
             .bufferOffset = buf_offset,
             .bufferRowLength = params->row_pitch / fmt->texel_size,
