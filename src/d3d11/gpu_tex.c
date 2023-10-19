@@ -617,11 +617,6 @@ bool pl_d3d11_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params
     if (fmt->emulated) {
 
         int num_slices = pl_tex_transfer_slices(gpu, tex_p->texel_fmt, params, &slices);
-        if (!num_slices) {
-            PL_ERR(gpu, "Cannot split tex upload fallback into slices!");
-            goto error;
-        }
-
         for (int i = 0; i < num_slices; i++) {
             // Copy the source data buffer into an intermediate buffer
             pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
@@ -683,11 +678,6 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
 
         pl_buf tbuf = NULL;
         int num_slices = pl_tex_transfer_slices(gpu, tex_p->texel_fmt, params, &slices);
-        if (!num_slices) {
-            PL_ERR(gpu, "Cannot split tex download fallback into slices!");
-            goto error;
-        }
-
         for (int i = 0; i < num_slices; i++) {
             const size_t slice_size = pl_tex_transfer_size(&slices[i]);
             bool ok = pl_buf_recreate(gpu, &tbuf, pl_buf_params(

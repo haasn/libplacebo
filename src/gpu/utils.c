@@ -478,9 +478,6 @@ int pl_tex_transfer_slices(pl_gpu gpu, pl_fmt texel_fmt,
         max_size = PL_MIN(gpu->limits.max_ssbo_size, max_texel);
     }
 
-    if (max_size < fmt->texel_size)
-        return 0;
-
     int slice_w = pl_rect_w(params->rc);
     int slice_h = pl_rect_h(params->rc);
     int slice_d = pl_rect_d(params->rc);
