@@ -922,12 +922,11 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
-        CMD_FINISH(&cmd);
+        bool ok = CMD_FINISH(&cmd);
 
         // Finally, dispatch the (texel) upload asynchronously. We can fire
         // the callback already at the completion of previous command because
         // these temporary buffers already hold persistent copies of the data
-        bool ok = true;
         for (int i = 0; i < num_slices; i++) {
             if (ok) {
                 slices[i].buf_offset = 0;
@@ -973,9 +972,10 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
-        CMD_FINISH(&cmd);
+        return CMD_FINISH(&cmd);
     }
-    return true;
+
+    pl_unreachable();
 
 error:
     for (int i = 0; i < num_slices; i++)
@@ -1106,11 +1106,10 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
-
-        CMD_FINISH(&cmd);
+        return CMD_FINISH(&cmd);
     }
 
-    return true;
+    pl_unreachable();
 
 error:
     for (int i = 0; i < num_slices; i++)
