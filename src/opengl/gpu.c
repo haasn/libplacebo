@@ -170,23 +170,24 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     struct pl_gpu_limits *limits = &gpu->limits;
     limits->thread_safe = params->make_current;
     limits->callbacks = gl_test_ext(gpu, "GL_ARB_sync", 32, 30);
-    if (gl_test_ext(gpu, "GL_ARB_pixel_buffer_object", 31, 0))
-        limits->max_buf_size = SIZE_MAX; // no restriction imposed by GL
-    if (gl_test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
-        get(GL_MAX_UNIFORM_BLOCK_SIZE, &limits->max_ubo_size);
-    if (gl_test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0) &&
-        gpu->glsl.version >= 140)
-    {
-        get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &limits->max_ssbo_size);
-    }
-    limits->max_vbo_size = limits->max_buf_size; // No additional restrictions
-    if (gl_test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
-        const char *vendor = (char *) gl->GetString(GL_VENDOR);
-        limits->max_mapped_size = limits->max_buf_size;
-        limits->host_cached = strcmp(vendor, "AMD") == 0 ||
-                              strcmp(vendor, "NVIDIA Corporation") == 0;
-    }
     limits->align_vertex_stride = 1;
+    if (gl_test_ext(gpu, "GL_ARB_pixel_buffer_object", 31, 0)) {
+        limits->max_buf_size = SIZE_MAX; // no restriction imposed by GL
+        if (gl_test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
+            get(GL_MAX_UNIFORM_BLOCK_SIZE, &limits->max_ubo_size);
+        if (gl_test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0) &&
+            gpu->glsl.version >= 140)
+        {
+            get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &limits->max_ssbo_size);
+        }
+        limits->max_vbo_size = limits->max_buf_size; // No additional restrictions
+        if (gl_test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
+            const char *vendor = (char *) gl->GetString(GL_VENDOR);
+            limits->max_mapped_size = limits->max_buf_size;
+            limits->host_cached = strcmp(vendor, "AMD") == 0 ||
+                                  strcmp(vendor, "NVIDIA Corporation") == 0;
+        }
+    }
 
     get(GL_MAX_TEXTURE_SIZE, &limits->max_tex_2d_dim);
     if (gl_test_ext(gpu, "GL_EXT_texture3D", 21, 30))
