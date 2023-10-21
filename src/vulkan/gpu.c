@@ -503,17 +503,18 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         gpu->glsl.max_gather_offset = limits.maxTexelGatherOffset;
     }
 
+    const size_t max_size = vk_malloc_avail(vk->ma, 0);
     gpu->limits = (struct pl_gpu_limits) {
         // pl_gpu
         .thread_safe        = true,
         .callbacks          = true,
         // pl_buf
-        .max_buf_size       = vk_malloc_avail(vk->ma, 0),
-        .max_ubo_size       = limits.maxUniformBufferRange,
-        .max_ssbo_size      = limits.maxStorageBufferRange,
+        .max_buf_size       = max_size,
+        .max_ubo_size       = PL_MIN(limits.maxUniformBufferRange, max_size),
+        .max_ssbo_size      = PL_MIN(limits.maxStorageBufferRange, max_size),
         .max_vbo_size       = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
         .max_mapped_size    = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
-        .max_buffer_texels  = limits.maxTexelBufferElements,
+        .max_buffer_texels  = PL_MIN(limits.maxTexelBufferElements, max_size),
         .align_host_ptr     = host_props.minImportedHostPointerAlignment,
         .host_cached        = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_CACHED_BIT),
         // pl_tex
