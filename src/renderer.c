@@ -2875,12 +2875,14 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
         return;
     }
 
+#ifdef PL_HAVE_LCMS
     if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, NULL)) {
         frame->icc = fallback->icc;
     } else {
         PL_WARN(rr, "Failed opening ICC profile... ignoring");
         fallback->error = frame->profile.signature;
     }
+#endif
 }
 
 static void pass_fix_frames(struct pass_state *pass)
