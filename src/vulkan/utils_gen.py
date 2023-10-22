@@ -105,7 +105,7 @@ def get_vkstructs(registry):
                 stype = m
                 break
 
-        if stype and 'values' in stype.attrib:
+        if stype is not None and 'values' in stype.attrib:
             yield Obj(stype = stype.attrib['values'],
                       name = t.attrib['name'])
 
