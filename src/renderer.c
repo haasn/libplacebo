@@ -2865,7 +2865,6 @@ static void pass_uninit(struct pass_state *pass)
 static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
                          struct icc_state *fallback)
 {
-    pl_renderer rr = pass->rr;
     if (!frame || frame->icc || !frame->profile.data)
         return;
 
@@ -2876,6 +2875,7 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
     }
 
 #ifdef PL_HAVE_LCMS
+    pl_renderer rr = pass->rr;
     if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, NULL)) {
         frame->icc = fallback->icc;
     } else {
