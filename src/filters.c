@@ -614,7 +614,7 @@ const struct pl_filter_function *pl_find_filter_function(const char *name)
     if (!name)
         return NULL;
 
-    for (int i = 0; pl_num_filter_functions; i++) {
+    for (int i = 0; i < pl_num_filter_functions; i++) {
         if (strcmp(name, pl_filter_functions[i]->name) == 0)
             return pl_filter_functions[i];
     }
@@ -937,7 +937,7 @@ pl_find_filter_config(const char *name, enum pl_filter_usage usage)
     if (!name)
         return NULL;
 
-    for (int i = 0; pl_num_filter_configs; i++) {
+    for (int i = 0; i < pl_num_filter_configs; i++) {
         if ((pl_filter_configs[i]->allowed & usage) != usage)
             continue;
         if (strcmp(name, pl_filter_configs[i]->name) == 0)
