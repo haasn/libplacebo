@@ -271,9 +271,8 @@ struct pl_vulkan_params {
 PL_API extern const struct pl_vulkan_params pl_vulkan_default_params;
 
 // Creates a new vulkan device based on the given parameters and initializes
-// a new GPU. This function will internally initialize a VkDevice. There is
-// currently no way to share a vulkan device with the caller. If `params` is
-// left as NULL, it defaults to &pl_vulkan_default_params.
+// a new GPU. If `params` is left as NULL, it defaults to
+// &pl_vulkan_default_params.
 //
 // Thread-safety: Safe
 PL_API pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params);
