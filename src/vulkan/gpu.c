@@ -463,6 +463,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         if (!strcmp(vk->exts.elem[i], VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
             vk_link_struct(&props, &port_props);
             is_portability = true;
+            break;
         }
     }
 #endif
