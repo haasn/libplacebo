@@ -150,6 +150,12 @@ struct pl_queue_params {
     // between calls to `pl_queue_update`. (Optional)
     float vsync_duration;
 
+    // If the difference between `pts` and the closest frame is smaller than
+    // this delta (in seconds), the mismatch will be assumed as drift/jitter
+    // and dynamically subtracted from all future pl_queue_update calls, until
+    // the queue is either reset or the PTS jumps by a large amount. (Optional)
+    float drift_compensation;
+
     // If the difference between the (estimated) vsync duration and the
     // (measured) frame duration is smaller than this threshold, silently
     // disable interpolation and switch to ZOH semantics instead.
@@ -181,7 +187,10 @@ struct pl_queue_params {
     void *priv;
 };
 
-#define pl_queue_params(...) (&(struct pl_queue_params) { __VA_ARGS__ })
+#define PL_QUEUE_DEFAULTS       \
+    .drift_compensation = 1e-3,
+
+#define pl_queue_params(...) (&(struct pl_queue_params) { PL_QUEUE_DEFAULTS __VA_ARGS__ })
 
 // Advance the frame queue's internal state to the target timestamp. Any frames
 // which are no longer needed (i.e. too far in the past) are automatically
@@ -213,6 +222,11 @@ PL_API float pl_queue_estimate_vps(pl_queue queue);
 
 // Returns the number of frames currently contained in a pl_queue.
 PL_API int pl_queue_num_frames(pl_queue queue);
+
+// Returns the current PTS offset factor, as determined by the PTS drift
+// compensation algorithm. This value is added onto all incoming values of
+// pl_queue_params.pts.
+PL_API double pl_queue_pts_offset(pl_queue queue);
 
 // Inspect the contents of the Nth queued frame. Returns false if `idx` is
 // out of range.

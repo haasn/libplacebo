@@ -468,10 +468,10 @@ static bool render_loop(struct plplay *p)
 {
     pl_options opts = p->opts;
 
-    struct pl_queue_params qparams = {
+    struct pl_queue_params qparams = *pl_queue_params(
         .interpolation_threshold = 0.01,
         .timeout = UINT64_MAX,
-    };
+    );
 
     // Initialize the frame queue, blocking indefinitely until done
     struct pl_frame_mix mix;

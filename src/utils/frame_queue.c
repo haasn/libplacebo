@@ -97,6 +97,7 @@ struct pl_queue_t {
     float reported_vps;
     float reported_fps;
     double prev_pts;
+    double pts_offset;
 
     // Storage for temporary arrays
     PL_ARRAY(uint64_t) tmp_sig;
@@ -929,6 +930,7 @@ static bool prefill(pl_queue p, const struct pl_queue_params *params)
 enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
                                      const struct pl_queue_params *params)
 {
+    struct pl_queue_params fixed;
     pl_mutex_lock(&p->lock_strong);
     pl_mutex_lock(&p->lock_weak);
     default_estimate(&p->vps, params->vsync_duration);
@@ -957,6 +959,7 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
         // the FPS estimate, treat this as a new frame.
         PL_TRACE(p, "Discontinuous target PTS jump %f -> %f, ignoring...",
                  p->prev_pts, params->pts);
+        p->pts_offset = 0.0;
 
     } else if (delta > 0) {
 
@@ -965,6 +968,22 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     }
 
     p->prev_pts = params->pts;
+
+    if (params->drift_compensation > 0.0f) {
+        // Adjust PTS offset if PTS is near-match for existing frame
+        double pts = params->pts + p->pts_offset;
+        for (int i = 0; i < p->queue.num; i++) {
+            if (fabs(p->queue.elem[i]->pts - pts) < params->drift_compensation) {
+                p->pts_offset = p->queue.elem[i]->pts - params->pts;
+                pts = p->queue.elem[i]->pts;
+                break;
+            }
+        }
+
+        fixed = *params;
+        fixed.pts = pts;
+        params = &fixed;
+    }
 
     // As a special case, prefill the queue if this is the first frame
     if (!params->pts && !p->queue.num) {
@@ -1017,6 +1036,14 @@ int pl_queue_num_frames(pl_queue p)
     int count = p->queue.num;
     pl_mutex_unlock(&p->lock_weak);
     return count;
+}
+
+double pl_queue_pts_offset(pl_queue p)
+{
+    pl_mutex_lock(&p->lock_weak);
+    double offset = p->pts_offset;
+    pl_mutex_unlock(&p->lock_weak);
+    return offset;
 }
 
 bool pl_queue_peek(pl_queue p, int idx, struct pl_source_frame *out)

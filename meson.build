@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '340': 'add pl_queue_params.drift_compensation, PL_QUEUE_DEFAULTS and pl_queue_pts_offset',
       '339': 'add pl_peak_detect_params.black_cutoff',
       '338': 'split pl_filter_nearest into pl_filter_nearest and pl_filter_box',
       '337': 'fix PL_FILTER_DOWNSCALING constant',

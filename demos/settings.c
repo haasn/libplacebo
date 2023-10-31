@@ -1158,6 +1158,8 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_labelf(nk, NK_TEXT_LEFT, "%.3f", pl_queue_estimate_fps(p->queue));
                 nk_label(nk, "Estimated vsync rate:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%.3f", pl_queue_estimate_vps(p->queue));
+                nk_label(nk, "PTS drift offset:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%.3f ms", 1e3 * pl_queue_pts_offset(p->queue));
                 nk_label(nk, "Frames rendered:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, p->stats.rendered);
                 nk_label(nk, "Decoded frames", NK_TEXT_LEFT);
