@@ -2869,10 +2869,8 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
         return;
 
     // Don't re-attempt opening already failed profiles
-    if (fallback->error && fallback->error == frame->profile.signature) {
-        pl_assert(!fallback->icc);
+    if (fallback->error && fallback->error == frame->profile.signature)
         return;
-    }
 
 #ifdef PL_HAVE_LCMS
     pl_renderer rr = pass->rr;
