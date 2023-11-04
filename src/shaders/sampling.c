@@ -499,7 +499,7 @@ static void describe_filter(pl_shader sh, const struct pl_filter_config *cfg,
 static void polar_sample(pl_shader sh, pl_filter filter,
                          ident_t tex, ident_t lut, ident_t radius,
                          int x, int y, uint8_t comp_mask, ident_t in,
-                         bool use_ar, float scale)
+                         bool use_ar, ident_t scale)
 {
     // Since we can't know the subpixel position in advance, assume a
     // worst case scenario
@@ -535,7 +535,7 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     @if (use_ar) {                                              \
         if (d <= ${const float: ar_radius}) {                   \
             @for (c : comp_mask) {                              \
-                cc = vec2(${float: scale} * c[@c]);             \
+                cc = vec2($scale * c[@c]);                      \
                 cc.x = 1.0 - cc.x;                              \
                 ww = cc + vec2(0.10);                           \
                 ww = ww * ww;                                   \
@@ -590,9 +590,9 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     }
 
     uint8_t cmask;
-    float rx, ry, scale;
-    ident_t src_tex, pos, pt;
-    if (!setup_src(sh, src, &src_tex, &pos, &pt, &rx, &ry, &cmask, &scale, false, FASTEST))
+    float rx, ry, scalef;
+    ident_t src_tex, pos, pt, scale;
+    if (!setup_src(sh, src, &src_tex, &pos, &pt, &rx, &ry, &cmask, &scalef, false, FASTEST))
         return false;
 
     struct sh_sampler_obj *obj;
@@ -605,6 +605,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     inv_scale = PL_MAX(inv_scale, 1.0);
     if (params->no_widening)
         inv_scale = 1.0;
+    scale = sh_const_float(sh, "scale", scalef);
 
     struct pl_filter_config cfg = params->filter;
     cfg.antiring = PL_DEF(cfg.antiring, params->antiring);
@@ -872,7 +873,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     }
 
 #pragma GLSL                                                                    \
-    color = ${float:scale} / wsum * color;                                      \
+    color = $scale / wsum * color;                                              \
     @if (use_ar) {                                                              \
         @for (c : cmask) {                                                      \
             ww = ar@c / wwsum@c;                                                \
