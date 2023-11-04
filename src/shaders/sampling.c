@@ -526,7 +526,7 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     wsum += w;                                                  \
     @if (in != NULL_IDENT) {                                    \
         @for (c : comp_mask)                                    \
-            c[@c] = $in@c[idx];                                 \
+            c[@c] = ${in}_@c[idx];                              \
     @} else {                                                   \
         c = textureLod($tex, base + pt * vec2(offset), 0.0);    \
     @}                                                          \
@@ -745,8 +745,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
         for (uint8_t comps = cmask; comps;) {
             uint8_t c = __builtin_ctz(comps);
-            GLSLH("shared float "$"%d["$" * "$"]; \n", in, c, sizeh_c, sizew_c);
-            GLSL(""$"%d["$" * y + x] = c[%d]; \n", in, c, sizew_c, c);
+            GLSLH("shared float "$"_%d["$" * "$"]; \n", in, c, sizeh_c, sizew_c);
+            GLSL(""$"_%d["$" * y + x] = c[%d]; \n", in, c, sizew_c, c);
             comps &= ~(1 << c);
         }
 
@@ -766,7 +766,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         // Fragment shader sampling
         for (uint8_t comps = cmask; comps;) {
             uint8_t c = __builtin_ctz(comps);
-            GLSL("vec4 "$"%d; \n", in, c);
+            GLSL("vec4 "$"_%d; \n", in, c);
             comps &= ~(1 << c);
         }
 
@@ -826,20 +826,20 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                     uint8_t c = __builtin_ctz(comps);
                     if (x || y) {
                         if (c) {
-                            GLSL($"%d = textureGatherOffset("$", "
+                            GLSL($"_%d = textureGatherOffset("$", "
                                  "center, ivec2(%d, %d), %d); \n",
                                  in, c, src_tex, x, y, c);
                         } else {
-                            GLSL($"0 = textureGatherOffset("$", "
+                            GLSL($"_0 = textureGatherOffset("$", "
                                  "center, ivec2(%d, %d)); \n",
                                  in, src_tex, x, y);
                         }
                     } else {
                         if (c) {
-                            GLSL($"%d = textureGather("$", center, %d); \n",
+                            GLSL($"_%d = textureGather("$", center, %d); \n",
                                  in, c, src_tex, c);
                         } else {
-                            GLSL($"0 = textureGather("$", center); \n",
+                            GLSL($"_0 = textureGather("$", center); \n",
                                  in, src_tex);
                         }
                     }
