@@ -137,8 +137,14 @@ PL_API extern const struct pl_filter_function pl_filter_function_sphinx;
 // B ≈ 0.26, C ≈ 0.37: RobidouxSharp filter (sharper variant of Robidoux)
 PL_API extern const struct pl_filter_function pl_filter_function_cubic;
 PL_API extern const struct pl_filter_function pl_filter_function_hermite;
-#define pl_filter_function_bicubic pl_filter_function_cubic
-#define pl_filter_function_bcspline pl_filter_function_cubic
+
+// Deprecated aliases of pl_filter_function_cubic (see the table above)
+PL_DEPRECATED_IN(v6.341) PL_API extern const struct pl_filter_function pl_filter_function_bicubic;
+PL_DEPRECATED_IN(v6.341) PL_API extern const struct pl_filter_function pl_filter_function_bcspline;
+PL_DEPRECATED_IN(v6.341) PL_API extern const struct pl_filter_function pl_filter_function_catmull_rom;
+PL_DEPRECATED_IN(v6.341) PL_API extern const struct pl_filter_function pl_filter_function_mitchell;
+PL_DEPRECATED_IN(v6.341) PL_API extern const struct pl_filter_function pl_filter_function_robidoux;
+PL_DEPRECATED_IN(v6.341) PL_API extern const struct pl_filter_function pl_filter_function_robidouxsharp;
 
 // Cubic splines with 2/3/4 taps. Referred to as "spline16", "spline36", and
 // "spline64" mainly for historical reasons, based on the number of pixels in
