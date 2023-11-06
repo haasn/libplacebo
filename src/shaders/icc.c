@@ -758,7 +758,11 @@ bool pl_icc_update(pl_log log, pl_icc_object *obj,
                    const struct pl_icc_profile *profile,
                    const struct pl_icc_params *params)
 {
-    pl_err(log, "libplacebo compiled without LittleCMS 2 support!");
+    static bool warned;
+    if (!warned) {
+        pl_err(log, "libplacebo compiled without LittleCMS 2 support!");
+        warned = true;
+    }
     *obj = NULL;
     return false;
 }
