@@ -1972,7 +1972,7 @@ static bool pass_scale_main(struct pass_state *pass)
     if (pl_color_space_is_hdr(&img->color))
         use_sigmoid = use_linear = false;
 
-    if (!use_linear && img->color.transfer == PL_COLOR_TRC_LINEAR) {
+    if (!(use_linear || use_sigmoid) && img->color.transfer == PL_COLOR_TRC_LINEAR) {
         img->color.transfer = image->color.transfer;
         if (image->color.transfer == PL_COLOR_TRC_LINEAR)
             img->color.transfer = PL_COLOR_TRC_GAMMA22; // arbitrary fallback
