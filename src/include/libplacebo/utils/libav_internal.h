@@ -793,28 +793,44 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
+#if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(60, 15, 100)
+PL_LIBAV_API const uint8_t *pl_av_stream_get_side_data(const AVStream *st,
+                                                 enum AVPacketSideDataType type)
+{
+    const AVPacketSideData *sd;
+    sd = av_packet_side_data_get(st->codecpar->coded_side_data,
+                                 st->codecpar->nb_coded_side_data,
+                                 type);
+    return sd ? sd->data : NULL;
+}
+#else
+# define pl_av_stream_get_side_data(st, type) av_stream_get_side_data(st, type, NULL)
+#endif
+
 PL_LIBAV_API void pl_frame_copy_stream_props(struct pl_frame *out,
-                                                 const AVStream *stream)
+                                             const AVStream *stream)
 {
     const uint8_t *sd;
-    if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX, NULL))) {
+    if ((sd = pl_av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX))) {
         double rot = av_display_rotation_get((const int32_t *) sd);
         out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
     }
 
 #ifdef PL_HAVE_LAV_HDR
     pl_map_hdr_metadata(&out->color.hdr, &(struct pl_av_hdr_metadata) {
-        .mdm = (void *) av_stream_get_side_data(stream,
-                        AV_PKT_DATA_MASTERING_DISPLAY_METADATA, NULL),
-        .clm = (void *) av_stream_get_side_data(stream,
-                        AV_PKT_DATA_CONTENT_LIGHT_LEVEL, NULL),
+        .mdm = (void *) pl_av_stream_get_side_data(stream,
+                        AV_PKT_DATA_MASTERING_DISPLAY_METADATA),
+        .clm = (void *) pl_av_stream_get_side_data(stream,
+                        AV_PKT_DATA_CONTENT_LIGHT_LEVEL),
 # if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(59, 2, 100)
-        .dhp = (void *) av_stream_get_side_data(stream,
-                        AV_PKT_DATA_DYNAMIC_HDR10_PLUS, NULL),
+        .dhp = (void *) pl_av_stream_get_side_data(stream,
+                        AV_PKT_DATA_DYNAMIC_HDR10_PLUS),
 # endif
     });
 #endif
 }
+
+#undef pl_av_stream_get_side_data
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
 PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
