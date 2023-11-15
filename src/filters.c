@@ -399,6 +399,32 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .tunable   = {true},
 };
 
+static double power_of_blackman(const struct pl_filter_ctx *f, double x)
+{
+    return pow(blackman(f, x), f->params[1]);
+}
+
+const struct pl_filter_function pl_filter_function_power_of_blackman = {
+    .name    = "power_of_blackman",
+    .weight  = power_of_blackman,
+    .radius  = 1.0,
+    .params  = {0.16, 1.0},
+    .tunable = {true, true},
+};
+
+static double power_of_garamond(const struct pl_filter_ctx *f, double x)
+{
+    return pow(1.0 - pow(x, f->params[0]), f->params[1]);
+}
+
+const struct pl_filter_function pl_filter_function_power_of_garamond = {
+    .name    = "power_of_garamond",
+    .weight  = power_of_garamond,
+    .radius  = 1.0,
+    .params  = {2.0, 1.0},
+    .tunable = {true, true},
+};
+
 static double quadratic(const struct pl_filter_ctx *f, double x)
 {
     if (x < 0.5) {
@@ -623,6 +649,8 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_blackman,
     &pl_filter_function_bohman,
     &pl_filter_function_gaussian,
+    &pl_filter_function_power_of_blackman,
+    &pl_filter_function_power_of_garamond,
     &pl_filter_function_quadratic,
     &filter_function_quadric, // alias
     &pl_filter_function_sinc,
@@ -986,35 +1014,37 @@ pl_find_filter_config(const char *name, enum pl_filter_usage usage)
 // Backwards compatibility with older API
 
 const struct pl_filter_function_preset pl_filter_function_presets[] = {
-    {"none",            NULL},
-    {"box",             &pl_filter_function_box},
-    {"dirichlet",       &filter_function_dirichlet}, // alias
-    {"triangle",        &pl_filter_function_triangle},
-    {"cosine",          &pl_filter_function_cosine},
-    {"hann",            &pl_filter_function_hann},
-    {"hanning",         &filter_function_hanning}, // alias
-    {"hamming",         &pl_filter_function_hamming},
-    {"welch",           &pl_filter_function_welch},
-    {"kaiser",          &pl_filter_function_kaiser},
-    {"blackman",        &pl_filter_function_blackman},
-    {"bohman",          &pl_filter_function_bohman},
-    {"gaussian",        &pl_filter_function_gaussian},
-    {"quadratic",       &pl_filter_function_quadratic},
-    {"quadric",         &filter_function_quadric}, // alias
-    {"sinc",            &pl_filter_function_sinc},
-    {"jinc",            &pl_filter_function_jinc},
-    {"sphinx",          &pl_filter_function_sphinx},
-    {"cubic",           &pl_filter_function_cubic},
-    {"hermite",         &pl_filter_function_hermite},
-    {"bicubic",         &pl_filter_function_bicubic},
-    {"bcspline",        &pl_filter_function_bcspline},
-    {"catmull_rom",     &pl_filter_function_catmull_rom}, // alias
-    {"mitchell",        &pl_filter_function_mitchell},
-    {"robidoux",        &pl_filter_function_robidoux},
-    {"robidouxsharp",   &pl_filter_function_robidouxsharp},
-    {"spline16",        &pl_filter_function_spline16},
-    {"spline36",        &pl_filter_function_spline36},
-    {"spline64",        &pl_filter_function_spline64},
+    {"none",              NULL},
+    {"box",               &pl_filter_function_box},
+    {"dirichlet",         &filter_function_dirichlet}, // alias
+    {"triangle",          &pl_filter_function_triangle},
+    {"cosine",            &pl_filter_function_cosine},
+    {"hann",              &pl_filter_function_hann},
+    {"hanning",           &filter_function_hanning}, // alias
+    {"hamming",           &pl_filter_function_hamming},
+    {"welch",             &pl_filter_function_welch},
+    {"kaiser",            &pl_filter_function_kaiser},
+    {"blackman",          &pl_filter_function_blackman},
+    {"bohman",            &pl_filter_function_bohman},
+    {"gaussian",          &pl_filter_function_gaussian},
+    {"power_of_blackman", &pl_filter_function_power_of_blackman},
+    {"power_of_garamond", &pl_filter_function_power_of_garamond},
+    {"quadratic",         &pl_filter_function_quadratic},
+    {"quadric",           &filter_function_quadric}, // alias
+    {"sinc",              &pl_filter_function_sinc},
+    {"jinc",              &pl_filter_function_jinc},
+    {"sphinx",            &pl_filter_function_sphinx},
+    {"cubic",             &pl_filter_function_cubic},
+    {"hermite",           &pl_filter_function_hermite},
+    {"bicubic",           &pl_filter_function_bicubic},
+    {"bcspline",          &pl_filter_function_bcspline},
+    {"catmull_rom",       &pl_filter_function_catmull_rom}, // alias
+    {"mitchell",          &pl_filter_function_mitchell},
+    {"robidoux",          &pl_filter_function_robidoux},
+    {"robidouxsharp",     &pl_filter_function_robidouxsharp},
+    {"spline16",          &pl_filter_function_spline16},
+    {"spline36",          &pl_filter_function_spline36},
+    {"spline64",          &pl_filter_function_spline64},
     {0},
 };
 
