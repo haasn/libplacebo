@@ -399,6 +399,22 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .tunable   = {true},
 };
 
+//Power of Garamond window
+static double garamond(const struct pl_filter_ctx *f, double x)
+{
+    double n = f->params[0];
+    double m = f->params[1];
+    return pow(1.0 - pow(x, n), m);
+}
+
+const struct pl_filter_function pl_filter_function_garamond = {
+    .name    = "garamond",
+    .weight  = garamond,
+    .radius  = 1.0,
+    .params  = {2.0, 1.0},
+    .tunable = {true, true},
+};
+
 static double quadratic(const struct pl_filter_ctx *f, double x)
 {
     if (x < 0.5) {
@@ -623,6 +639,7 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_blackman,
     &pl_filter_function_bohman,
     &pl_filter_function_gaussian,
+    &pl_filter_function_garamond,
     &pl_filter_function_quadratic,
     &filter_function_quadric, // alias
     &pl_filter_function_sinc,
@@ -999,6 +1016,7 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"blackman",        &pl_filter_function_blackman},
     {"bohman",          &pl_filter_function_bohman},
     {"gaussian",        &pl_filter_function_gaussian},
+    {"garamond",        &pl_filter_function_garamond},
     {"quadratic",       &pl_filter_function_quadratic},
     {"quadric",         &filter_function_quadric}, // alias
     {"sinc",            &pl_filter_function_sinc},
