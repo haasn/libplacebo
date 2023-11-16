@@ -357,20 +357,22 @@ const struct pl_filter_function pl_filter_function_kaiser = {
     .tunable = {true},
 };
 
+//Power of Blackman window
 static double blackman(const struct pl_filter_ctx *f, double x)
 {
     double a = f->params[0];
-    double a0 = (1 - a) / 2.0, a1 = 1 / 2.0, a2 = a / 2.0;
+    double n = f->params[1];
+    double a0 = (1.0 - a) / 2.0, a1 = 1.0 / 2.0, a2 = a / 2.0;
     x *= M_PI;
-    return a0 + a1 * cos(x) + a2 * cos(2 * x);
+    return pow(a0 + a1 * cos(x) + a2 * cos(2.0 * x), n);
 }
 
 const struct pl_filter_function pl_filter_function_blackman = {
     .name    = "blackman",
     .weight  = blackman,
     .radius  = 1.0,
-    .params  = {0.16},
-    .tunable = {true},
+    .params  = {0.16, 1.0},
+    .tunable = {true, true},
 };
 
 static double bohman(const struct pl_filter_ctx *f, double x)
@@ -399,27 +401,17 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .tunable   = {true},
 };
 
-static double power_of_blackman(const struct pl_filter_ctx *f, double x)
+//Power of Garamond window
+static double garamond(const struct pl_filter_ctx *f, double x)
 {
-    return pow(blackman(f, x), f->params[1]);
+    double n = f->params[0];
+    double m = f->params[1];
+    return pow(1.0 - pow(x, n), m);
 }
 
-const struct pl_filter_function pl_filter_function_power_of_blackman = {
-    .name    = "power_of_blackman",
-    .weight  = power_of_blackman,
-    .radius  = 1.0,
-    .params  = {0.16, 1.0},
-    .tunable = {true, true},
-};
-
-static double power_of_garamond(const struct pl_filter_ctx *f, double x)
-{
-    return pow(1.0 - pow(x, f->params[0]), f->params[1]);
-}
-
-const struct pl_filter_function pl_filter_function_power_of_garamond = {
-    .name    = "power_of_garamond",
-    .weight  = power_of_garamond,
+const struct pl_filter_function pl_filter_function_garamond = {
+    .name    = "garamond",
+    .weight  = garamond,
     .radius  = 1.0,
     .params  = {2.0, 1.0},
     .tunable = {true, true},
@@ -649,8 +641,7 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_blackman,
     &pl_filter_function_bohman,
     &pl_filter_function_gaussian,
-    &pl_filter_function_power_of_blackman,
-    &pl_filter_function_power_of_garamond,
+    &pl_filter_function_garamond,
     &pl_filter_function_quadratic,
     &filter_function_quadric, // alias
     &pl_filter_function_sinc,
@@ -1014,37 +1005,36 @@ pl_find_filter_config(const char *name, enum pl_filter_usage usage)
 // Backwards compatibility with older API
 
 const struct pl_filter_function_preset pl_filter_function_presets[] = {
-    {"none",              NULL},
-    {"box",               &pl_filter_function_box},
-    {"dirichlet",         &filter_function_dirichlet}, // alias
-    {"triangle",          &pl_filter_function_triangle},
-    {"cosine",            &pl_filter_function_cosine},
-    {"hann",              &pl_filter_function_hann},
-    {"hanning",           &filter_function_hanning}, // alias
-    {"hamming",           &pl_filter_function_hamming},
-    {"welch",             &pl_filter_function_welch},
-    {"kaiser",            &pl_filter_function_kaiser},
-    {"blackman",          &pl_filter_function_blackman},
-    {"bohman",            &pl_filter_function_bohman},
-    {"gaussian",          &pl_filter_function_gaussian},
-    {"power_of_blackman", &pl_filter_function_power_of_blackman},
-    {"power_of_garamond", &pl_filter_function_power_of_garamond},
-    {"quadratic",         &pl_filter_function_quadratic},
-    {"quadric",           &filter_function_quadric}, // alias
-    {"sinc",              &pl_filter_function_sinc},
-    {"jinc",              &pl_filter_function_jinc},
-    {"sphinx",            &pl_filter_function_sphinx},
-    {"cubic",             &pl_filter_function_cubic},
-    {"hermite",           &pl_filter_function_hermite},
-    {"bicubic",           &pl_filter_function_bicubic},
-    {"bcspline",          &pl_filter_function_bcspline},
-    {"catmull_rom",       &pl_filter_function_catmull_rom}, // alias
-    {"mitchell",          &pl_filter_function_mitchell},
-    {"robidoux",          &pl_filter_function_robidoux},
-    {"robidouxsharp",     &pl_filter_function_robidouxsharp},
-    {"spline16",          &pl_filter_function_spline16},
-    {"spline36",          &pl_filter_function_spline36},
-    {"spline64",          &pl_filter_function_spline64},
+    {"none",            NULL},
+    {"box",             &pl_filter_function_box},
+    {"dirichlet",       &filter_function_dirichlet}, // alias
+    {"triangle",        &pl_filter_function_triangle},
+    {"cosine",          &pl_filter_function_cosine},
+    {"hann",            &pl_filter_function_hann},
+    {"hanning",         &filter_function_hanning}, // alias
+    {"hamming",         &pl_filter_function_hamming},
+    {"welch",           &pl_filter_function_welch},
+    {"kaiser",          &pl_filter_function_kaiser},
+    {"blackman",        &pl_filter_function_blackman},
+    {"bohman",          &pl_filter_function_bohman},
+    {"gaussian",        &pl_filter_function_gaussian},
+    {"garamond",        &pl_filter_function_garamond},
+    {"quadratic",       &pl_filter_function_quadratic},
+    {"quadric",         &filter_function_quadric}, // alias
+    {"sinc",            &pl_filter_function_sinc},
+    {"jinc",            &pl_filter_function_jinc},
+    {"sphinx",          &pl_filter_function_sphinx},
+    {"cubic",           &pl_filter_function_cubic},
+    {"hermite",         &pl_filter_function_hermite},
+    {"bicubic",         &pl_filter_function_bicubic},
+    {"bcspline",        &pl_filter_function_bcspline},
+    {"catmull_rom",     &pl_filter_function_catmull_rom}, // alias
+    {"mitchell",        &pl_filter_function_mitchell},
+    {"robidoux",        &pl_filter_function_robidoux},
+    {"robidouxsharp",   &pl_filter_function_robidouxsharp},
+    {"spline16",        &pl_filter_function_spline16},
+    {"spline36",        &pl_filter_function_spline36},
+    {"spline64",        &pl_filter_function_spline64},
     {0},
 };
 
