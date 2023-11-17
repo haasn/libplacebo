@@ -46,6 +46,7 @@ struct plplay {
     pl_renderer renderer;
     pl_queue queue;
     pl_cache cache;
+    uint64_t cache_sig;
 
     // libav*
     AVFormatContext *format;

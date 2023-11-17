@@ -64,10 +64,12 @@ static void uninit(struct plplay *p)
     pl_icc_close(&p->icc);
 
     if (p->cache) {
-        FILE *file = fopen(p->cache_file, "wb");
-        if (file) {
-            pl_cache_save_file(p->cache, file);
-            fclose(file);
+        if (pl_cache_signature(p->cache) != p->cache_sig) {
+            FILE *file = fopen(p->cache_file, "wb");
+            if (file) {
+                pl_cache_save_file(p->cache, file);
+                fclose(file);
+            }
         }
         pl_cache_destroy(&p->cache);
     }
@@ -738,6 +740,7 @@ int main(int argc, char *argv[])
             FILE *file = fopen(p->cache_file, "rb");
             if (file) {
                 pl_cache_load_file(p->cache, file);
+                p->cache_sig = pl_cache_signature(p->cache);
                 fclose(file);
             }
         }
