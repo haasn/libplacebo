@@ -357,20 +357,22 @@ const struct pl_filter_function pl_filter_function_kaiser = {
     .tunable = {true},
 };
 
+//Power of Blackman window
 static double blackman(const struct pl_filter_ctx *f, double x)
 {
     double a = f->params[0];
-    double a0 = (1 - a) / 2.0, a1 = 1 / 2.0, a2 = a / 2.0;
+    double n = f->params[1];
+    double a0 = (1.0 - a) / 2.0, a1 = 1.0 / 2.0, a2 = a / 2.0;
     x *= M_PI;
-    return a0 + a1 * cos(x) + a2 * cos(2 * x);
+    return pow(a0 + a1 * cos(x) + a2 * cos(2.0 * x), n);
 }
 
 const struct pl_filter_function pl_filter_function_blackman = {
     .name    = "blackman",
     .weight  = blackman,
     .radius  = 1.0,
-    .params  = {0.16},
-    .tunable = {true},
+    .params  = {0.16, 1.0},
+    .tunable = {true, true},
 };
 
 static double bohman(const struct pl_filter_ctx *f, double x)
@@ -397,6 +399,22 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .resizable = true,
     .params    = {1.0},
     .tunable   = {true},
+};
+
+//Power of Garamond window
+static double garamond(const struct pl_filter_ctx *f, double x)
+{
+    double n = f->params[0];
+    double m = f->params[1];
+    return pow(1.0 - pow(x, n), m);
+}
+
+const struct pl_filter_function pl_filter_function_garamond = {
+    .name    = "garamond",
+    .weight  = garamond,
+    .radius  = 1.0,
+    .params  = {2.0, 1.0},
+    .tunable = {true, true},
 };
 
 static double quadratic(const struct pl_filter_ctx *f, double x)
@@ -623,6 +641,7 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_blackman,
     &pl_filter_function_bohman,
     &pl_filter_function_gaussian,
+    &pl_filter_function_garamond,
     &pl_filter_function_quadratic,
     &filter_function_quadric, // alias
     &pl_filter_function_sinc,
@@ -999,6 +1018,7 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"blackman",        &pl_filter_function_blackman},
     {"bohman",          &pl_filter_function_bohman},
     {"gaussian",        &pl_filter_function_gaussian},
+    {"garamond",        &pl_filter_function_garamond},
     {"quadratic",       &pl_filter_function_quadratic},
     {"quadric",         &filter_function_quadric}, // alias
     {"sinc",            &pl_filter_function_sinc},

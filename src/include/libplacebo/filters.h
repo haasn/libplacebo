@@ -94,9 +94,14 @@ PL_API extern const struct pl_filter_function pl_filter_function_welch;
 //                and the side lobes.
 PL_API extern const struct pl_filter_function pl_filter_function_kaiser;
 
-// Blackman filter: Cosine filter named after Ralph Beebe Blackman.
+// Power of Blackman filter: Based on cosine filter named after Ralph Beebe Blackman.
 // Parameter [0]: Scale (alpha). Influences the shape. The defaults result in
 //                zeros at the third and fourth sidelobes.
+// Parameter [1]: Scale (n). Influences the shape. Controls main lobe width. Default 1.0.
+// alpha = 0.0,  n = 1.0: Hann filter.
+// alpha = 0.0,  n = 0.5: Cosine filter.
+//               n = 1.0: Blackman filter.
+//               n = 0.0: Box filter.
 PL_API extern const struct pl_filter_function pl_filter_function_blackman;
 
 // Bohman filter: 2nd order Cosine filter.
@@ -106,6 +111,16 @@ PL_API extern const struct pl_filter_function pl_filter_function_bohman;
 // bell curve function.
 // Parameter [0]: Scale (t), increasing makes the result blurrier.
 PL_API extern const struct pl_filter_function pl_filter_function_gaussian;
+
+// Power of Garamond function: Based on power filter named after Claude Garamond.
+// Parameter [0]: Scale(n). Influences the shape. Default 2.0.
+// Parameter [1]: Scale(m). Influences the shape. Default 1.0.
+// n = 1.0,   m = 1.0:  Linear filter.
+// n = 2.0,   m = 1.0:  Welch filter.
+// n -> +inf, m <= 1.0: Box filter.
+//            m = 0.0:  Box filter.
+//            m = 1.0:  Garamond filter.
+PL_API extern const struct pl_filter_function pl_filter_function_garamond;
 
 // Quadratic function: 2nd order approximation of the gaussian function. Also
 // sometimes called a "quadric" window.
