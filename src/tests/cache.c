@@ -18,6 +18,16 @@ static void update_count(void *priv, pl_cache_obj obj)
     *count += obj.size ? 1 : -1;
 }
 
+enum {
+    KEY1 = 0x9c65575f419288f5,
+    KEY2 = 0x92da969be9b88086,
+    KEY3 = 0x7fcb62540b00bc8b,
+    KEY4 = 0x46c60ec11af9dde3,
+    KEY5 = 0xcb6760b98ece2477,
+    KEY6 = 0xf37dc72b7f9e5c88,
+    KEY7 = 0x30c18c962d82e5f5,
+};
+
 int main()
 {
     pl_log log = pl_test_logger();
@@ -27,16 +37,16 @@ int main()
         .max_total_size  = 32,
     ));
 
-    pl_cache_obj obj1 = { .key  = 0x1, .data = "abc",  .size = 3 };
-    pl_cache_obj obj2 = { .key  = 0x2, .data = "de",   .size = 2 };
-    pl_cache_obj obj3 = { .key  = 0x3, .data = "xyzw", .size = 4 };
+    pl_cache_obj obj1 = { .key  = KEY1, .data = "abc",  .size = 3 };
+    pl_cache_obj obj2 = { .key  = KEY2, .data = "de",   .size = 2 };
+    pl_cache_obj obj3 = { .key  = KEY3, .data = "xyzw", .size = 4 };
 
     REQUIRE(pl_cache_try_set(test, &obj1));
     REQUIRE(pl_cache_try_set(test, &obj2));
     REQUIRE(pl_cache_try_set(test, &obj3));
     REQUIRE_CMP(pl_cache_size(test), ==, 9, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
-    REQUIRE(pl_cache_try_set(test, &obj2)); // delete 0x2
+    REQUIRE(pl_cache_try_set(test, &obj2)); // delete KEY2
     REQUIRE_CMP(pl_cache_size(test), ==, 7, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 2, "d");
 
@@ -76,7 +86,7 @@ int main()
     W(uint32_t, 2);                                     // number of objects
 
     // object 3
-    W(uint64_t, 3);                   // key
+    W(uint64_t, KEY3);                // key
     W(uint64_t, 4);                   // size
 #ifdef PL_HAVE_XXHASH
     W(uint64_t, 0xd43612ef3fbee8be);  // hash
@@ -86,7 +96,7 @@ int main()
     W(char[], 'x', 'y', 'z', 'w');    // data
 
     // object 1
-    W(uint64_t, 1);                   // key
+    W(uint64_t, KEY1);                // key
     W(uint64_t, 3);                   // size
 #ifdef PL_HAVE_XXHASH
     W(uint64_t, 0x78af5f94892f3950);  // hash
@@ -120,14 +130,14 @@ int main()
 
     // Inserting too large object should fail
     uint8_t zero[32] = {0};
-    pl_cache_obj obj4 = { .key = 0x4, .data = zero, .size = 32 };
+    pl_cache_obj obj4 = { .key = KEY4, .data = zero, .size = 32 };
     REQUIRE(!pl_cache_try_set(test, &obj4));
     REQUIRE(!pl_cache_get(test, &obj4));
     REQUIRE_CMP(pl_cache_size(test), ==, 7, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 2, "d");
 
     // Inserting 16-byte object should succeed, and not purge old entries
-    obj4 = (pl_cache_obj) { .key = 0x4, .data = zero, .size = 16 };
+    obj4 = (pl_cache_obj) { .key = KEY4, .data = zero, .size = 16 };
     REQUIRE(pl_cache_try_set(test, &obj4));
     REQUIRE_CMP(pl_cache_size(test), ==, 23, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
@@ -140,8 +150,8 @@ int main()
     REQUIRE_CMP(pl_cache_size(test), ==, 23, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
 
-    // Inserting another 10-byte object should purge entry 0x1
-    pl_cache_obj obj5 = { .key = 0x5, .data = zero, .size = 10 };
+    // Inserting another 10-byte object should purge entry KEY1
+    pl_cache_obj obj5 = { .key = KEY5, .data = zero, .size = 10 };
     REQUIRE(pl_cache_try_set(test, &obj5));
     REQUIRE_CMP(pl_cache_size(test), ==, 30, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
@@ -155,8 +165,8 @@ int main()
     REQUIRE_CMP(pl_cache_size(test), ==, 30, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
 
-    // Inserting final 6-byte object should purge entry 0x3
-    pl_cache_obj obj6 = { .key = 0x6, .data = zero, .size = 6 };
+    // Inserting final 6-byte object should purge entry KEY3
+    pl_cache_obj obj6 = { .key = KEY6, .data = zero, .size = 6 };
     REQUIRE(pl_cache_try_set(test, &obj6));
     REQUIRE_CMP(pl_cache_size(test), ==, 32, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
@@ -179,18 +189,18 @@ int main()
     ));
 
     REQUIRE(pl_cache_get(test2, &obj1));
-    REQUIRE_CMP(obj1.key, ==, 0x1, PRIu64);
+    REQUIRE_CMP(obj1.key, ==, KEY1, PRIu64);
     REQUIRE_CMP(obj1.size, ==, 3, "zu");
     REQUIRE_MEMEQ(obj1.data, "bar", 3);
     REQUIRE(pl_cache_get(test2, &obj2));
-    REQUIRE_CMP(obj2.key, ==, 0x2, PRIu64);
+    REQUIRE_CMP(obj2.key, ==, KEY2, PRIu64);
     REQUIRE_CMP(obj2.size, ==, 3, "zu");
     REQUIRE_MEMEQ(obj2.data, "foo", 3);
     REQUIRE_CMP(pl_cache_objects(test2), ==, 0, "d");
     REQUIRE_CMP(num_objects, ==, 0, "d");
     REQUIRE(pl_cache_try_set(test2, &obj1));
     REQUIRE(pl_cache_try_set(test2, &obj2));
-    REQUIRE(pl_cache_try_set(test2, &(pl_cache_obj) { .key = 0x789, .data = "abcde", .size = 5 }));
+    REQUIRE(pl_cache_try_set(test2, &(pl_cache_obj) { .key = KEY7, .data = "abcde", .size = 5 }));
     REQUIRE_CMP(pl_cache_objects(test2), ==, 3, "d");
     REQUIRE_CMP(num_objects, ==, 3, "d");
     REQUIRE(pl_cache_try_set(test2, &obj1));
