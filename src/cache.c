@@ -259,6 +259,25 @@ void pl_cache_iterate(pl_cache cache,
     pl_mutex_unlock(&p->lock);
 }
 
+uint64_t pl_cache_signature(pl_cache cache)
+{
+    uint64_t hash = 0;
+    if (!cache)
+        return hash;
+
+    // Simple XOR of all keys. This satisfies our order-invariant requirement,
+    // and does not pose issues because duplicate keys are not allowed, nor
+    // are keys with hash 0.
+    struct priv *p = PL_PRIV(cache);
+    pl_mutex_lock(&p->lock);
+    for (int i = 0; i < p->objects.num; i++) {
+        assert(p->objects.elem[i].key);
+        hash ^= p->objects.elem[i].key;
+    }
+    pl_mutex_unlock(&p->lock);
+    return hash;
+}
+
 // --- Saving/loading
 
 #define CACHE_MAGIC   "pl_cache"

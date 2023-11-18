@@ -40,15 +40,20 @@ int main()
     pl_cache_obj obj1 = { .key  = KEY1, .data = "abc",  .size = 3 };
     pl_cache_obj obj2 = { .key  = KEY2, .data = "de",   .size = 2 };
     pl_cache_obj obj3 = { .key  = KEY3, .data = "xyzw", .size = 4 };
+    REQUIRE_CMP(pl_cache_signature(test), ==, 0x0, PRIu64);
 
     REQUIRE(pl_cache_try_set(test, &obj1));
+    REQUIRE_CMP(pl_cache_signature(test), ==, KEY1, PRIu64);
     REQUIRE(pl_cache_try_set(test, &obj2));
+    REQUIRE_CMP(pl_cache_signature(test), ==, KEY1 ^ KEY2, PRIu64);
     REQUIRE(pl_cache_try_set(test, &obj3));
+    REQUIRE_CMP(pl_cache_signature(test), ==, KEY1 ^ KEY2 ^ KEY3, PRIu64);
     REQUIRE_CMP(pl_cache_size(test), ==, 9, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 3, "d");
     REQUIRE(pl_cache_try_set(test, &obj2)); // delete KEY2
     REQUIRE_CMP(pl_cache_size(test), ==, 7, "zu");
     REQUIRE_CMP(pl_cache_objects(test), ==, 2, "d");
+    REQUIRE_CMP(pl_cache_signature(test), ==, KEY1 ^ KEY3, PRIu64);
 
     REQUIRE(pl_cache_get(test, &obj1));
     REQUIRE(!pl_cache_get(test, &obj2));
@@ -115,6 +120,7 @@ int main()
 
     pl_cache test2 = pl_cache_create(pl_cache_params( .log = log ));
     REQUIRE_CMP(pl_cache_load(test2, data, sizeof(data)), ==, 2, "d");
+    REQUIRE_CMP(pl_cache_signature(test), ==, pl_cache_signature(test2), PRIu64);
     REQUIRE_CMP(pl_cache_size(test2), ==, 7, "zu");
     REQUIRE_CMP(pl_cache_save(test2, NULL, 0), ==, sizeof(ref), "zu");
     REQUIRE_CMP(pl_cache_save(test2, data, sizeof(data)), ==, sizeof(ref), "zu");

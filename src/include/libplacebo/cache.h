@@ -106,6 +106,10 @@ PL_API void pl_cache_reset(pl_cache cache);
 PL_API int pl_cache_objects(pl_cache cache);
 PL_API size_t pl_cache_size(pl_cache cache);
 
+// Return a lightweight, order-independent hash of all objects currently stored
+// in the `pl_cache`. Can be used to avoid re-saving unmodified caches.
+PL_API uint64_t pl_cache_signature(pl_cache cache);
+
 // --- Cache saving and loading APIs
 
 // Serialize the internal state of a `pl_cache` into an abstract cache

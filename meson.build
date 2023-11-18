@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '342': 'add pl_cache_signature',
       '341': 're-add pl_filter_function_{bicubic,bcspline,catmull_rom,mitchell,robidoux,robidouxsharp} as deprecated',
       '340': 'add pl_queue_params.drift_compensation, PL_QUEUE_DEFAULTS and pl_queue_pts_offset',
       '339': 'add pl_peak_detect_params.black_cutoff',
