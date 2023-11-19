@@ -357,20 +357,22 @@ const struct pl_filter_function pl_filter_function_kaiser = {
     .tunable = {true},
 };
 
+//Power of Blackman window
 static double blackman(const struct pl_filter_ctx *f, double x)
 {
     double a = f->params[0];
-    double a0 = (1 - a) / 2.0, a1 = 1 / 2.0, a2 = a / 2.0;
+    double n = f->params[1];
+    double a0 = (1.0 - a) / 2.0, a1 = 1.0 / 2.0, a2 = a / 2.0;
     x *= M_PI;
-    return a0 + a1 * cos(x) + a2 * cos(2 * x);
+    return pow(a0 + a1 * cos(x) + a2 * cos(2.0 * x), n);
 }
 
 const struct pl_filter_function pl_filter_function_blackman = {
     .name    = "blackman",
     .weight  = blackman,
     .radius  = 1.0,
-    .params  = {0.16},
-    .tunable = {true},
+    .params  = {0.16, 1.0},
+    .tunable = {true, true},
 };
 
 static double bohman(const struct pl_filter_ctx *f, double x)

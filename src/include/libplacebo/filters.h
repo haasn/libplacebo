@@ -94,9 +94,14 @@ PL_API extern const struct pl_filter_function pl_filter_function_welch;
 //                and the side lobes.
 PL_API extern const struct pl_filter_function pl_filter_function_kaiser;
 
-// Blackman filter: Cosine filter named after Ralph Beebe Blackman.
+// Power of Blackman filter: Based on cosine filter named after Ralph Beebe Blackman.
 // Parameter [0]: Scale (alpha). Influences the shape. The defaults result in
 //                zeros at the third and fourth sidelobes.
+// Parameter [1]: Scale (n). Influences the shape. Controls main lobe width. Default 1.0.
+// alpha = 0.0,  n = 1.0: Hann filter.
+// alpha = 0.0,  n = 0.5: Cosine filter.
+//               n = 1.0: Blackman filter.
+//               n = 0.0: Box filter.
 PL_API extern const struct pl_filter_function pl_filter_function_blackman;
 
 // Bohman filter: 2nd order Cosine filter.
