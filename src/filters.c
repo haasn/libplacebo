@@ -404,8 +404,10 @@ const struct pl_filter_function pl_filter_function_gaussian = {
 //Power of Garamond window
 static double garamond(const struct pl_filter_ctx *f, double x)
 {
-    double n = f->params[0];
-    double m = f->params[1];
+    double n = fmax(f->params[0], 0.0);
+    double m = fmax(f->params[1], 0.0);
+    if (n < 1e-8)
+        return 1.0;
     return pow(1.0 - pow(x, n), m);
 }
 
