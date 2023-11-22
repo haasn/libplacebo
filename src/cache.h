@@ -37,8 +37,8 @@ static inline void pl_cache_str(pl_cache cache, uint64_t key, pl_str *str)
 // Steal and insert a cache object
 static inline void pl_cache_steal(pl_cache cache, pl_cache_obj *obj)
 {
-    pl_assert(!obj->data || obj->free == pl_free);
-    obj->data = pl_steal(NULL, obj->data);
+    if (obj->free == pl_free)
+        obj->data = pl_steal(NULL, obj->data);
     pl_cache_set(cache, obj);
 }
 
