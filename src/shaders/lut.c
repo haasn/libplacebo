@@ -333,6 +333,7 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
     pl_assert(params->method == SH_LUT_NONE || vartype == PL_VAR_FLOAT);
     pl_assert(params->width > 0 && params->height >= 0 && params->depth >= 0);
     pl_assert(params->comps > 0);
+    pl_assert(!params->cache || params->signature);
 
     int sizes[] = { params->width, params->height, params->depth };
     int size = params->width * PL_DEF(params->height, 1) * PL_DEF(params->depth, 1);
