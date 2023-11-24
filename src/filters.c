@@ -361,7 +361,7 @@ const struct pl_filter_function pl_filter_function_kaiser = {
 static double blackman(const struct pl_filter_ctx *f, double x)
 {
     double a = f->params[0];
-    double n = f->params[1];
+    double n = fmax(f->params[1], 0.0);
 
     // Power of Blackman function may not be defined for all
     // x when alpha (a) is larger than 0.16, so in that case
