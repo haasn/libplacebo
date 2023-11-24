@@ -357,11 +357,18 @@ const struct pl_filter_function pl_filter_function_kaiser = {
     .tunable = {true},
 };
 
-//Power of Blackman window
+// Power of Blackman window
 static double blackman(const struct pl_filter_ctx *f, double x)
 {
     double a = f->params[0];
     double n = f->params[1];
+
+    // Power of Blackman function may not be defined for all
+    // x when alpha (a) is larger than 0.16, so in that case
+    // just use Blackman function.  
+    if (a > 0.16)
+        n = 1.0;
+    
     double a0 = (1.0 - a) / 2.0, a1 = 1.0 / 2.0, a2 = a / 2.0;
     x *= M_PI;
     return pow(a0 + a1 * cos(x) + a2 * cos(2.0 * x), n);
@@ -401,7 +408,7 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .tunable   = {true},
 };
 
-//Power of Garamond window
+// Power of Garamond window
 static double garamond(const struct pl_filter_ctx *f, double x)
 {
     double n = fmax(f->params[0], 0.0);
