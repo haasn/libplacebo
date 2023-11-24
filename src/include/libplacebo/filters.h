@@ -119,6 +119,7 @@ PL_API extern const struct pl_filter_function pl_filter_function_gaussian;
 // n = 1.0,   m = 1.0:  Linear filter.
 // n = 2.0,   m = 1.0:  Welch filter.
 // n -> +inf, m <= 1.0: Box filter.
+// n = 0:               Box filter.
 //            m = 0.0:  Box filter.
 //            m = 1.0:  Garamond filter.
 PL_API extern const struct pl_filter_function pl_filter_function_garamond;
