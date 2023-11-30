@@ -190,10 +190,11 @@ if libdovi.found()
   build_deps += libdovi
 endif
 
-xxhash = dependency('libxxhash', required: get_option('xxhash')).partial_dependency(includes: true, compile_args: true)
+xxhash_inc = include_directories()
+xxhash = dependency('libxxhash', required: get_option('xxhash'))
 components.set('xxhash', xxhash.found())
 if xxhash.found()
-  build_deps += xxhash
+  xxhash_inc = xxhash.get_variable('includedir')
 endif
 
 # Generate configuration files
@@ -243,7 +244,7 @@ lib = library('placebo', sources,
   install: true,
   dependencies: build_deps + glad_dep,
   soversion: apiver,
-  include_directories: [ inc, vulkan_headers_inc, fast_float_inc ],
+  include_directories: [ inc, vulkan_headers_inc, fast_float_inc, xxhash_inc ],
   link_args: link_args,
   link_depends: link_depends,
   gnu_symbol_visibility: 'hidden',
