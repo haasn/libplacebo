@@ -1653,7 +1653,7 @@ static bool pass_read_image(struct pass_state *pass)
     }
 
     int bits = image->repr.bits.sample_depth;
-    float out_scale = bits ? (1 << bits) / ((1 << bits) - 1.0f) : 1.0f;
+    float out_scale = bits ? (1llu << bits) / ((1llu << bits) - 1.0f) : 1.0f;
     float neutral_luma = 0.0, neutral_chroma = 0.5f * out_scale;
     if (pl_color_levels_guess(&image->repr) == PL_COLOR_LEVELS_LIMITED)
         neutral_luma = 16 / 256.0f * out_scale;
