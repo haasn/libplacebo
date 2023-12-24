@@ -383,7 +383,7 @@ gamut mapping algorithms.
 (Relative) chromaticity protection zone for `perceptual` mapping. Defaults to
 `0.30`.
 
-#### `perceptual_strength<0.0..1.0>`
+#### `perceptual_strength=<0.0..1.0>`
 
 Strength of the `perceptual` saturation mapping component. Defaults to `0.80`.
 
