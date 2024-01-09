@@ -967,11 +967,6 @@ static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *fra
     struct pl_bit_encoding *bits = &out->repr.bits;
 
     bits->sample_depth = fmt->component_depth[0];
-
-    switch (hwfc->sw_format) {
-    case AV_PIX_FMT_P010: bits->bit_shift = 6; break;
-    default: break;
-    }
 }
 
 static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
@@ -1016,6 +1011,12 @@ static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
     }
 
     pl_fix_hwframe_sample_depth(out, frame);
+
+    switch (hwfc->sw_format) {
+    case AV_PIX_FMT_P010: out->repr.bits.bit_shift = 6; break;
+    default: break;
+    }
+
     return true;
 }
 
