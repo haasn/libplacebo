@@ -372,7 +372,7 @@ void vk_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
         for (size_t xfer = 0; xfer < size_base; xfer += max_transfer) {
             vk->CmdUpdateBuffer(cmd->buf, buf_vk->mem.buf,
                                 buf_offset + xfer,
-                                PL_MIN(size_base, max_transfer),
+                                PL_MIN(size_base - xfer, max_transfer),
                                 (void *) ((uint8_t *) data + xfer));
         }
 
