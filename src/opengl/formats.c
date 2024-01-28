@@ -350,8 +350,17 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     if (fmt->caps & PL_FMT_CAP_SAMPLEABLE)
         fmt->gatherable = p->gather_comps >= fmt->num_components;
 
+    bool host_readable = false;
+    if (p->gl_ver && p->has_readback)
+        host_readable = true;
     // Reading from textures on GLES requires FBO support for this fmt
-    if (p->has_readback && (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE)))
+    if (fmt->caps & PL_FMT_CAP_RENDERABLE) {
+        // this combination always works in glReadPixels
+        if ((gl_fmt->fmt == GL_RGBA && gl_fmt->type == GL_UNSIGNED_BYTE) ||
+            p->has_readback)
+            host_readable = true;
+    }
+    if (host_readable)
         fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
     if (gpu->glsl.compute && fmt->glsl_format && p->has_storage)
