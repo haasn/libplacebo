@@ -450,8 +450,7 @@ bool gl_setup_formats(struct pl_gpu_t *gpu)
         }
         if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_format_BGRA8888"))
             DO_FORMATS(formats_bgra_gles);
-        if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_integer"))
-            DO_FORMATS(formats_uint);
+        DO_FORMATS(formats_uint);
         DO_FORMATS(formats_basic_vertex);
         if (p->gles_ver >= 32 || pl_opengl_has_ext(p->gl, "GL_EXT_color_buffer_half_float")
                               || pl_opengl_has_ext(p->gl, "GL_EXT_color_buffer_float")) {
