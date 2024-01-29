@@ -960,7 +960,7 @@ struct pl_avframe_priv {
     pl_tex planar; // for planar vulkan textures
 };
 
-static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *frame)
+static void pl_fix_hwframe_sample_depth(struct pl_frame *out)
 {
     pl_fmt fmt = out->planes[0].texture->params.format;
     struct pl_bit_encoding *bits = &out->repr.bits;
@@ -1008,7 +1008,7 @@ static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
             return false;
     }
 
-    pl_fix_hwframe_sample_depth(out, frame);
+    pl_fix_hwframe_sample_depth(out);
 
     switch (hwfc->sw_format) {
     case AV_PIX_FMT_P010: out->repr.bits.bit_shift = 6; break;
@@ -1156,7 +1156,7 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
 
     out->acquire = pl_acquire_avframe;
     out->release = pl_release_avframe;
-    pl_fix_hwframe_sample_depth(out, frame);
+    pl_fix_hwframe_sample_depth(out);
     return true;
 }
 
