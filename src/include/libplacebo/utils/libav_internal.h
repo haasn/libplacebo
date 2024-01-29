@@ -962,10 +962,8 @@ struct pl_avframe_priv {
 
 static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *frame)
 {
-    const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
     pl_fmt fmt = out->planes[0].texture->params.format;
     struct pl_bit_encoding *bits = &out->repr.bits;
-
     bits->sample_depth = fmt->component_depth[0];
 }
 
