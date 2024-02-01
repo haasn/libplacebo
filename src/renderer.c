@@ -966,7 +966,20 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         pl_shader_decode_color(sh, &ol.repr, NULL);
         if (target->icc)
             color.transfer = PL_COLOR_TRC_LINEAR;
-        pl_shader_color_map_ex(sh, &osd_params, pl_color_map_args(ol.color, color));
+        // Copy overlay color to infer it only if matching with the target video
+        struct pl_color_space ol_color = ol.color;
+        struct pl_color_space target_color = pass->target.color;
+        pl_color_space_infer_map(&ol_color, &target_color);
+        if (image && pl_color_space_equal(&ol_color, &image->color)) {
+            const struct pl_color_map_params *cmp = pass->params->color_map_params;
+            pl_shader_color_map_ex(sh, cmp, pl_color_map_args(
+                .src   = ol_color,
+                .dst   = color,
+                .state = &rr->tone_map_state,
+            ));
+        } else {
+            pl_shader_color_map_ex(sh, &osd_params, pl_color_map_args(ol.color, color));
+        }
         if (target->icc)
             pl_icc_encode(sh, target->icc, &rr->icc_state[ICC_TARGET]);
 
