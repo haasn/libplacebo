@@ -654,15 +654,15 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         bool can_fast = info.dir == SAMPLER_UP || params->skip_anti_aliasing;
 
         if (can_fast && !params->disable_builtin_scalers) {
-            if (can_linear && info.config == &pl_filter_bicubic)
+            if (can_linear && pl_filter_config_eq(info.config, &pl_filter_bicubic))
                 info.type = SAMPLER_BICUBIC;
-            if (can_linear && info.config == &pl_filter_hermite)
+            if (can_linear && pl_filter_config_eq(info.config, &pl_filter_hermite))
                 info.type = SAMPLER_HERMITE;
-            if (can_linear && info.config == &pl_filter_gaussian)
+            if (can_linear && pl_filter_config_eq(info.config, &pl_filter_gaussian))
                 info.type = SAMPLER_GAUSSIAN;
-            if (can_linear && info.config == &pl_filter_bilinear)
+            if (can_linear && pl_filter_config_eq(info.config, &pl_filter_bilinear))
                 info.type = SAMPLER_DIRECT;
-            if (info.config == &pl_filter_nearest)
+            if (pl_filter_config_eq(info.config, &pl_filter_nearest))
                 info.type = can_linear ? SAMPLER_NEAREST : SAMPLER_DIRECT;
         }
     }
