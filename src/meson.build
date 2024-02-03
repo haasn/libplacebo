@@ -216,12 +216,13 @@ sources += configure_file(
   configuration: conf_internal
 )
 
-version_h = vcs_tag(
-  command: ['git', 'describe', '--dirty'],
-  fallback: version_pretty,
-  replace_string: '@buildver@',
+version_h = custom_target(
+  command: [ python, join_paths(meson.current_source_dir(), 'version.py'),
+             '@INPUT@', '@OUTPUT@', '@SOURCE_ROOT@', version_pretty ],
   input: 'version.h.in',
   output: 'version.h',
+  build_by_default: true,
+  build_always_stale: true,
 )
 
 sources += version_h
