@@ -1054,27 +1054,26 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         ${vecType: comps} hi = ${vecType: comps}(0.0);                          \
         ${vecType: comps} lo = ${vecType: comps}(1e9);                          \
     @}                                                                          \
-    @for (n < N) {                                                              \
-        @if @(n % 4 == 0)                                                       \
-            ws = $lut(vec2(float(@n / 4) / ${const float: denom}, fcoord));     \
-        @if @(vars.use_ar && (n == vars.n / 2 - 1 || n == vars.n / 2)) {        \
-            c = textureLod($src_tex, base + pt * @n.0, 0.0).${swizzle: comps};  \
-            ca += ws[@n % 4] * c;                                               \
-            lo = min(lo, c);                                                    \
-            hi = max(hi, c);                                                    \
+    #pragma unroll 4                                                            \
+    for (int n = 0; n < ${int: N}; ++n) {                                       \
+        if (n % 4 == 0)                                                         \
+            ws = $lut(vec2(float(n / 4) / ${const float: denom}, fcoord));      \
+        @if (use_linear) {                                                      \
+            if (n % 2 == 0) {                                                   \
+                off = float(n) + ws[n % 4 + 1];                                 \
+                c = textureLod($src_tex, base + pt * off, 0.0).${swizzle: comps}; \
+            }                                                                   \
         @} else {                                                               \
-            @if (use_linear) {                                                  \
-                @if @(n % 2 == 0) {                                             \
-                    off = @n.0 + ws[@n % 4 + 1];                                \
-                    ca += ws[@n % 4] * textureLod($src_tex, base + pt * off,    \
-                                                  0.0).${swizzle: comps};       \
-                @}                                                              \
-            @} else {                                                           \
-                ca += ws[@n % 4] * textureLod($src_tex, base + pt * @n.0,       \
-                                              0.0).${swizzle: comps};           \
-            @}                                                                  \
+            c = textureLod($src_tex, base + pt * float(n), 0.0).${swizzle: comps}; \
         @}                                                                      \
-    @}                                                                          \
+        @if (use_ar) {                                                          \
+            if (n == ${int: N} / 2 - 1 || n == ${int: N} / 2) {                 \
+                lo = min(lo, c);                                                \
+                hi = max(hi, c);                                                \
+            }                                                                   \
+        @}                                                                      \
+        ca += ws[n % 4] * c;                                                    \
+    }                                                                           \
     @if (use_ar)                                                                \
         ca = mix(ca, clamp(ca, lo, hi), ${float: cfg.antiring});                \
     color.${swizzle: comps} = ${float: scale} * ca;                             \
