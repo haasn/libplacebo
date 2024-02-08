@@ -1055,20 +1055,20 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         ${vecType: comps} lo = ${vecType: comps}(1e9);                          \
     @}                                                                          \
     #pragma unroll 4                                                            \
-    for (int n = 0; n < ${int: N}; n += ${const int: use_linear ? 2 : 1}) {     \
-        if (n % 4 == 0)                                                         \
-            ws = $lut(vec2(float(n / 4) / ${const float: denom}, fcoord));      \
+    for (uint n = 0u; n < ${uint: N}; n += ${const uint: use_linear ? 2u : 1u}) { \
+        if (n % 4u == 0u)                                                        \
+            ws = $lut(vec2(float(n / 4u) / ${const float: denom}, fcoord));     \
         off = float(n);                                                         \
         @if (use_linear)                                                        \
-            off += ws[n % 4 + 1];                                               \
+            off += ws[n % 4u + 1u];                                             \
         c = textureLod($src_tex, base + pt * off, 0.0).${swizzle: comps};       \
         @if (use_ar) {                                                          \
-            if (n == ${uint: N} / 2 - 1 || n == ${uint: N} / 2) {               \
+            if (n == ${uint: N} / 2u - 1u || n == ${uint: N} / 2u) {            \
                 lo = min(lo, c);                                                \
                 hi = max(hi, c);                                                \
             }                                                                   \
         @}                                                                      \
-        ca += ws[n % 4] * c;                                                    \
+        ca += ws[n % 4u] * c;                                                   \
     }                                                                           \
     @if (use_ar)                                                                \
         ca = mix(ca, clamp(ca, lo, hi), ${float: cfg.antiring});                \
