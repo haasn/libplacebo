@@ -1055,19 +1055,17 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         ${vecType: comps} lo = ${vecType: comps}(1e9);                          \
     @}                                                                          \
     #pragma unroll 4                                                            \
-    for (int n = 0; n < ${int: N}; ++n) {                                       \
+    for (int n = 0; n < ${int: N}; n += ${const int: use_linear ? 2 : 1}) {     \
         if (n % 4 == 0)                                                         \
             ws = $lut(vec2(float(n / 4) / ${const float: denom}, fcoord));      \
         @if (use_linear) {                                                      \
-            if (n % 2 == 0) {                                                   \
-                off = float(n) + ws[n % 4 + 1];                                 \
-                c = textureLod($src_tex, base + pt * off, 0.0).${swizzle: comps}; \
-            }                                                                   \
+            off = float(n) + ws[n % 4 + 1];                                     \
+            c = textureLod($src_tex, base + pt * off, 0.0).${swizzle: comps};   \
         @} else {                                                               \
             c = textureLod($src_tex, base + pt * float(n), 0.0).${swizzle: comps}; \
         @}                                                                      \
         @if (use_ar) {                                                          \
-            if (n == ${int: N} / 2 - 1 || n == ${int: N} / 2) {                 \
+            if (n == ${uint: N} / 2 - 1 || n == ${uint: N} / 2) {               \
                 lo = min(lo, c);                                                \
                 hi = max(hi, c);                                                \
             }                                                                   \
