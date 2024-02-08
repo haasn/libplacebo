@@ -65,11 +65,9 @@ VAR_TYPES = {
 }
 
 def stringify(value, strip):
-    end = '\\n"'
     if strip:
-        end = '"'
         value = re.sub(r'(?:\/\*[^\*]*\*\/|\/\/[^\n]+|^\s*)', '', value)
-    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + end
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '\\n"'
 
 def commentify(value, strip):
     if strip:
