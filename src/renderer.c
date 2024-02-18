@@ -1544,6 +1544,19 @@ static bool pass_read_image(struct pass_state *pass)
             },
         };
 
+        // Explicitly skip alpha channel when overridden
+        if (image->repr.alpha == PL_ALPHA_NONE) {
+            if (planes[i].type == PLANE_ALPHA) {
+                planes[i].type = PLANE_INVALID;
+                continue;
+            } else {
+                for (int j = 0; j < planes[i].plane.components; j++) {
+                    if (planes[i].plane.component_mapping[j] == PL_CHANNEL_A)
+                        planes[i].plane.component_mapping[j] = PL_CHANNEL_NONE;
+                }
+            }
+        }
+
         // Deinterlace plane if needed
         if (image->field != PL_FIELD_NONE && params->deinterlace_params &&
             pass->fbofmt[4] && !(rr->errors & PL_RENDER_ERR_DEINTERLACING))
@@ -1828,7 +1841,7 @@ static bool pass_read_image(struct pass_state *pass)
         .h      = pl_rect_h(ref_rounded),
         .repr   = ref->img.repr,
         .color  = image->color,
-        .comps  = ref->img.repr.alpha ? 4 : 3,
+        .comps  = ref->img.repr.alpha == PL_ALPHA_NONE ? 3 : 4,
         .rect   = {
             off_x,
             off_y,
@@ -2304,6 +2317,7 @@ static bool pass_output_target(struct pass_state *pass)
 
         switch (img->repr.alpha) {
         case PL_ALPHA_UNKNOWN:
+        case PL_ALPHA_NONE:
             GLSL("color.a = border; \n");
             img->repr.alpha = PL_ALPHA_INDEPENDENT;
             img->comps = 4;
@@ -2372,7 +2386,7 @@ static bool pass_output_target(struct pass_state *pass)
     pass_hook(pass, img, PL_HOOK_PRE_OUTPUT);
 
     bool need_blend = params->blend_against_tiles ||
-                      (!target->repr.alpha && !params->blend_params);
+                      (target->repr.alpha == PL_ALPHA_NONE && !params->blend_params);
     if (img->comps == 4 && need_blend) {
         if (params->blend_against_tiles) {
             static const float zero[2][3] = {0};
@@ -2397,7 +2411,7 @@ static bool pass_output_target(struct pass_state *pass)
 
         pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
         GLSL("color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0); \n");
-        img->repr.alpha = PL_ALPHA_UNKNOWN;
+        img->repr.alpha = PL_ALPHA_NONE;
         img->comps = 3;
     }
 
@@ -2917,6 +2931,7 @@ static void pass_fix_frames(struct pass_state *pass)
     // premultiplied. (We also premultiply for internal rendering, so this
     // way of doing it avoids a possible division-by-zero path!)
     if (image && !image->repr.alpha) {
+        image->repr.alpha = PL_ALPHA_NONE;
         for (int i = 0; i < image->num_planes; i++) {
             const struct pl_plane *plane = &image->planes[i];
             for (int c = 0; c < plane->components; c++) {
@@ -2927,6 +2942,7 @@ static void pass_fix_frames(struct pass_state *pass)
     }
 
     if (!target->repr.alpha) {
+        target->repr.alpha = PL_ALPHA_NONE;
         for (int i = 0; i < target->num_planes; i++) {
             const struct pl_plane *plane = &target->planes[i];
             for (int c = 0; c < plane->components; c++) {
@@ -3616,7 +3632,7 @@ inter_pass_error:
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
             .levels = PL_COLOR_LEVELS_PC,
-            .alpha = comps >= 4 ? PL_ALPHA_PREMULTIPLIED : PL_ALPHA_UNKNOWN,
+            .alpha = comps >= 4 ? PL_ALPHA_PREMULTIPLIED : PL_ALPHA_NONE,
         },
     };
 
@@ -3693,7 +3709,7 @@ void pl_frame_from_swapchain(struct pl_frame *out_frame,
 {
     pl_tex fbo = frame->fbo;
     int num_comps = fbo->params.format->num_components;
-    if (!frame->color_repr.alpha)
+    if (frame->color_repr.alpha == PL_ALPHA_NONE)
         num_comps = PL_MIN(num_comps, 3);
 
     *out_frame = (struct pl_frame) {

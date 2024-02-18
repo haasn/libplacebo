@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '344': 'add PL_ALPHA_NONE',
       '343': 'add pl_map_avdovi_metadata and deprecate pl_frame_map_avdovi_metadata',
       '342': 'add pl_cache_signature',
       '341': 're-add pl_filter_function_{bicubic,bcspline,catmull_rom,mitchell,robidoux,robidouxsharp} as deprecated',

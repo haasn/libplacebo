@@ -51,7 +51,12 @@ static const float SLOG_A = 0.432699,
 void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
                          enum pl_alpha_mode mode)
 {
-    if (repr->alpha == PL_ALPHA_PREMULTIPLIED && mode == PL_ALPHA_INDEPENDENT) {
+    bool src_has_alpha = repr->alpha == PL_ALPHA_INDEPENDENT ||
+                         repr->alpha == PL_ALPHA_PREMULTIPLIED;
+    bool dst_not_premul = mode == PL_ALPHA_INDEPENDENT ||
+                          mode == PL_ALPHA_NONE;
+
+    if (repr->alpha == PL_ALPHA_PREMULTIPLIED && dst_not_premul) {
         GLSL("if (color.a > 1e-6)               \n"
              "    color.rgb /= vec3(color.a);   \n");
         repr->alpha = PL_ALPHA_INDEPENDENT;
@@ -60,6 +65,11 @@ void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
     if (repr->alpha == PL_ALPHA_INDEPENDENT && mode == PL_ALPHA_PREMULTIPLIED) {
         GLSL("color.rgb *= vec3(color.a); \n");
         repr->alpha = PL_ALPHA_PREMULTIPLIED;
+    }
+
+    if (src_has_alpha && mode == PL_ALPHA_NONE) {
+        GLSL("color.a = 1.0; \n");
+        repr->alpha = PL_ALPHA_NONE;
     }
 }
 

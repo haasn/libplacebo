@@ -1109,9 +1109,10 @@ const struct pl_opt_t pl_option_list[] = {
              {"repeat", PL_TEX_ADDRESS_REPEAT},
              {"mirror", PL_TEX_ADDRESS_MIRROR})),
     OPT_ENUM("distort_alpha_mode", "Distortion alpha blending mode", distort_params.alpha_mode, LIST(
-             {"none",          PL_ALPHA_UNKNOWN},
+             {"unknown",       PL_ALPHA_UNKNOWN},
              {"independent",   PL_ALPHA_INDEPENDENT},
-             {"premultiplied", PL_ALPHA_PREMULTIPLIED})),
+             {"premultiplied", PL_ALPHA_PREMULTIPLIED},
+             {"none",          PL_ALPHA_NONE})),
 
     // Misc renderer settings
     OPT_NAMED("error_diffusion", "Error diffusion kernel", params.error_diffusion,

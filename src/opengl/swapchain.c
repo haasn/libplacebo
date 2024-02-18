@@ -183,7 +183,7 @@ static bool gl_sw_start_frame(pl_swapchain sw,
             .levels = PL_COLOR_LEVELS_FULL,
             .alpha = p->fb->params.format->num_components == 4
                         ? PL_ALPHA_PREMULTIPLIED
-                        : PL_ALPHA_UNKNOWN,
+                        : PL_ALPHA_NONE,
             .bits = {
                 // Just use the red channel in the absence of anything more
                 // sane to do, because the red channel is both guaranteed to

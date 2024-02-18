@@ -491,7 +491,7 @@ static bool render_loop(struct plplay *p)
 
     // Disable background transparency by default if the swapchain does not
     // appear to support alpha transaprency
-    if (frame.color_repr.alpha == PL_ALPHA_UNKNOWN)
+    if (frame.color_repr.alpha == PL_ALPHA_NONE)
         opts->params.background_transparency = 0.0;
 
     if (!render_frame(p, &frame, &mix))

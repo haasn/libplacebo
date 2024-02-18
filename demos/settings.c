@@ -466,7 +466,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             dpar->address_mode = nk_combo(nk, address_modes, PL_TEX_ADDRESS_MODE_COUNT,
                                           dpar->address_mode, 16, nk_vec2(nk_widget_width(nk), 100));
             bool alpha = nk_check_label(nk, "Transparent background", dpar->alpha_mode);
-            dpar->alpha_mode = alpha ? PL_ALPHA_INDEPENDENT : PL_ALPHA_UNKNOWN;
+            dpar->alpha_mode = alpha ? PL_ALPHA_INDEPENDENT : PL_ALPHA_NONE;
             nk_checkbox_label(nk, "Bicubic interpolation", &dpar->bicubic);
 
             struct pl_transform2x2 *tf = &dpar->transform;
@@ -903,9 +903,10 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                                      16, nk_vec2(nk_widget_width(nk), 200));
 
             const char *alphas[PL_ALPHA_MODE_COUNT] = {
-                [PL_ALPHA_UNKNOWN]          = "Auto (unknown, or no alpha)",
-                [PL_ALPHA_INDEPENDENT]      = "Independent alpha channel",
-                [PL_ALPHA_PREMULTIPLIED]    = "Premultiplied alpha channel",
+                [PL_ALPHA_UNKNOWN]          = "Auto (unknown)",
+                [PL_ALPHA_INDEPENDENT]      = "Independent",
+                [PL_ALPHA_PREMULTIPLIED]    = "Premultiplied",
+                [PL_ALPHA_NONE]             = "None",
             };
 
             if (target->repr.alpha) {

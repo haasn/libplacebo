@@ -712,7 +712,7 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
             .levels = pl_levels_from_av(frame->color_range),
             .alpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
                         ? PL_ALPHA_INDEPENDENT
-                        : PL_ALPHA_UNKNOWN,
+                        : PL_ALPHA_NONE,
 
             // For sake of simplicity, just use the first component's depth as
             // the authoritative color depth for the whole image. Usually, this
