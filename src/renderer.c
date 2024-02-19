@@ -1308,14 +1308,6 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
         .scale = pl_color_repr_normalize(&repr),
     };
 
-    if (!(src.tex->params.format->caps & PL_FMT_CAP_LINEAR)) {
-        PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
-                "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
-                "Disabling debanding..");
-        rr->errors |= PL_RENDER_ERR_DEBANDING;
-        return false;
-    }
-
     // Divide the deband grain scale by the effective current colorspace nominal
     // peak, to make sure the output intensity of the grain is as independent
     // of the source as possible, even though it happens this early in the
