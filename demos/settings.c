@@ -237,8 +237,20 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 1.0 - par->background_transparency,
             };
 
-            nk_layout_row_dynamic(nk, 24, 2);
-            nk_label(nk, "Background color:", NK_TEXT_LEFT);
+            static const char *clear_modes[PL_CLEAR_MODE_COUNT] = {
+                [PL_CLEAR_COLOR]    = "Solid color",
+                [PL_CLEAR_TILES]    = "Tiled pattern",
+                [PL_CLEAR_SKIP]     = "Skip clearing",
+            };
+
+            nk_label(nk, "Background:", NK_TEXT_LEFT);
+            par->background = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT,
+                                       par->background, 16, nk_vec2(nk_widget_width(nk), 300));
+
+            nk_label(nk, "Borders:", NK_TEXT_LEFT);
+            par->border = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT,
+                                   par->border, 16, nk_vec2(nk_widget_width(nk), 300));
+
             if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
                 nk_layout_row_dynamic(nk, 200, 1);
                 nk_color_pick(nk, &bg, NK_RGBA);
@@ -250,8 +262,6 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 par->background_transparency = 1.0 - bg.a;
             }
 
-            nk_layout_row_dynamic(nk, 24, 2);
-            par->blend_against_tiles = nk_check_label(nk, "Blend against tiles", par->blend_against_tiles);
             nk_property_int(nk, "Tile size", 2, &par->tile_size, 256, 1, 1);
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 3, (float[]){ 0.4, 0.3, 0.3 });
