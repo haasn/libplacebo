@@ -2286,6 +2286,25 @@ error:
         1.0 - (params)->background_transparency,                                \
     }
 
+static void clear_target(pl_renderer rr, const struct pl_frame *target,
+                         const struct pl_render_params *params)
+{
+    enum pl_clear_mode border = params->border;
+    if (params->skip_target_clearing)
+        border = PL_CLEAR_SKIP;
+
+    switch (border) {
+    case PL_CLEAR_COLOR:
+        pl_frame_clear_rgba(rr->gpu, target, CLEAR_COL(params));
+        break;
+    case PL_CLEAR_TILES:
+        pl_frame_clear_tiles(rr->gpu, target, params->tile_colors, params->tile_size);
+        break;
+    case PL_CLEAR_SKIP: break;
+    case PL_CLEAR_MODE_COUNT: pl_unreachable();
+    }
+}
+
 static bool pass_output_target(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
@@ -2385,34 +2404,46 @@ static bool pass_output_target(struct pass_state *pass)
 
     pass_hook(pass, img, PL_HOOK_PRE_OUTPUT);
 
-    bool need_blend = params->blend_against_tiles ||
-                      (target->repr.alpha == PL_ALPHA_NONE && !params->blend_params);
+    enum pl_clear_mode background = params->background;
+    if (params->blend_against_tiles)
+        background = PL_CLEAR_TILES;
+
+    bool has_alpha = target->repr.alpha != PL_ALPHA_NONE || params->blend_params;
+    bool need_blend = background != PL_CLEAR_SKIP || !has_alpha;
     if (img->comps == 4 && need_blend) {
-        if (params->blend_against_tiles) {
+        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
+        switch (background) {
+        case PL_CLEAR_COLOR:
+            GLSL("color += (1.0 - color.a) * vec4("$", "$", "$", "$"); \n",
+                 SH_FLOAT(params->background_color[0]),
+                 SH_FLOAT(params->background_color[1]),
+                 SH_FLOAT(params->background_color[2]),
+                 SH_FLOAT(1.0 - params->background_transparency));
+            if (!params->background_transparency) {
+                img->repr.alpha = PL_ALPHA_NONE;
+                img->comps = 3;
+            }
+            break;
+        case PL_CLEAR_TILES:;
             static const float zero[2][3] = {0};
             const float (*color)[3] = params->tile_colors;
             if (memcmp(color, zero, sizeof(zero)) == 0)
                 color = pl_render_default_params.tile_colors;
-            int size = PL_DEF(params->tile_size, pl_render_default_params.tile_size);
-            GLSLH("#define bg_tile_a vec3("$", "$", "$") \n",
-                  SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
-            GLSLH("#define bg_tile_b vec3("$", "$", "$") \n",
-                  SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
             GLSL("vec2 outcoord = gl_FragCoord.xy * "$";                    \n"
                  "bvec2 tile = lessThan(fract(outcoord), vec2(0.5));        \n"
-                 "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b; \n",
-                 SH_FLOAT(1.0 / size));
-        } else {
-            GLSLH("#define bg_color vec3("$", "$", "$") \n",
-                  SH_FLOAT(params->background_color[0]),
-                  SH_FLOAT(params->background_color[1]),
-                  SH_FLOAT(params->background_color[2]));
+                 "vec3 tile_color = tile.x == tile.y ? vec3("$", "$", "$")  \n"
+                 "                                   : vec3("$", "$", "$"); \n"
+                 "color.rgb += (1.0 - color.a) * tile_color;                \n"
+                 "color.a = 1.0;                                            \n",
+                 SH_FLOAT(1.0 / PL_DEF(params->tile_size, pl_render_default_params.tile_size)),
+                 SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]),
+                 SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
+            img->repr.alpha = PL_ALPHA_NONE;
+            img->comps = 3;
+            break;
+        case PL_CLEAR_SKIP: break;
+        case PL_CLEAR_MODE_COUNT: pl_unreachable();
         }
-
-        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
-        GLSL("color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0); \n");
-        img->repr.alpha = PL_ALPHA_NONE;
-        img->comps = 3;
     }
 
     // Apply the color scale separately, after encoding is done, to make sure
@@ -2442,8 +2473,8 @@ static bool pass_output_target(struct pass_state *pass)
     bool flipped_x = dst_rect.x1 < dst_rect.x0,
          flipped_y = dst_rect.y1 < dst_rect.y0;
 
-    if (!params->skip_target_clearing && pl_frame_is_cropped(target))
-        pl_frame_clear_rgba(rr->gpu, target, CLEAR_COL(params));
+    if (pl_frame_is_cropped(target))
+        clear_target(rr, target, params);
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -3034,9 +3065,7 @@ static bool draw_empty_overlays(pl_renderer rr,
                                 const struct pl_frame *ptarget,
                                 const struct pl_render_params *params)
 {
-    if (!params->skip_target_clearing)
-        pl_frame_clear_rgba(rr->gpu, ptarget, CLEAR_COL(params));
-
+    clear_target(rr, ptarget, params);
     if (!ptarget->num_overlays)
         return true;
 
@@ -3235,14 +3264,16 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.frame_mixer);
     CLEAR(params.preserve_mixing_cache);
     CLEAR(params.skip_caching_single_frame);
-    memset(params.background_color, 0, sizeof(params.background_color));
-    CLEAR(params.background_transparency);
-    CLEAR(params.skip_target_clearing);
-    CLEAR(params.blend_against_tiles);
-    memset(params.tile_colors, 0, sizeof(params.tile_colors));
-    CLEAR(params.tile_size);
 
     // Clear out fields only relevant to pass_output_target
+    CLEAR(params.background);
+    CLEAR(params.border);
+    CLEAR(params.skip_target_clearing);
+    CLEAR(params.blend_against_tiles);
+    memset(params.background_color, 0, sizeof(params.background_color));
+    CLEAR(params.background_transparency);
+    memset(params.tile_colors, 0, sizeof(params.tile_colors));
+    CLEAR(params.tile_size);
     CLEAR(params.blend_params);
     CLEAR(params.distort_params);
     CLEAR(params.dither_params);
