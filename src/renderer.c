@@ -3744,6 +3744,58 @@ bool pl_frame_is_cropped(const struct pl_frame *frame)
     return x0 > 0 || y0 > 0 || x1 < ref->params.w || y1 < ref->params.h;
 }
 
+void pl_frame_clear_tiles(pl_gpu gpu, const struct pl_frame *frame,
+                          const float tile_colors[2][3], int tile_size)
+{
+    struct pl_color_repr repr = frame->repr;
+    pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
+    pl_transform3x3_invert(&tr);
+
+    float encoded[2][3];
+    memcpy(encoded, tile_colors, sizeof(encoded));
+    pl_transform3x3_apply(&tr, encoded[0]);
+    pl_transform3x3_apply(&tr, encoded[1]);
+
+    pl_tex ref = frame->planes[frame_ref(frame)].texture;
+
+    for (int p = 0; p < frame->num_planes; p++) {
+        const struct pl_plane *plane = &frame->planes[p];
+        float tiles[2][3] = {0};
+        for (int c = 0; c < plane->components; c++) {
+            int ch = plane->component_mapping[c];
+            if (ch >= 0 && ch < 3) {
+                tiles[0][c] = encoded[0][plane->component_mapping[c]];
+                tiles[1][c] = encoded[1][plane->component_mapping[c]];
+            }
+        }
+
+        float rx = (float) plane->texture->params.w / ref->params.w,
+              ry = (float) plane->texture->params.h / ref->params.h;
+        float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
+              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
+        int size_x = tile_size * rrx, size_y = tile_size * rry;
+
+        pl_dispatch dp = pl_gpu_dispatch(gpu);
+        pl_shader sh = pl_dispatch_begin(dp);
+        sh->output = PL_SHADER_SIG_COLOR;
+        GLSL("// pl_frame_clear_tiles (plane %d)                    \n"
+             "vec4 color;                                           \n"
+             "vec2 outcoord = gl_FragCoord.xy * vec2("$", "$");     \n"
+             "bvec2 tile = lessThan(fract(outcoord), vec2(0.5));    \n"
+             "color.rgb = tile.x == tile.y ? vec3("$", "$", "$")    \n"
+             "                             : vec3("$", "$", "$");   \n"
+             "color.a = 1.0;                                        \n",
+             p, SH_FLOAT(1.0 / size_x), SH_FLOAT(1.0 / size_y),
+             SH_FLOAT(tiles[0][0]), SH_FLOAT(tiles[0][1]), SH_FLOAT(tiles[0][2]),
+             SH_FLOAT(tiles[1][0]), SH_FLOAT(tiles[1][1]), SH_FLOAT(tiles[1][2]));
+
+        pl_dispatch_finish(dp, pl_dispatch_params(
+            .shader = &sh,
+            .target = plane->texture,
+        ));
+    }
+}
+
 void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
                          const float rgba[4])
 {

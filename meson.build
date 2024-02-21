@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '345': 'add pl_frame_clear_tiles',
       '344': 'add PL_ALPHA_NONE',
       '343': 'add pl_map_avdovi_metadata and deprecate pl_frame_map_avdovi_metadata',
       '342': 'add pl_cache_signature',

@@ -657,6 +657,10 @@ static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
     pl_frame_clear_rgba(gpu, frame, clear_color_rgba);
 }
 
+// Helper function to clear a frame to a fully tiled background.
+PL_API void pl_frame_clear_tiles(pl_gpu gpu, const struct pl_frame *frame,
+                                 const float tile_colors[2][3], int tile_size);
+
 // Helper functions to return the fixed/inferred pl_frame parameters used
 // for rendering internally. Mutates `image` and `target` in-place to hold
 // the modified values, which are what will actually be used for rendering.
