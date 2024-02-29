@@ -265,7 +265,7 @@ PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
         if (data->mdm->has_luminance) {
             out->max_luma = av_q2d(data->mdm->max_luminance);
             out->min_luma = av_q2d(data->mdm->min_luminance);
-            if (out->max_luma < 10.0 || out->min_luma >= out->max_luma)
+            if (out->max_luma < 5.0 || out->min_luma >= out->max_luma)
                 out->max_luma = out->min_luma = 0; /* sanity */
         }
         if (data->mdm->has_primaries) {
