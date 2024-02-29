@@ -22,7 +22,12 @@
 // resources are no longer in use, provide an abstraction for tracking these.
 // In practice, these are only checked and run when submitting new commands, so
 // the actual execution may be delayed by a frame.
-typedef void (*vk_cb)(void *p, void *arg);
+typedef void (*vk_cb)(void *priv, void *arg);
+#define VK_CB_FUNC(name) name ## _cb
+#define VK_CB_FUNC_DEF(name)                                                    \
+    static void VK_CB_FUNC(name)(void *priv, void *arg) {                       \
+        name(priv, arg);                                                        \
+    }
 
 struct vk_callback {
     vk_cb run;

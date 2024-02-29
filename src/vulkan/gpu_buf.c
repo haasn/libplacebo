@@ -17,6 +17,8 @@
 
 #include "gpu.h"
 
+VK_CB_FUNC_DEF(vk_buf_deref);
+
 void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
                     VkPipelineStageFlags2 stage, VkAccessFlags2 access,
                     size_t offset, size_t size, bool export)
@@ -73,7 +75,7 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
 
     buf_vk->needs_flush = false;
     buf_vk->exported = export;
-    vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
+    vk_cmd_callback(cmd, VK_CB_FUNC(vk_buf_deref), gpu, buf);
 }
 
 void vk_buf_deref(pl_gpu gpu, pl_buf buf)
@@ -271,6 +273,8 @@ error: ;
     vk_buf_deref(gpu, buf);
 }
 
+VK_CB_FUNC_DEF(invalidate_buf);
+
 void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
                   size_t offset, size_t size)
 {
@@ -305,7 +309,7 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     });
 
     // We need to hold on to the buffer until this barrier completes
-    vk_cmd_callback(cmd, (vk_cb) invalidate_buf, gpu, buf);
+    vk_cmd_callback(cmd, VK_CB_FUNC(invalidate_buf), gpu, buf);
     pl_rc_ref(&buf_vk->rc);
 }
 

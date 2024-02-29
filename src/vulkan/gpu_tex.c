@@ -17,6 +17,8 @@
 
 #include "gpu.h"
 
+VK_CB_FUNC_DEF(vk_tex_deref);
+
 void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
                     VkPipelineStageFlags2 stage, VkAccessFlags2 access,
                     VkImageLayout layout, uint32_t qf)
@@ -74,7 +76,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
 
     tex_vk->qf = qf;
     tex_vk->layout = layout;
-    vk_cmd_callback(cmd, (vk_cb) vk_tex_deref, gpu, tex);
+    vk_cmd_callback(cmd, VK_CB_FUNC(vk_tex_deref), gpu, tex);
 
     for (int i = 0; i < tex_vk->ext_deps.num; i++)
         vk_cmd_dep(cmd, stage, tex_vk->ext_deps.elem[i]);

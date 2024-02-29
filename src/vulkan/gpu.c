@@ -48,6 +48,8 @@ static void timer_destroy_cb(pl_gpu gpu, pl_timer timer)
     pl_free(timer);
 }
 
+VK_CB_FUNC_DEF(timer_destroy_cb);
+
 static pl_timer vk_timer_create(pl_gpu gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -72,7 +74,7 @@ error:
 
 static void vk_timer_destroy(pl_gpu gpu, pl_timer timer)
 {
-    vk_gpu_idle_callback(gpu, (vk_cb) timer_destroy_cb, gpu, timer);
+    vk_gpu_idle_callback(gpu, VK_CB_FUNC(timer_destroy_cb), gpu, timer);
 }
 
 static uint64_t vk_timer_query(pl_gpu gpu, pl_timer timer)
@@ -211,7 +213,7 @@ bool _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
                               timer->qpool, timer->index_write + 1);
 
         timer->pending |= timer_bit(timer->index_write);
-        vk_cmd_callback(cmd, (vk_cb) timer_end_cb, timer,
+        vk_cmd_callback(cmd, timer_end_cb, timer,
                         (void *) (uintptr_t) timer->index_write);
 
         timer->index_write = (timer->index_write + 2) % QUERY_POOL_SIZE;

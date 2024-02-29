@@ -73,9 +73,11 @@ static void pass_destroy_cb(pl_gpu gpu, pl_pass pass)
     pl_free((void *) pass);
 }
 
+VK_CB_FUNC_DEF(pass_destroy_cb);
+
 void vk_pass_destroy(pl_gpu gpu, pl_pass pass)
 {
-    vk_gpu_idle_callback(gpu, (vk_cb) pass_destroy_cb, gpu, pass);
+    vk_gpu_idle_callback(gpu, VK_CB_FUNC(pass_destroy_cb), gpu, pass);
 }
 
 static const VkDescriptorType dsType[] = {
@@ -120,10 +122,12 @@ static const VkShaderStageFlags stageFlags[] = {
     [PL_PASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
 };
 
-static void destroy_pipeline(struct vk_ctx *vk, void *pipeline)
+static inline void destroy_pipeline(struct vk_ctx *vk, void *pipeline)
 {
     vk->DestroyPipeline(vk->dev, vk_unwrap_handle(pipeline), PL_VK_ALLOC);
 }
+
+VK_CB_FUNC_DEF(destroy_pipeline);
 
 static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
                                       bool derivable, VkPipeline base,
@@ -137,7 +141,7 @@ static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
     if (*out_pipe) {
         // We don't need to use `vk_gpu_idle_callback` because the only command
         // that can access a VkPipeline, `vk_pass_run`, always flushes `p->cmd`.
-        vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, vk_wrap_handle(*out_pipe));
+        vk_dev_callback(vk, VK_CB_FUNC(destroy_pipeline), vk, vk_wrap_handle(*out_pipe));
         *out_pipe = VK_NULL_HANDLE;
     }
 
@@ -750,6 +754,8 @@ static void set_ds(struct pl_pass_vk *pass_vk, void *dsbit)
     pass_vk->dmask |= (uintptr_t) dsbit;
 }
 
+VK_CB_FUNC_DEF(set_ds);
+
 static bool need_respec(pl_pass pass, const struct pl_pass_run_params *params)
 {
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);
@@ -816,7 +822,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             if (pass_vk->dmask & dsbit) {
                 ds = pass_vk->dss[i];
                 pass_vk->dmask &= ~dsbit; // unset
-                vk_cmd_callback(cmd, (vk_cb) set_ds, pass_vk,
+                vk_cmd_callback(cmd, VK_CB_FUNC(set_ds), pass_vk,
                                 (void *)(uintptr_t) dsbit);
                 break;
             }

@@ -571,6 +571,8 @@ static void destroy_swapchain(struct vk_ctx *vk, void *swapchain)
     vk->DestroySwapchainKHR(vk->dev, vk_unwrap_handle(swapchain), PL_VK_ALLOC);
 }
 
+VK_CB_FUNC_DEF(destroy_swapchain);
+
 static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 {
     pl_gpu gpu = sw->gpu;
@@ -616,7 +618,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     sinfo.oldSwapchain = p->swapchain;
     p->swapchain = VK_NULL_HANDLE;
     VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain);
-    vk_dev_callback(vk, (vk_cb) destroy_swapchain, vk, vk_wrap_handle(sinfo.oldSwapchain));
+    vk_dev_callback(vk, VK_CB_FUNC(destroy_swapchain), vk, vk_wrap_handle(sinfo.oldSwapchain));
     PL_VK_ASSERT(res, "vk->CreateSwapchainKHR(...)");
 
     // Get the new swapchain images
@@ -769,6 +771,8 @@ static void present_cb(struct priv *p, void *arg)
     (void) pl_rc_deref(&p->frames_in_flight);
 }
 
+VK_CB_FUNC_DEF(present_cb);
+
 static bool vk_sw_submit_frame(pl_swapchain sw)
 {
     pl_gpu gpu = sw->gpu;
@@ -801,7 +805,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     }
 
     pl_rc_ref(&p->frames_in_flight);
-    vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);
+    vk_cmd_callback(cmd, VK_CB_FUNC(present_cb), p, NULL);
     if (!vk_cmd_submit(&cmd)) {
         pl_mutex_unlock(&p->lock);
         return false;
