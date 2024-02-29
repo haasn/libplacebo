@@ -96,7 +96,7 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
         return false;
     case VK_COLOR_SPACE_BT709_LINEAR_EXT:
         *out = (struct pl_color_space) {
-            .primaries = PL_COLOR_PRIM_DCI_P3,
+            .primaries = PL_COLOR_PRIM_BT_709,
             .transfer  = PL_COLOR_TRC_LINEAR,
         };
         return true;
