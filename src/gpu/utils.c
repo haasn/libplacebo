@@ -528,11 +528,7 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (params->buf)
         return pl_tex_upload(gpu, params);
 
-    struct pl_buf_params bufparams = {
-        .size = pl_tex_transfer_size(params),
-        .debug_tag = PL_DEBUG_TAG,
-    };
-
+    const size_t size = pl_tex_transfer_size(params);
     struct pl_tex_transfer_params fixed = *params;
     fixed.ptr = NULL;
 
@@ -543,29 +539,31 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     bool can_import = gpu->import_caps.buf & PL_HANDLE_HOST_PTR;
     can_import &= !params->no_import;
     can_import &= params->callback != NULL;
-    can_import &= bufparams.size > (32 << 10); // 32 KiB
+    can_import &= size > (32 << 10); // 32 KiB
     if (can_import) {
-        bufparams.import_handle = PL_HANDLE_HOST_PTR;
-        bufparams.shared_mem = (struct pl_shared_mem) {
-            .handle.ptr = params->ptr,
-            .size = bufparams.size,
-            .offset = 0,
-        };
-
         // Suppress errors for this test because it may fail, in which case we
         // want to silently fall back.
         pl_log_level_cap(gpu->log, PL_LOG_DEBUG);
-        fixed.buf = pl_buf_create(gpu, &bufparams);
+        fixed.buf = pl_buf_create(gpu, pl_buf_params(
+            .size = size,
+            .import_handle = PL_HANDLE_HOST_PTR,
+            .shared_mem = (struct pl_shared_mem) {
+                .handle.ptr = params->ptr,
+                .size = size,
+                .offset = 0,
+            },
+        ));
         pl_log_level_cap(gpu->log, PL_LOG_NONE);
     }
 
     if (!fixed.buf) {
-        bufparams.import_handle = 0;
-        bufparams.host_writable = true;
-        fixed.buf = pl_buf_create(gpu, &bufparams);
+        fixed.buf = pl_buf_create(gpu, pl_buf_params(
+            .size = size,
+            .host_writable = true,
+        ));
         if (!fixed.buf)
             return false;
-        pl_buf_write(gpu, fixed.buf, 0, params->ptr, bufparams.size);
+        pl_buf_write(gpu, fixed.buf, 0, params->ptr, size);
         if (params->callback)
             params->callback(params->priv);
         fixed.callback = NULL;
@@ -600,38 +598,37 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     if (params->buf)
         return pl_tex_download(gpu, params);
 
+    const size_t size = pl_tex_transfer_size(params);
     pl_buf buf = NULL;
-    struct pl_buf_params bufparams = {
-        .size = pl_tex_transfer_size(params),
-        .debug_tag = PL_DEBUG_TAG,
-    };
 
     // If we can import host pointers directly, we can avoid an extra memcpy
     // (sometimes). In the cases where it isn't avoidable, the extra memcpy
     // will happen inside VRAM, which is typically faster anyway.
     bool can_import = gpu->import_caps.buf & PL_HANDLE_HOST_PTR;
     can_import &= !params->no_import;
-    can_import &= bufparams.size > (32 << 10); // 32 KiB
+    can_import &= size > (32 << 10); // 32 KiB
     if (can_import) {
-        bufparams.import_handle = PL_HANDLE_HOST_PTR;
-        bufparams.shared_mem = (struct pl_shared_mem) {
-            .handle.ptr = params->ptr,
-            .size = bufparams.size,
-            .offset = 0,
-        };
-
         // Suppress errors for this test because it may fail, in which case we
         // want to silently fall back.
         pl_log_level_cap(gpu->log, PL_LOG_DEBUG);
-        buf = pl_buf_create(gpu, &bufparams);
+        buf = pl_buf_create(gpu, pl_buf_params(
+            .size = size,
+            .import_handle = PL_HANDLE_HOST_PTR,
+            .shared_mem = (struct pl_shared_mem) {
+                .handle.ptr = params->ptr,
+                .size = size,
+                .offset = 0,
+            },
+        ));
         pl_log_level_cap(gpu->log, PL_LOG_NONE);
     }
 
     if (!buf) {
         // Fallback when host pointer import is not supported
-        bufparams.import_handle = 0;
-        bufparams.host_readable = true;
-        buf = pl_buf_create(gpu, &bufparams);
+        buf = pl_buf_create(gpu, pl_buf_params(
+            .size = size,
+            .host_readable = true,
+        ));
     }
 
     if (!buf)
@@ -642,7 +639,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     newparams.buf = buf;
 
     // If the transfer is asynchronous, propagate our host read asynchronously
-    if (params->callback && !bufparams.import_handle) {
+    if (params->callback && !buf->params.import_handle) {
         newparams.callback = pbo_download_cb;
         newparams.priv = pl_alloc_struct(NULL, struct pbo_cb_ctx, {
             .gpu = gpu,
@@ -664,7 +661,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     }
 
     bool ok;
-    if (bufparams.import_handle) {
+    if (buf->params.import_handle) {
         // Buffer download completion already means the host pointer contains
         // the valid data, no more need to copy. (Note: this applies even for
         // asynchronous downloads)
@@ -672,7 +669,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
         pl_buf_destroy(gpu, &buf);
     } else if (!params->callback) {
         // Synchronous read back to the host pointer
-        ok = pl_buf_read(gpu, buf, 0, params->ptr, bufparams.size);
+        ok = pl_buf_read(gpu, buf, 0, params->ptr, size);
         pl_buf_destroy(gpu, &buf);
     } else {
         // Nothing left to do here, the rest will be done by pbo_download_cb
