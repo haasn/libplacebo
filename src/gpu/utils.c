@@ -147,6 +147,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
     pl_assert(gpu->limits.max_ssbo_size   <= gpu->limits.max_buf_size);
     pl_assert(gpu->limits.max_vbo_size    <= gpu->limits.max_buf_size);
     pl_assert(gpu->limits.max_mapped_size <= gpu->limits.max_buf_size);
+    pl_assert(gpu->limits.max_mapped_vram <= gpu->limits.max_mapped_size);
 
     for (int n = 0; n < gpu->num_formats; n++) {
         pl_fmt fmt = gpu->formats[n];

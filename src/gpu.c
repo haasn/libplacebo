@@ -590,7 +590,11 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     require(!params->uniform || params->size <= gpu->limits.max_ubo_size);
     require(!params->storable || params->size <= gpu->limits.max_ssbo_size);
     require(!params->drawable || params->size <= gpu->limits.max_vbo_size);
-    require(!params->host_mapped || params->size <= gpu->limits.max_mapped_size);
+    if (params->host_mapped) {
+        require(params->size <= gpu->limits.max_mapped_size);
+        require(params->memory_type != PL_BUF_MEM_DEVICE ||
+                params->size <= gpu->limits.max_mapped_vram);
+    }
 
     if (params->format) {
         pl_fmt fmt = params->format;

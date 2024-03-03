@@ -184,6 +184,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
         if (gl_test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
             const char *vendor = (char *) gl->GetString(GL_VENDOR);
             limits->max_mapped_size = limits->max_buf_size;
+            limits->max_mapped_vram = limits->max_buf_size;
             limits->host_cached = strcmp(vendor, "AMD") == 0 ||
                                   strcmp(vendor, "NVIDIA Corporation") == 0;
         }

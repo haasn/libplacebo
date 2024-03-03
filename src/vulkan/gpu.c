@@ -517,6 +517,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .max_ssbo_size      = PL_MIN(limits.maxStorageBufferRange, max_size),
         .max_vbo_size       = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
         .max_mapped_size    = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
+        .max_mapped_vram    = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
         .max_buffer_texels  = PL_MIN(limits.maxTexelBufferElements, max_size),
         .align_host_ptr     = host_props.minImportedHostPointerAlignment,
         .host_cached        = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_CACHED_BIT),

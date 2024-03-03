@@ -105,6 +105,9 @@ struct pl_gpu_limits {
     size_t max_mapped_size;     // maximum size of a `host_mapped` buffer
     uint64_t max_buffer_texels; // maximum number of texels in a texel buffer
     bool host_cached;           // if true, PL_BUF_MEM_HOST buffers are cached
+    size_t max_mapped_vram;     // maximum (known) size of a `host_mapped`
+                                // PL_BUF_MEM_DEVICE buffer, or 0 if this
+                                // combination is not supported
 
     // Required alignment for PL_HANDLE_HOST_PTR imports. This is provided
     // merely as a hint to the user. If the host pointer being imported is
