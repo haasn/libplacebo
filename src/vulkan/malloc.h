@@ -19,6 +19,13 @@
 
 #include "common.h"
 
+// The threshold for which allocations to serve from host-mapped VRAM, as
+// opposed to host memory. Will not allocate more than this fraction of VRAM in
+// one go. (For a 256 MB non-resizable BAR, this is equivalent to 4 MB)
+//
+// Note: Not actually used by malloc.c, but by gpu_buf.c
+#define MAPPED_VRAM_THRESHOLD 64
+
 // All memory allocated from a vk_malloc MUST be explicitly released by
 // the caller before vk_malloc_destroy is called.
 struct vk_malloc *vk_malloc_create(struct vk_ctx *vk);
