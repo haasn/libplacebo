@@ -649,6 +649,11 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
             vec2 ar@c = vec2(0.0), wwsum@c = vec2(0.0);
     }
 
+    pl_gpu gpu = SH_GPU(sh);
+    const int num_comps = __builtin_popcount(cmask);
+    const bool dynamic_size = SH_PARAMS(sh).dynamic_constants ||
+                              !gpu || !gpu->limits.array_size_constants;
+
     int bound   = ceil(obj->filter->radius);
     int offset  = bound - 1; // padding top/left
     int padding = offset + bound; // total padding
@@ -656,29 +661,34 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     // Determined experimentally on modern AMD and Nvidia hardware. 32 is a
     // good tradeoff for the horizontal work group size. Apart from that,
     // just use as many threads as possible.
-    const int bw = 32, bh = sh_glsl(sh).max_group_threads / bw;
+    int bw = 32, bh = sh_glsl(sh).max_group_threads / bw;
+    int sizew, sizeh, iw, ih;
 
-    // We need to sample everything from base_min to base_max, so make sure we
-    // have enough room in shmem. The extra margin on the ceilf guards against
-    // floating point inaccuracy on near-integer scaling ratios.
-    const float margin = 1e-5;
-    int iw = (int) ceilf(bw / rx - margin) + padding + 1,
-        ih = (int) ceilf(bh / ry - margin) + padding + 1;
-    int sizew = iw, sizeh = ih;
+    bool is_compute = !params->no_compute && sh_glsl(sh).compute;
+    while (is_compute) {
+        // We need to sample everything from base_min to base_max, so make sure
+        // we have enough room in shmem. The extra margin on the ceilf guards
+        // against floating point inaccuracy on near-integer scaling ratios.
+        const float margin = 1e-5;
+        sizew = iw = (int) ceilf(bw / rx - margin) + padding + 1;
+        sizeh = ih = (int) ceilf(bh / ry - margin) + padding + 1;
 
-    pl_gpu gpu = SH_GPU(sh);
-    bool dynamic_size = SH_PARAMS(sh).dynamic_constants ||
-                        !gpu || !gpu->limits.array_size_constants;
-    if (dynamic_size) {
-        // Overallocate the array slightly to reduce recompilation overhead
-        sizew = PL_ALIGN2(sizew, 8);
-        sizeh = PL_ALIGN2(sizeh, 8);
+        if (dynamic_size) {
+            // Overallocate slightly to reduce recompilation overhead
+            sizew = PL_ALIGN2(sizew, 8);
+            sizeh = PL_ALIGN2(sizeh, 8);
+        }
+
+        const int shmem_req = (sizew * sizeh * num_comps + 2) * sizeof(float);
+        if (shmem_req > sh_glsl(sh).max_shmem_size && bh > 1) {
+            // Try again with smaller work group size
+            bh >>= 1;
+            continue;
+        }
+
+        is_compute = sh_try_compute(sh, bw, bh, false, shmem_req);
+        break;
     }
-
-    int num_comps = __builtin_popcount(cmask);
-    int shmem_req = (sizew * sizeh * num_comps + 2) * sizeof(float);
-    bool is_compute = !params->no_compute && sh_glsl(sh).compute &&
-                      sh_try_compute(sh, bw, bh, false, shmem_req);
 
     // Note: SH_LUT_LITERAL might be faster in some specific cases, but not by
     // much, and it's catastrophically slow on other platforms.
