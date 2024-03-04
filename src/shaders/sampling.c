@@ -777,7 +777,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         // with regular sampling. This requires keeping track of which
         // pixels in the next row were already gathered by the previous
         // row.
-        uint32_t gathered_cur = 0x0, gathered_next = 0x0;
+        uint64_t gathered_cur = 0x0, gathered_next = 0x0;
         const float radius2 = PL_SQUARE(obj->filter->radius);
         const int base = bound - 1;
 
@@ -790,7 +790,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         for (int y = 1 - bound; y <= bound; y++) {
             for (int x = 1 - bound; x <= bound; x++) {
                 // Skip already gathered texels
-                uint32_t bit = 1llu << (base + x);
+                uint64_t bit = 1llu << (base + x);
                 if (gathered_cur & bit)
                     continue;
 
