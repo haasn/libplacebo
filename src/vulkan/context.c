@@ -802,7 +802,9 @@ debug_ext_done: ;
             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
             VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+            // Depends on timeline semaphores being implemented:
+            // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7600
+            //VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
         };
 
         static const VkValidationFeaturesEXT vinfo = {
