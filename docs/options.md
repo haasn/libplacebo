@@ -52,7 +52,7 @@ roughly ordered from fastest to slowest:
 - `bicubic`: Bicubic interpolation (fast)
 - `gaussian`: Gaussian smoothing (fast)
 - `catmull_rom`: Catmull-Rom cubic spline
-- `mitchell`: Mitchell-Netravalia cubic spline
+- `mitchell`: Mitchell–Netravali cubic spline
 - `lanczos`: Lanczos reconstruction
 
 ### `plane_upscaler=<filter>`, `plane_downscaler=<filter>`
