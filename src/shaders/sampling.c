@@ -664,7 +664,11 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     int bw = 32, bh = sh_glsl(sh).max_group_threads / bw;
     int sizew, sizeh, iw, ih;
 
+    // Disable compute shaders after a (hard-coded) radius of 6, since the
+    // gather kernel generally pulls ahead here.
     bool is_compute = !params->no_compute && sh_glsl(sh).compute;
+    is_compute &= obj->filter->radius < 6.0;
+
     while (is_compute) {
         // We need to sample everything from base_min to base_max, so make sure
         // we have enough room in shmem. The extra margin on the ceilf guards
