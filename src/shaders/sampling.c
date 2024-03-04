@@ -856,6 +856,9 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                     if (x+xo[p] > bound || y+yo[p] > bound)
                         continue; // next subpixel
 
+                    if (!yo[p] && (gathered_cur & (bit << xo[p])))
+                        continue; // already sampled
+
                     GLSL("idx = %d;\n", p);
                     polar_sample(sh, obj->filter, src_tex, lut, radius_c,
                                  x+xo[p], y+yo[p], cmask, in, use_ar, scale);
