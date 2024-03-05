@@ -218,7 +218,7 @@ sources += configure_file(
 
 version_h = custom_target(
   command: [ python, join_paths(meson.current_source_dir(), 'version.py'),
-             '@INPUT@', '@OUTPUT@', '@SOURCE_ROOT@', version_pretty ],
+             '@INPUT@', '@OUTPUT@', '@CURRENT_SOURCE_DIR@', version_pretty ],
   input: 'version.h.in',
   output: 'version.h',
   build_by_default: true,
