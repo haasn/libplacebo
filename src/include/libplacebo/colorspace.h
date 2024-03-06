@@ -47,6 +47,10 @@ enum pl_color_system {
 
 PL_API bool pl_color_system_is_ycbcr_like(enum pl_color_system sys);
 
+// Returns the human-readable, friendly name of the color system.
+PL_API const char *pl_color_system_name(enum pl_color_system sys);
+PL_API extern const char *const pl_color_system_names[PL_COLOR_SYSTEM_COUNT];
+
 // Returns true for color systems that are linear transformations of the RGB
 // equivalent, i.e. are simple matrix multiplications. For color systems with
 // this property, `pl_color_repr_decode` is sufficient for conversion to RGB.
@@ -217,6 +221,10 @@ enum pl_color_primaries {
 
 PL_API bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim);
 
+// Returns the human-readable, friendly name of the color primaries.
+PL_API const char *pl_color_primaries_name(enum pl_color_primaries prim);
+PL_API extern const char *const pl_color_primaries_names[PL_COLOR_PRIM_COUNT];
+
 // Guesses the best primaries based on a resolution. This always guesses
 // conservatively, i.e. it will never return a wide gamut color space even if
 // the resolution is 4K.
@@ -245,6 +253,10 @@ enum pl_color_transfer {
     PL_COLOR_TRC_S_LOG2,        // Sony S-Log2
     PL_COLOR_TRC_COUNT
 };
+
+// Returns the human-readable, friendly name of the color transfer.
+PL_API const char *pl_color_transfer_name(enum pl_color_transfer trc);
+PL_API extern const char *const pl_color_transfer_names[PL_COLOR_TRC_COUNT];
 
 // Returns the nominal peak of a given transfer function, relative to the
 // reference white. This refers to the highest encodable signal level.

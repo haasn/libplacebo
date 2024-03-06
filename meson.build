@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '349': 'add pl_color_{primaries,system,transfer}_name(s)',
       '348': 'add pl_color_linearize and pl_color_delinearize',
       '347': 'add pl_gpu_limits.max_mapped_vram',
       '346': 'add pl_render_params.background/border, deprecate skip_target_clearing and blend_against_tiles',
