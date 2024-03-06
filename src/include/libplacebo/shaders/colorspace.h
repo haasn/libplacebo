@@ -62,9 +62,6 @@ PL_API void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *rep
 
 // Linearize (expand) `vec4 color`, given a specified color space. In essence,
 // this corresponds to the ITU-R EOTF.
-//
-// Note: Unlike the ITU-R EOTF, it never includes the OOTF - even for systems
-// where the EOTF includes the OOTF (such as HLG).
 PL_API void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp);
 
 // Delinearize (compress), given a color space as output. This loosely
