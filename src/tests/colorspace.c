@@ -8,9 +8,43 @@ int main()
     }
 
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
+        printf("Testing pl_color_transfer %d\n", trc);
         bool hdr = trc >= PL_COLOR_TRC_PQ && trc <= PL_COLOR_TRC_S_LOG2;
         REQUIRE_CMP(hdr, ==, pl_color_transfer_is_hdr(trc), "d");
         REQUIRE_CMP(pl_color_transfer_nominal_peak(trc), >=, 1.0, "f");
+
+        if (trc == PL_COLOR_TRC_LINEAR)
+            continue;
+
+        // Test round trip
+        const float peak = 1.0f, contrast = 1000;
+        const struct pl_color_space csp = {
+            .transfer = trc,
+            .hdr.max_luma = PL_COLOR_SDR_WHITE * peak,
+            .hdr.min_luma = PL_COLOR_SDR_WHITE * peak / contrast,
+        };
+        for (float x = 0.0f; x <= 1.0f; x += 0.01f) {
+            float color[3] = { x, x, x };
+            pl_color_linearize(&csp, color);
+            if (trc == PL_COLOR_TRC_PQ)
+                REQUIRE_FEQ(color[0], pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, x), 1e-5f);
+            if (pl_color_space_is_black_scaled(&csp) || trc == PL_COLOR_TRC_BT_1886)
+                REQUIRE_CMP(color[0] + 1e-6f, >=, peak / contrast, "f");
+            if (!pl_color_space_is_hdr(&csp) && trc != PL_COLOR_TRC_ST428)
+                REQUIRE_CMP(color[0] - 1e-6f, <=, peak, "f");
+
+            switch (trc) {
+            case PL_COLOR_TRC_V_LOG:
+            case PL_COLOR_TRC_S_LOG1:
+            case PL_COLOR_TRC_S_LOG2:
+                // FIXME: these don't currently round-trip on subzero values
+                break;
+            default:
+                pl_color_delinearize(&csp, color);
+                REQUIRE_FEQ(color[0], x, 1e-5f);
+                break;
+            }
+        }
     }
 
     float pq_peak = pl_color_transfer_nominal_peak(PL_COLOR_TRC_PQ);
