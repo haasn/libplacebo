@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "colorspace.h"
 #include "hash.h"
 
 #include <libplacebo/colorspace.h>
@@ -277,12 +278,6 @@ const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
     .max_cll  = 10000,
     .max_fall = 0, // unknown
 };
-
-static const float PQ_M1 = 2610./4096 * 1./4,
-                   PQ_M2 = 2523./4096 * 128,
-                   PQ_C1 = 3424./4096,
-                   PQ_C2 = 2413./4096 * 32,
-                   PQ_C3 = 2392./4096 * 32;
 
 float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x)
 {

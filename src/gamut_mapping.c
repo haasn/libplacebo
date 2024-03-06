@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "colorspace.h"
 #include "pl_thread.h"
 
 #include <libplacebo/gamut_mapping.h>
@@ -104,12 +105,6 @@ static inline struct IPT ich2ipt(struct ICh c)
         .T = c.C * sinf(c.h),
     };
 }
-
-static const float PQ_M1 = 2610./4096 * 1./4,
-                   PQ_M2 = 2523./4096 * 128,
-                   PQ_C1 = 3424./4096,
-                   PQ_C2 = 2413./4096 * 32,
-                   PQ_C3 = 2392./4096 * 32;
 
 enum { PQ_LUT_SIZE = 1024 };
 static const float pq_eotf_lut[1024+1] = {
