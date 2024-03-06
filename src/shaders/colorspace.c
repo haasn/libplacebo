@@ -748,33 +748,13 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
     ));
 
     GLSL("// pl_shader_delinearize \n");
-    switch (csp->transfer) {
-    case PL_COLOR_TRC_UNKNOWN:
-    case PL_COLOR_TRC_SRGB:
-    case PL_COLOR_TRC_LINEAR:
-    case PL_COLOR_TRC_GAMMA18:
-    case PL_COLOR_TRC_GAMMA20:
-    case PL_COLOR_TRC_GAMMA22:
-    case PL_COLOR_TRC_GAMMA24:
-    case PL_COLOR_TRC_GAMMA26:
-    case PL_COLOR_TRC_GAMMA28:
-    case PL_COLOR_TRC_PRO_PHOTO:
-    case PL_COLOR_TRC_ST428: ;
-        if (csp_max != 1 || csp_min != 0) {
-            GLSL("color.rgb = "$" * color.rgb + vec3("$"); \n",
-                 SH_FLOAT(1 / (csp_max - csp_min)),
-                 SH_FLOAT(-csp_min / (csp_max - csp_min)));
-        }
-        break;
-    case PL_COLOR_TRC_BT_1886:
-    case PL_COLOR_TRC_PQ:
-    case PL_COLOR_TRC_HLG:
-    case PL_COLOR_TRC_V_LOG:
-    case PL_COLOR_TRC_S_LOG1:
-    case PL_COLOR_TRC_S_LOG2:
-        break; // scene-referred or absolute scale
-    case PL_COLOR_TRC_COUNT:
-        pl_unreachable();
+    if (pl_color_space_is_black_scaled(csp) &&
+        csp->transfer != PL_COLOR_TRC_HLG &&
+        (csp_max != 1 || csp_min != 0))
+    {
+        GLSL("color.rgb = "$" * color.rgb + vec3("$"); \n",
+             SH_FLOAT(1 / (csp_max - csp_min)),
+             SH_FLOAT(-csp_min / (csp_max - csp_min)));
     }
 
     GLSL("color.rgb = max(color.rgb, 0.0); \n");
