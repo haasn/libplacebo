@@ -788,26 +788,8 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
 
-            const char *primaries[PL_COLOR_PRIM_COUNT] = {
-                [PL_COLOR_PRIM_UNKNOWN]     = "Auto (unknown)",
-                [PL_COLOR_PRIM_BT_601_525]  = "ITU-R Rec. BT.601 (525-line = NTSC, SMPTE-C)",
-                [PL_COLOR_PRIM_BT_601_625]  = "ITU-R Rec. BT.601 (625-line = PAL, SECAM)",
-                [PL_COLOR_PRIM_BT_709]      = "ITU-R Rec. BT.709 (HD), also sRGB",
-                [PL_COLOR_PRIM_BT_470M]     = "ITU-R Rec. BT.470 M",
-                [PL_COLOR_PRIM_EBU_3213]    = "EBU Tech. 3213-E / JEDEC P22 phosphors",
-                [PL_COLOR_PRIM_BT_2020]     = "ITU-R Rec. BT.2020 (UltraHD)",
-                [PL_COLOR_PRIM_APPLE]       = "Apple RGB",
-                [PL_COLOR_PRIM_ADOBE]       = "Adobe RGB (1998)",
-                [PL_COLOR_PRIM_PRO_PHOTO]   = "ProPhoto RGB (ROMM)",
-                [PL_COLOR_PRIM_CIE_1931]    = "CIE 1931 RGB primaries",
-                [PL_COLOR_PRIM_DCI_P3]      = "DCI-P3 (Digital Cinema)",
-                [PL_COLOR_PRIM_DISPLAY_P3]  = "DCI-P3 (Digital Cinema) with D65 white point",
-                [PL_COLOR_PRIM_V_GAMUT]     = "Panasonic V-Gamut (VARICAM)",
-                [PL_COLOR_PRIM_S_GAMUT]     = "Sony S-Gamut",
-                [PL_COLOR_PRIM_FILM_C]      = "Traditional film primaries with Illuminant C",
-                [PL_COLOR_PRIM_ACES_AP0]    = "ACES Primaries #0",
-                [PL_COLOR_PRIM_ACES_AP1]    = "ACES Primaries #1",
-            };
+            const char *primaries[PL_COLOR_PRIM_COUNT];
+            memcpy(primaries, pl_color_primaries_names, sizeof(primaries));
 
             if (target->color.primaries) {
                 snprintf(buf, sizeof(buf), "Auto (%s)", primaries[target->color.primaries]);
@@ -818,25 +800,8 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             p->force_prim = nk_combo(nk, primaries, PL_COLOR_PRIM_COUNT, p->force_prim,
                                        16, nk_vec2(nk_widget_width(nk), 200));
 
-            const char *transfers[PL_COLOR_TRC_COUNT] = {
-                [PL_COLOR_TRC_UNKNOWN]      = "Auto (unknown SDR)",
-                [PL_COLOR_TRC_BT_1886]      = "ITU-R Rec. BT.1886 (CRT emulation + OOTF)",
-                [PL_COLOR_TRC_SRGB]         = "IEC 61966-2-4 sRGB (CRT emulation)",
-                [PL_COLOR_TRC_LINEAR]       = "Linear light content",
-                [PL_COLOR_TRC_GAMMA18]      = "Pure power gamma 1.8",
-                [PL_COLOR_TRC_GAMMA20]      = "Pure power gamma 2.0",
-                [PL_COLOR_TRC_GAMMA22]      = "Pure power gamma 2.2",
-                [PL_COLOR_TRC_GAMMA24]      = "Pure power gamma 2.4",
-                [PL_COLOR_TRC_GAMMA26]      = "Pure power gamma 2.6",
-                [PL_COLOR_TRC_GAMMA28]      = "Pure power gamma 2.8",
-                [PL_COLOR_TRC_PRO_PHOTO]    = "ProPhoto RGB (ROMM)",
-                [PL_COLOR_TRC_ST428]        = "Digital Cinema Distribution Master (XYZ)",
-                [PL_COLOR_TRC_PQ]           = "ITU-R BT.2100 PQ (perceptual quantizer), aka SMPTE ST2048",
-                [PL_COLOR_TRC_HLG]          = "ITU-R BT.2100 HLG (hybrid log-gamma), aka ARIB STD-B67",
-                [PL_COLOR_TRC_V_LOG]        = "Panasonic V-Log (VARICAM)",
-                [PL_COLOR_TRC_S_LOG1]       = "Sony S-Log1",
-                [PL_COLOR_TRC_S_LOG2]       = "Sony S-Log2",
-            };
+            const char *transfers[PL_COLOR_TRC_COUNT];
+            memcpy(transfers, pl_color_transfer_names, sizeof(transfers));
 
             if (target->color.transfer) {
                 snprintf(buf, sizeof(buf), "Auto (%s)", transfers[target->color.transfer]);
@@ -871,20 +836,8 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             struct pl_color_repr *trepr = &p->force_repr;
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
 
-            const char *systems[PL_COLOR_SYSTEM_COUNT] = {
-                [PL_COLOR_SYSTEM_UNKNOWN]       = "Auto (unknown)",
-                [PL_COLOR_SYSTEM_BT_601]        = "ITU-R Rec. BT.601 (SD)",
-                [PL_COLOR_SYSTEM_BT_709]        = "ITU-R Rec. BT.709 (HD)",
-                [PL_COLOR_SYSTEM_SMPTE_240M]    = "SMPTE-240M",
-                [PL_COLOR_SYSTEM_BT_2020_NC]    = "ITU-R Rec. BT.2020 (non-constant luminance)",
-                [PL_COLOR_SYSTEM_BT_2020_C]     = "ITU-R Rec. BT.2020 (constant luminance)",
-                [PL_COLOR_SYSTEM_BT_2100_PQ]    = "ITU-R Rec. BT.2100 ICtCp PQ variant",
-                [PL_COLOR_SYSTEM_BT_2100_HLG]   = "ITU-R Rec. BT.2100 ICtCp HLG variant",
-                [PL_COLOR_SYSTEM_DOLBYVISION]   = "Dolby Vision (invalid for output)",
-                [PL_COLOR_SYSTEM_YCGCO]         = "YCgCo (derived from RGB)",
-                [PL_COLOR_SYSTEM_RGB]           = "Red, Green and Blue",
-                [PL_COLOR_SYSTEM_XYZ]           = "Digital Cinema Distribution Master (XYZ)",
-            };
+            const char *systems[PL_COLOR_SYSTEM_COUNT];
+            memcpy(systems, pl_color_system_names, sizeof(systems));
 
             if (target->repr.sys) {
                 snprintf(buf, sizeof(buf), "Auto (%s)", systems[target->repr.sys]);
