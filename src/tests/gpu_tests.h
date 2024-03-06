@@ -556,7 +556,7 @@ static void pl_shader_tests(pl_gpu gpu)
         )));
 
         float epsilon = pl_color_transfer_is_hdr(trc) ? 1e-4 : 1e-6;
-        TEST_FBO_PATTERN(epsilon, "transfer function %d", (int) trc);
+        TEST_FBO_PATTERN(epsilon, "transfer function: %s", pl_color_transfer_name(trc));
     }
 
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
@@ -588,7 +588,7 @@ static void pl_shader_tests(pl_gpu gpu)
         default: epsilon = 1e-6; break;
         }
 
-        TEST_FBO_PATTERN(epsilon, "color system %d", (int) sys);
+        TEST_FBO_PATTERN(epsilon, "color system: %s", pl_color_system_name(sys));
     }
 
     // Repeat this a few times to test the caching

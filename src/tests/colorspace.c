@@ -8,7 +8,7 @@ int main()
     }
 
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
-        printf("Testing pl_color_transfer %d\n", trc);
+        printf("Testing color transfer: %s\n", pl_color_transfer_name(trc));
         bool hdr = trc >= PL_COLOR_TRC_PQ && trc <= PL_COLOR_TRC_S_LOG2;
         REQUIRE_CMP(hdr, ==, pl_color_transfer_is_hdr(trc), "d");
         REQUIRE_CMP(pl_color_transfer_nominal_peak(trc), >=, 1.0, "f");
@@ -176,7 +176,7 @@ int main()
         if (!pl_color_system_is_linear(sys))
             continue;
 
-        printf("testing color system %u\n", (unsigned) sys);
+        printf("Testing color system: %s\n", pl_color_system_name(sys));
         struct pl_color_repr repr = {
             .levels = PL_COLOR_LEVELS_LIMITED,
             .sys = sys,
