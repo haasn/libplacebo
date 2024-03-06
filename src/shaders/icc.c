@@ -35,7 +35,7 @@ struct icc_priv {
     cmsHPROFILE profile;
     cmsHPROFILE approx; // approximation profile
     float a, b, scale; // approxmation tone curve parameters and scaling
-    cmsCIEXYZ black;
+    cmsCIEXYZ *white, black;
     float gamma_stddev;
     uint64_t lut_sig;
 };
@@ -254,11 +254,7 @@ static bool detect_csp(struct pl_icc_object_t *icc)
     }
     S = sqrt(S / (k - 1));
 
-    if (S > 0.5) {
-        PL_WARN(p, "Detected profile gamma (%.3f) very far from pure power "
-                "response (stddev=%.1f), suspected unusual or broken profile. "
-                "Using anyway, but results may be poor.", M, S);
-    } else if (!(M > 0)) {
+    if (M <= 0) {
         PL_ERR(p, "Arithmetic error in ICC profile gamma estimation? "
                "Please open an issue");
         return false;
@@ -273,7 +269,6 @@ static bool detect_contrast(struct pl_icc_object_t *icc,
                             struct pl_icc_params *params)
 {
     struct icc_priv *p = PL_PRIV(icc);
-    cmsCIEXYZ *white = cmsReadTag(p->profile, cmsSigLuminanceTag);
     enum pl_rendering_intent intent = params->intent;
     struct pl_hdr_metadata *hdr = &icc->csp.hdr;
 
@@ -297,21 +292,14 @@ static bool detect_contrast(struct pl_icc_object_t *icc,
         return false;
     }
 
-    if (white) {
-        PL_DEBUG(p, "Detected raw white point X=%.2f Y=%.2f Z=%.2f cd/m^2",
-                 white->X, white->Y, white->Z);
-    }
-    PL_DEBUG(p, "Detected raw black point X=%.6f%% Y=%.6f%% Z=%.6f%%",
-             p->black.X * 100, p->black.Y * 100, p->black.Z * 100);
-
     float max_luma = params->max_luma;
+    p->white = cmsReadTag(p->profile, cmsSigLuminanceTag);
     if (max_luma <= 0)
-        max_luma = white ? white->Y : PL_COLOR_SDR_WHITE;
+        max_luma = p->white ? p->white->Y : PL_COLOR_SDR_WHITE;
 
     hdr->max_luma = max_luma;
     hdr->min_luma = p->black.Y * max_luma;
     hdr->min_luma = PL_MAX(hdr->min_luma, 1e-6); // prevent true 0
-    PL_INFO(p, "Using ICC contrast %.0f:1", hdr->max_luma / hdr->min_luma);
     return true;
 }
 
@@ -423,9 +411,6 @@ static void infer_clut_size(struct pl_icc_object_t *icc)
         params->size_g = ceilf(factor * params->size_g);
         params->size_b = ceilf(factor * params->size_b);
     }
-
-    PL_INFO(p, "Chosen 3DLUT size: %dx%dx%d",
-            (int) params->size_r, (int) params->size_g, (int) params->size_b);
 }
 
 static bool icc_init(struct pl_icc_object_t *icc)
@@ -456,7 +441,8 @@ static bool icc_init(struct pl_icc_object_t *icc)
     if (!curve)
         return false;
 
-    const struct pl_raw_primaries *prim = pl_raw_primaries_get(icc->containing_primaries);
+    const struct pl_raw_primaries *prim =
+        pl_raw_primaries_get(icc->containing_primaries);
     cmsCIExyY wp_xyY = { prim->white.x, prim->white.y, 1.0 };
     cmsCIExyYTRIPLE prim_xyY = {
         .Red   = { prim->red.x,   prim->red.y,   1.0 },
@@ -497,6 +483,41 @@ static bool icc_init(struct pl_icc_object_t *icc)
         ));
     }
 
+    // Dump profile information
+    PL_INFO(p, "Opened ICC profile:");
+    if (p->white) {
+        PL_DEBUG(p, "    Raw white point: X=%.2f Y=%.2f Z=%.2f cd/m^2",
+                 p->white->X, p->white->Y, p->white->Z);
+    }
+    PL_DEBUG(p, "    Raw black point: X=%.6f%% Y=%.6f%% Z=%.6f%%",
+             p->black.X * 100, p->black.Y * 100, p->black.Z * 100);
+    PL_INFO(p,  "    Contrast = %.0f cd/m^2 : %.3f mcd/m^2 ≈ %.0f : 1",
+            icc->csp.hdr.max_luma, icc->csp.hdr.min_luma * 1000,
+            icc->csp.hdr.max_luma / icc->csp.hdr.min_luma);
+
+    if (icc->csp.primaries) {
+        PL_INFO(p, "    Detected primaries: %s",
+                pl_color_primaries_name(icc->csp.primaries));
+    } else {
+        const struct pl_raw_primaries *raw = &icc->csp.hdr.prim;
+        PL_DEBUG(p, "    Measured primaries:");
+        PL_DEBUG(p, "      White: x=%.6f, y=%.6f", raw->white.x, raw->white.y);
+        PL_DEBUG(p, "      Red:   x=%.3f, y=%.3f", raw->red.x, raw->red.y);
+        PL_DEBUG(p, "      Green: x=%.3f, y=%.3f", raw->green.x, raw->green.y);
+        PL_DEBUG(p, "      Blue:  x=%.3f, y=%.3f", raw->blue.x, raw->blue.y);
+        PL_INFO(p,  "    Containing primaries: %s",
+                pl_color_primaries_name(icc->containing_primaries));
+    }
+
+    if (icc->csp.transfer) {
+        PL_INFO(p, "    Transfer function: %s",
+                pl_color_transfer_name(icc->csp.transfer));
+    } else {
+        PL_INFO(p, "    Approximation gamma: %.3f (stddev %.1f%s)",
+                icc->gamma, p->gamma_stddev,
+                p->gamma_stddev > 0.5 ? ", inaccurate!" : "");
+    }
+
     return true;
 }
 
@@ -518,7 +539,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     }
 
     cmsSetLogErrorHandlerTHR(p->cms, error_callback);
-    PL_INFO(p, "Opening ICC profile..");
+    PL_DEBUG(p, "Opening new ICC profile");
     p->profile = cmsOpenProfileFromMemTHR(p->cms, profile->data, profile->len);
     if (!p->profile) {
         PL_ERR(p, "Failed opening ICC profile");
