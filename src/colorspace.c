@@ -467,6 +467,183 @@ bool pl_color_space_is_black_scaled(const struct pl_color_space *csp)
     pl_unreachable();
 }
 
+#define MAP3(...)                                                               \
+    do {                                                                        \
+        float X;                                                                \
+        for (int _i = 0; _i < 3; _i++) {                                        \
+            X = color[_i];                                                      \
+            color[_i] = __VA_ARGS__;                                            \
+        }                                                                       \
+    } while (0)
+
+void pl_color_linearize(const struct pl_color_space *csp, float color[3])
+{
+    if (csp->transfer == PL_COLOR_TRC_LINEAR)
+        return;
+
+    float csp_min, csp_max;
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = csp,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &csp_min,
+        .out_max    = &csp_max,
+    ));
+
+    MAP3(fmaxf(X, 0));
+
+    switch (csp->transfer) {
+    case PL_COLOR_TRC_SRGB:
+        MAP3(X > 0.04045f ? powf((X + 0.055f) / 1.055f, 2.4f)
+                          : X / 12.92f);
+        goto scale_out;
+    case PL_COLOR_TRC_BT_1886: {
+        const float lb = powf(csp_min, 1/2.4f);
+        const float lw = powf(csp_max, 1/2.4f);
+        const float a = powf(lw - lb, 2.4f);
+        const float b = lb / (lw - lb);
+        MAP3(a * powf(X + b, 2.4f));
+        return;
+    }
+    case PL_COLOR_TRC_GAMMA18: MAP3(powf(X, 1.8f)); goto scale_out;
+    case PL_COLOR_TRC_GAMMA20: MAP3(powf(X, 2.0f)); goto scale_out;
+    case PL_COLOR_TRC_UNKNOWN:
+    case PL_COLOR_TRC_GAMMA22: MAP3(powf(X, 2.2f)); goto scale_out;
+    case PL_COLOR_TRC_GAMMA24: MAP3(powf(X, 2.4f)); goto scale_out;
+    case PL_COLOR_TRC_GAMMA26: MAP3(powf(X, 2.6f)); goto scale_out;
+    case PL_COLOR_TRC_GAMMA28: MAP3(powf(X, 2.8f)); goto scale_out;
+    case PL_COLOR_TRC_PRO_PHOTO:
+        MAP3(X > 0.03125f ? powf(X, 1.8f) : X / 16);
+        goto scale_out;
+    case PL_COLOR_TRC_ST428:
+        MAP3(52.37f/48 * powf(X, 2.6f));
+        goto scale_out;
+    case PL_COLOR_TRC_PQ:
+        MAP3(powf(X, 1 / PQ_M2));
+        MAP3(fmaxf(X - PQ_C1, 0) / (PQ_C2 - PQ_C3 * X));
+        MAP3(10000 / PL_COLOR_SDR_WHITE * powf(X, 1 / PQ_M1));
+        return;
+    case PL_COLOR_TRC_HLG: {
+        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
+        const pl_matrix3x3 rgb2xyz =
+            pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
+        const float *coef = rgb2xyz.m[1];
+        // OETF^-1
+        MAP3((1 - b) * X + b);
+        MAP3(X > 0.5f ? expf((X - HLG_C) / HLG_A) + HLG_B
+                      : 4 * X * X);
+        // OOTF
+        float luma = coef[0] * color[0] + coef[1] * color[1] + coef[2] * color[2];
+        luma = powf(fmaxf(luma / 12, 0), y - 1);
+        MAP3(luma * X / 12);
+        return;
+    }
+    case PL_COLOR_TRC_V_LOG:
+        MAP3(X >= 0.181f ? powf(10, (X - VLOG_D) / VLOG_C) - VLOG_B
+                         : (X - 0.125f) / 5.6f);
+        return;
+    case PL_COLOR_TRC_S_LOG1:
+        MAP3(powf(10, (X - SLOG_C) / SLOG_A) - SLOG_B);
+        return;
+    case PL_COLOR_TRC_S_LOG2:
+        MAP3(X >= SLOG_Q ? (powf(10, (X - SLOG_C) / SLOG_A) - SLOG_B) / SLOG_K2
+                         : (X - SLOG_Q) / SLOG_P);
+        return;
+    case PL_COLOR_TRC_LINEAR:
+    case PL_COLOR_TRC_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+
+scale_out:
+    MAP3((csp_max - csp_min) * X + csp_min);
+}
+
+void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
+{
+    if (csp->transfer == PL_COLOR_TRC_LINEAR)
+        return;
+
+    float csp_min, csp_max;
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = csp,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &csp_min,
+        .out_max    = &csp_max,
+    ));
+
+    if (pl_color_space_is_black_scaled(csp) && csp->transfer != PL_COLOR_TRC_HLG)
+        MAP3((X - csp_min) / (csp_max - csp_min));
+
+    MAP3(fmaxf(X, 0));
+
+    switch (csp->transfer) {
+    case PL_COLOR_TRC_SRGB:
+        MAP3(X >= 0.0031308f ? 1.055f * powf(X, 1/2.4f) - 0.055f
+                             : 12.92f * X);
+        return;
+    case PL_COLOR_TRC_BT_1886: {
+        const float lb = powf(csp_min, 1/2.4f);
+        const float lw = powf(csp_max, 1/2.4f);
+        const float a = powf(lw - lb, 2.4f);
+        const float b = lb / (lw - lb);
+        MAP3(powf(X / a, 1/2.4f) - b);
+            return;
+    }
+    case PL_COLOR_TRC_GAMMA18: MAP3(powf(X, 1/1.8f)); return;
+    case PL_COLOR_TRC_GAMMA20: MAP3(powf(X, 1/2.0f)); return;
+    case PL_COLOR_TRC_UNKNOWN:
+    case PL_COLOR_TRC_GAMMA22: MAP3(powf(X, 1/2.2f)); return;
+    case PL_COLOR_TRC_GAMMA24: MAP3(powf(X, 1/2.4f)); return;
+    case PL_COLOR_TRC_GAMMA26: MAP3(powf(X, 1/2.6f)); return;
+    case PL_COLOR_TRC_GAMMA28: MAP3(powf(X, 1/2.8f)); return;
+    case PL_COLOR_TRC_ST428:
+        MAP3(powf(X * 48/52.37f, 1/2.6f));
+        return;
+    case PL_COLOR_TRC_PRO_PHOTO:
+        MAP3(X >= 0.001953f ? powf(X, 1/1.8f) : 16 * X);
+        return;
+    case PL_COLOR_TRC_PQ:
+        MAP3(powf(X * PL_COLOR_SDR_WHITE / 10000, PQ_M1));
+        MAP3(powf((PQ_C1 + PQ_C2 * X) / (1 + PQ_C3 * X), PQ_M2));
+        return;
+    case PL_COLOR_TRC_HLG: {
+        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
+        const pl_matrix3x3 rgb2xyz =
+            pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
+        const float *coef = rgb2xyz.m[1];
+        // OOTF^-1
+        float luma = coef[0] * color[0] + coef[1] * color[1] + coef[2] * color[2];
+        luma = fmaxf(1e-6f, powf(luma / csp_max, (1 - y) / y));
+        MAP3(12 / csp_max * luma * X);
+        // OETF
+        MAP3(X > 1 ? HLG_A * logf(X - HLG_B) + HLG_C : 0.5f * sqrtf(X));
+        MAP3((X - b) / (1 - b));
+        return;
+    }
+    case PL_COLOR_TRC_V_LOG:
+        MAP3(X >= 0.01f ? VLOG_C * log10f(X + VLOG_B) + VLOG_D
+                        : 5.6f * X + 0.125f);
+        return;
+    case PL_COLOR_TRC_S_LOG1:
+        MAP3(SLOG_A * log10f(X + SLOG_B) + SLOG_C);
+        return;
+    case PL_COLOR_TRC_S_LOG2:
+        MAP3(X >= 0 ? SLOG_A * log10f(SLOG_B * X + SLOG_C)
+                    : SLOG_P * X + SLOG_Q);
+        return;
+    case PL_COLOR_TRC_LINEAR:
+    case PL_COLOR_TRC_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
 void pl_color_space_merge(struct pl_color_space *orig,
                           const struct pl_color_space *new)
 {

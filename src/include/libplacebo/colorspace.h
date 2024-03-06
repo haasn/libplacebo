@@ -452,6 +452,16 @@ PL_API bool pl_color_space_is_hdr(const struct pl_color_space *csp);
 // well as for HLG.
 PL_API bool pl_color_space_is_black_scaled(const struct pl_color_space *csp);
 
+// Linearize/delinearize input color, given a specified color space. In essence,
+// this corresponds to the ITU-R EOTF and its inverse (not the OETF).
+// The linear color will be scaled so that 1.0 is the diffuse white. The
+// non-linear color will be scaled so that 1.0 is the maximum representable
+// value.
+//
+// Note: This is a no-op if csp->transfer == PL_COLOR_TRC_LINEAR.
+PL_API void pl_color_linearize(const struct pl_color_space *csp, float color[3]);
+PL_API void pl_color_delinearize(const struct pl_color_space *csp, float color[3]);
+
 struct pl_nominal_luma_params {
     // The color space to infer luminance from
     const struct pl_color_space *color;

@@ -60,13 +60,12 @@ PL_API void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 // Note: For DCDM XYZ encoding input is expected to be linear
 PL_API void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr);
 
-// Linearize (expand) `vec4 color`, given a specified color space. In essence,
-// this corresponds to the ITU-R EOTF.
+// Linearize (expand) `vec4 color`, given a specified color space. Shader
+// equivalent of `pl_color_linearize`.
 PL_API void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp);
 
-// Delinearize (compress), given a color space as output. This loosely
-// corresponds to the inverse EOTF (not the OETF) in ITU-R terminology, again
-// assuming a reference monitor.
+// Delinearize (compress), given a color space as output. Shader equivalent
+// of `pl_color_delinearize`.
 PL_API void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp);
 
 struct pl_sigmoid_params {
