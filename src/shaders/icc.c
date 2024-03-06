@@ -269,12 +269,14 @@ static bool detect_csp(struct pl_icc_object_t *icc)
     return true;
 }
 
-static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
-                            struct pl_icc_params *params, float max_luma)
+static bool detect_contrast(struct pl_icc_object_t *icc,
+                            struct pl_icc_params *params)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsCIEXYZ *white = cmsReadTag(p->profile, cmsSigLuminanceTag);
     enum pl_rendering_intent intent = params->intent;
+    struct pl_hdr_metadata *hdr = &icc->csp.hdr;
+
     /* LittleCMS refuses to detect an intent in absolute colorimetric intent,
      * so fall back to relative colorimetric since we only care about the
      * brightness value here */
@@ -288,7 +290,7 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
          */
         if (cmsGetEncodedICCversion(p->profile) >= 0x4000000 && intent != PL_INTENT_PERCEPTUAL) {
             params->intent = PL_INTENT_PERCEPTUAL;
-            return detect_contrast(icc, hdr, params, max_luma);
+            return detect_contrast(icc, params);
         }
 
         PL_ERR(p, "Failed detecting ICC profile black point!");
@@ -302,6 +304,7 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
     PL_DEBUG(p, "Detected raw black point X=%.6f%% Y=%.6f%% Z=%.6f%%",
              p->black.X * 100, p->black.Y * 100, p->black.Z * 100);
 
+    float max_luma = params->max_luma;
     if (max_luma <= 0)
         max_luma = white ? white->Y : PL_COLOR_SDR_WHITE;
 
@@ -432,7 +435,7 @@ static bool icc_init(struct pl_icc_object_t *icc)
     if (params->intent < 0 || params->intent > PL_INTENT_ABSOLUTE_COLORIMETRIC)
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
-    if (!detect_contrast(icc, &icc->csp.hdr, params, params->max_luma))
+    if (!detect_contrast(icc, params))
         return false;
     if (!detect_csp(icc))
         return false;
