@@ -87,7 +87,7 @@ void pl_icc_close(pl_icc_object *picc)
     pl_free_ptr((void **) picc);
 }
 
-static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
+static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
                        float *out_gamma)
 {
     struct icc_priv *p = PL_PRIV(icc);
@@ -169,10 +169,45 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
     cmsDeleteTransform(tf);
 
     // Read primaries from transformed RGBW values
-    prim->red   = pl_cie_from_XYZ(dst[RED].X, dst[RED].Y, dst[RED].Z);
-    prim->green = pl_cie_from_XYZ(dst[GREEN].X, dst[GREEN].Y, dst[GREEN].Z);
-    prim->blue  = pl_cie_from_XYZ(dst[BLUE].X, dst[BLUE].Y, dst[BLUE].Z);
-    prim->white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
+    csp->hdr.prim.red   = pl_cie_from_XYZ(dst[RED].X, dst[RED].Y, dst[RED].Z);
+    csp->hdr.prim.green = pl_cie_from_XYZ(dst[GREEN].X, dst[GREEN].Y, dst[GREEN].Z);
+    csp->hdr.prim.blue  = pl_cie_from_XYZ(dst[BLUE].X, dst[BLUE].Y, dst[BLUE].Z);
+    csp->hdr.prim.white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
+
+    // Detect match for known transfer functions
+    const float contrast = csp->hdr.max_luma / csp->hdr.min_luma;
+    float best_errsum = 0.0f;
+    for (enum pl_color_transfer trc = 1; trc < PL_COLOR_TRC_COUNT; trc++) {
+        struct pl_color_space ref = {
+            .primaries = csp->primaries,
+            .transfer = trc,
+            .hdr.max_luma = PL_COLOR_SDR_WHITE,
+            .hdr.min_luma = PL_COLOR_SDR_WHITE * contrast,
+        };
+
+        float errsum = 0.0f;
+        for (int i = RAMP; i < PL_ARRAY_SIZE(dst); i++) {
+            const float x = test[i][0] / 255.0;
+            float color[3] = { x, x, x };
+            pl_color_linearize(&ref, color);
+            const float delta = dst[i].Y - color[0];
+            errsum += delta * delta;
+        }
+        const int N = PL_ARRAY_SIZE(dst) - RAMP;
+        const float tolerance = 5e-3f; // 0.5% stddev(error), around JND
+        PL_WARN(p, "TRC %s -> stddev %f", pl_color_transfer_name(trc),
+                 sqrtf(errsum / N));
+        if (errsum > N * PL_SQUARE(tolerance))
+            continue;
+
+        if (!csp->transfer || errsum < best_errsum) {
+            csp->transfer = trc;
+            best_errsum = errsum;
+        }
+    }
+
+    // TODO: re-use pl_shader_linearize() and a built-in parametric
+    // profile, instead of a pure power gamma approximation?
 
     // Rough estimate of overall gamma and starting point for curve black point
     const float y_approx = dst[GRAY].Y ? log(dst[GRAY].Y) / log(0.5) : 1.0f;
@@ -377,9 +412,9 @@ static bool icc_init(struct pl_icc_object_t *icc)
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
     struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
-    if (!detect_csp(icc, out_prim, &icc->gamma))
-        return false;
     if (!detect_contrast(icc, &icc->csp.hdr, params, params->max_luma))
+        return false;
+    if (!detect_csp(icc, &icc->csp, &icc->gamma))
         return false;
     infer_clut_size(icc);
 
