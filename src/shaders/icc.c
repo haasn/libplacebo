@@ -88,7 +88,7 @@ void pl_icc_close(pl_icc_object *picc)
 }
 
 static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
-                       float *out_gamma)
+                       float *out_gamma, enum pl_color_primaries *containing_prim)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsHTRANSFORM tf;
@@ -173,6 +173,28 @@ static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
     csp->hdr.prim.green = pl_cie_from_XYZ(dst[GREEN].X, dst[GREEN].Y, dst[GREEN].Z);
     csp->hdr.prim.blue  = pl_cie_from_XYZ(dst[BLUE].X, dst[BLUE].Y, dst[BLUE].Z);
     csp->hdr.prim.white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
+
+    // Detect best containing gamut
+    const struct pl_raw_primaries *best = NULL;
+    for (enum pl_color_primaries prim = 1; prim < PL_COLOR_PRIM_COUNT; prim++) {
+        const struct pl_raw_primaries *raw = pl_raw_primaries_get(prim);
+        if (!icc->csp.primaries && pl_raw_primaries_similar(raw, &csp->hdr.prim)) {
+            *containing_prim = csp->primaries = prim;
+            break;
+        }
+
+        if (pl_primaries_superset(raw, &csp->hdr.prim) &&
+            (!best || pl_primaries_superset(best, raw)))
+        {
+            *containing_prim = prim;
+            best = raw;
+        }
+    }
+
+    if (!best) {
+        PL_WARN(p, "ICC profile too wide to handle, colors may be clipped!");
+        *containing_prim = PL_COLOR_PRIM_ACES_AP0;
+    }
 
     // Detect match for known transfer functions
     const float contrast = csp->hdr.max_luma / csp->hdr.min_luma;
@@ -411,36 +433,11 @@ static bool icc_init(struct pl_icc_object_t *icc)
     if (params->intent < 0 || params->intent > PL_INTENT_ABSOLUTE_COLORIMETRIC)
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
-    struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
     if (!detect_contrast(icc, &icc->csp.hdr, params, params->max_luma))
         return false;
-    if (!detect_csp(icc, &icc->csp, &icc->gamma))
+    if (!detect_csp(icc, &icc->csp, &icc->gamma, &icc->containing_primaries))
         return false;
     infer_clut_size(icc);
-
-    const struct pl_raw_primaries *best = NULL;
-    for (enum pl_color_primaries prim = 1; prim < PL_COLOR_PRIM_COUNT; prim++) {
-        const struct pl_raw_primaries *raw = pl_raw_primaries_get(prim);
-        if (!icc->csp.primaries && pl_raw_primaries_similar(raw, out_prim)) {
-            icc->containing_primaries = prim;
-            icc->csp.primaries = prim;
-            best = raw;
-            break;
-        }
-
-        if (pl_primaries_superset(raw, out_prim) &&
-            (!best || pl_primaries_superset(best, raw)))
-        {
-            icc->containing_primaries = prim;
-            best = raw;
-        }
-    }
-
-    if (!best) {
-        PL_WARN(p, "ICC profile too wide to handle, colors may be clipped!");
-        icc->containing_primaries = PL_COLOR_PRIM_ACES_AP0;
-        best = pl_raw_primaries_get(icc->containing_primaries);
-    }
 
     // Create approximation profile. Use a tone-curve based on a BT.1886-style
     // pure power curve, with an approximation gamma matched to the ICC
@@ -457,11 +454,12 @@ static bool icc_init(struct pl_icc_object_t *icc)
     if (!curve)
         return false;
 
-    cmsCIExyY wp_xyY = { best->white.x, best->white.y, 1.0 };
+    const struct pl_raw_primaries *prim = pl_raw_primaries_get(icc->containing_primaries);
+    cmsCIExyY wp_xyY = { prim->white.x, prim->white.y, 1.0 };
     cmsCIExyYTRIPLE prim_xyY = {
-        .Red   = { best->red.x,   best->red.y,   1.0 },
-        .Green = { best->green.x, best->green.y, 1.0 },
-        .Blue  = { best->blue.x,  best->blue.y,  1.0 },
+        .Red   = { prim->red.x,   prim->red.y,   1.0 },
+        .Green = { prim->green.x, prim->green.y, 1.0 },
+        .Blue  = { prim->blue.x,  prim->blue.y,  1.0 },
     };
 
     p->approx = cmsCreateRGBProfileTHR(p->cms, &wp_xyY, &prim_xyY,
