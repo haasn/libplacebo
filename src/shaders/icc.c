@@ -87,8 +87,7 @@ void pl_icc_close(pl_icc_object *picc)
     pl_free_ptr((void **) picc);
 }
 
-static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
-                       float *out_gamma, enum pl_color_primaries *containing_prim)
+static bool detect_csp(struct pl_icc_object_t *icc)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsHTRANSFORM tf;
@@ -169,39 +168,40 @@ static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
     cmsDeleteTransform(tf);
 
     // Read primaries from transformed RGBW values
-    csp->hdr.prim.red   = pl_cie_from_XYZ(dst[RED].X, dst[RED].Y, dst[RED].Z);
-    csp->hdr.prim.green = pl_cie_from_XYZ(dst[GREEN].X, dst[GREEN].Y, dst[GREEN].Z);
-    csp->hdr.prim.blue  = pl_cie_from_XYZ(dst[BLUE].X, dst[BLUE].Y, dst[BLUE].Z);
-    csp->hdr.prim.white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
+    struct pl_raw_primaries *measured = &icc->csp.hdr.prim;
+    measured->red   = pl_cie_from_XYZ(dst[RED].X, dst[RED].Y, dst[RED].Z);
+    measured->green = pl_cie_from_XYZ(dst[GREEN].X, dst[GREEN].Y, dst[GREEN].Z);
+    measured->blue  = pl_cie_from_XYZ(dst[BLUE].X, dst[BLUE].Y, dst[BLUE].Z);
+    measured->white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
 
     // Detect best containing gamut
     const struct pl_raw_primaries *best = NULL;
     for (enum pl_color_primaries prim = 1; prim < PL_COLOR_PRIM_COUNT; prim++) {
         const struct pl_raw_primaries *raw = pl_raw_primaries_get(prim);
-        if (!icc->csp.primaries && pl_raw_primaries_similar(raw, &csp->hdr.prim)) {
-            *containing_prim = csp->primaries = prim;
+        if (!icc->csp.primaries && pl_raw_primaries_similar(raw, measured)) {
+            icc->containing_primaries = icc->csp.primaries = prim;
             break;
         }
 
-        if (pl_primaries_superset(raw, &csp->hdr.prim) &&
+        if (pl_primaries_superset(raw, measured) &&
             (!best || pl_primaries_superset(best, raw)))
         {
-            *containing_prim = prim;
+            icc->containing_primaries = prim;
             best = raw;
         }
     }
 
     if (!best) {
         PL_WARN(p, "ICC profile too wide to handle, colors may be clipped!");
-        *containing_prim = PL_COLOR_PRIM_ACES_AP0;
+        icc->containing_primaries = PL_COLOR_PRIM_ACES_AP0;
     }
 
     // Detect match for known transfer functions
-    const float contrast = csp->hdr.max_luma / csp->hdr.min_luma;
+    const float contrast = icc->csp.hdr.max_luma / icc->csp.hdr.min_luma;
     float best_errsum = 0.0f;
     for (enum pl_color_transfer trc = 1; trc < PL_COLOR_TRC_COUNT; trc++) {
         struct pl_color_space ref = {
-            .primaries = csp->primaries,
+            .primaries = icc->csp.primaries,
             .transfer = trc,
             .hdr.max_luma = PL_COLOR_SDR_WHITE,
             .hdr.min_luma = PL_COLOR_SDR_WHITE * contrast,
@@ -222,8 +222,8 @@ static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
         if (errsum > N * PL_SQUARE(tolerance))
             continue;
 
-        if (!csp->transfer || errsum < best_errsum) {
-            csp->transfer = trc;
+        if (!icc->csp.transfer || errsum < best_errsum) {
+            icc->csp.transfer = trc;
             best_errsum = errsum;
         }
     }
@@ -254,7 +254,6 @@ static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
     }
     S = sqrt(S / (k - 1));
 
-    PL_INFO(p, "Detected profile approximation gamma %.3f", M);
     if (S > 0.5) {
         PL_WARN(p, "Detected profile gamma (%.3f) very far from pure power "
                 "response (stddev=%.1f), suspected unusual or broken profile. "
@@ -265,7 +264,7 @@ static bool detect_csp(pl_icc_object icc, struct pl_color_space *csp,
         return false;
     }
 
-    *out_gamma = M;
+    icc->gamma = M;
     p->gamma_stddev = S;
     return true;
 }
@@ -435,7 +434,7 @@ static bool icc_init(struct pl_icc_object_t *icc)
 
     if (!detect_contrast(icc, &icc->csp.hdr, params, params->max_luma))
         return false;
-    if (!detect_csp(icc, &icc->csp, &icc->gamma, &icc->containing_primaries))
+    if (!detect_csp(icc))
         return false;
     infer_clut_size(icc);
 
