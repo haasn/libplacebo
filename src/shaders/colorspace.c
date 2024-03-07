@@ -1666,13 +1666,6 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         return;
 
     struct pl_color_space src = args->src, dst = args->dst;
-    pl_color_space_infer_map(&src, &dst);
-    if (pl_color_space_equal(&src, &dst)) {
-        if (args->prelinearized)
-            pl_shader_delinearize(sh, &dst);
-        return;
-    }
-
     struct sh_color_map_obj *obj = NULL;
     if (args->state) {
         pl_get_detected_hdr_metadata(*args->state, &src.hdr);
@@ -1680,6 +1673,13 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
                      sh_color_map_uninit);
         if (!obj)
             return;
+    }
+
+    pl_color_space_infer_map(&src, &dst);
+    if (pl_color_space_equal(&src, &dst)) {
+        if (args->prelinearized)
+            pl_shader_delinearize(sh, &dst);
+        return;
     }
 
     params = PL_DEF(params, &pl_color_map_default_params);
