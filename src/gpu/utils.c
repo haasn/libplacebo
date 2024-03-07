@@ -639,8 +639,9 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     newparams.ptr = NULL;
     newparams.buf = buf;
 
+    bool import_handle = buf->params.import_handle;
     // If the transfer is asynchronous, propagate our host read asynchronously
-    if (params->callback && !buf->params.import_handle) {
+    if (params->callback && !import_handle) {
         newparams.callback = pbo_download_cb;
         newparams.priv = pl_alloc_struct(NULL, struct pbo_cb_ctx, {
             .gpu = gpu,
@@ -662,7 +663,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     }
 
     bool ok;
-    if (buf->params.import_handle) {
+    if (import_handle) {
         // Buffer download completion already means the host pointer contains
         // the valid data, no more need to copy. (Note: this applies even for
         // asynchronous downloads)
