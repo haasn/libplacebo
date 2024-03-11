@@ -2936,11 +2936,15 @@ static void pass_fix_frames(struct pass_state *pass)
     if (image && image->icc) {
         image->color.primaries = image->icc->containing_primaries;
         image->color.hdr = image->icc->csp.hdr;
+        if (image->icc->csp.transfer)
+            image->color.transfer = image->icc->csp.transfer;
     }
 
     if (target->icc) {
         target->color.primaries = target->icc->containing_primaries;
         target->color.hdr = target->icc->csp.hdr;
+        if (target->icc->csp.transfer)
+            target->color.transfer = target->icc->csp.transfer;
     }
 
     // Infer the target color space info based on the image's
