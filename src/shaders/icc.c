@@ -217,8 +217,6 @@ static bool detect_csp(struct pl_icc_object_t *icc)
         }
         const int N = PL_ARRAY_SIZE(dst) - RAMP;
         const float tolerance = 5e-3f; // 0.5% stddev(error), around JND
-        PL_WARN(p, "TRC %s -> stddev %f", pl_color_transfer_name(trc),
-                 sqrtf(errsum / N));
         if (errsum > N * PL_SQUARE(tolerance))
             continue;
 
