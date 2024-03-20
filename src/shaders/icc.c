@@ -180,6 +180,7 @@ static bool detect_csp(struct pl_icc_object_t *icc)
         const struct pl_raw_primaries *raw = pl_raw_primaries_get(prim);
         if (!icc->csp.primaries && pl_raw_primaries_similar(raw, measured)) {
             icc->containing_primaries = icc->csp.primaries = prim;
+            best = raw;
             break;
         }
 
