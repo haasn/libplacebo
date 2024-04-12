@@ -19,7 +19,9 @@
 
 #define VK_NO_PROTOTYPES
 #define VK_ENABLE_BETA_EXTENSIONS // for VK_KHR_portability_subset
+#ifdef __APPLE__
 #define VK_USE_PLATFORM_METAL_EXT
+#endif
 
 #include "../common.h"
 #include "../log.h"
