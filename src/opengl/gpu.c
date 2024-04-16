@@ -160,8 +160,12 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
             geti(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &glsl->max_group_size[i]);
     }
 
-    if (gl_test_ext(gpu, "GL_ARB_texture_gather", 40, 0)) {
-        get(GL_MAX_PROGRAM_TEXTURE_GATHER_COMPONENTS_ARB, &p->gather_comps);
+    if (gl_test_ext(gpu, "GL_ARB_texture_gather", 40, 31) &&
+        glsl->version >= (p->gles_ver ? 310 : 400)) {
+        if (p->gles_ver)
+            p->gather_comps = 4;
+        else
+            get(GL_MAX_PROGRAM_TEXTURE_GATHER_COMPONENTS_ARB, &p->gather_comps);
         get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &glsl->min_gather_offset);
         get(GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &glsl->max_gather_offset);
     }
@@ -231,11 +235,11 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     }
 
     // Cache some internal capability checks
-    p->has_vao = gl_test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
+    p->has_vao = gl_test_ext(gpu, "GL_ARB_vertex_array_object", 30, 30);
     p->has_invalidate_fb = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
     p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 33, 0);
-    p->has_storage = gl_test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0);
+    p->has_storage = gl_test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 31);
     p->has_readback = true;
 
     if (p->has_readback && p->gles_ver) {

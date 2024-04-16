@@ -359,7 +359,7 @@ static void generate_shaders(pl_dispatch dp,
         }
     }
 
-    if (has_img)
+    if (has_img && !gpu->glsl.gles)
         ADD(pre, "#extension GL_ARB_shader_image_load_store : enable\n");
     if (has_ubo)
         ADD(pre, "#extension GL_ARB_uniform_buffer_object : enable\n");
@@ -376,7 +376,7 @@ static void generate_shaders(pl_dispatch dp,
     }
     if (has_nofmt)
         ADD(pre, "#extension GL_EXT_shader_image_load_formatted : enable\n");
-    if (has_gather)
+    if (has_gather && !gpu->glsl.gles)
         ADD(pre, "#extension GL_ARB_texture_gather : enable\n");
 
     if (gpu->glsl.gles) {
