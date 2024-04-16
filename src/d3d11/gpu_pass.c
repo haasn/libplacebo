@@ -508,7 +508,7 @@ struct d3d11_cache_header {
     size_t comp_bc_len;
 };
 
-static inline uint64_t pass_cache_signature(pl_gpu gpu, uint64_t *key,
+static inline uint64_t pass_cache_signature(pl_gpu gpu,
                                             const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
@@ -518,10 +518,6 @@ static inline uint64_t pass_cache_signature(pl_gpu gpu, uint64_t *key,
     pl_hash_merge(&hash, pl_str0_hash(params->glsl_shader));
     if (params->type == PL_PASS_RASTER)
         pl_hash_merge(&hash, pl_str0_hash(params->vertex_shader));
-
-    // store hash based on the shader bodys as the lookup key
-    if (key)
-        *key = hash;
 
     // and add the compiler version information into the verification signature
     pl_hash_merge(&hash, p->spirv->signature);
@@ -563,7 +559,7 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
     if (!gpu_cache)
         return false;
 
-    *out_sig = pass_cache_signature(gpu, &obj->key, params);
+    *out_sig = obj->key = pass_cache_signature(gpu, params);
     if (!pl_cache_get(gpu_cache, obj))
         return false;
 
