@@ -238,7 +238,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     p->has_vao = gl_test_ext(gpu, "GL_ARB_vertex_array_object", 30, 30);
     p->has_invalidate_fb = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
-    p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 33, 0);
+    p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 30, 30);
     p->has_storage = gl_test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 31);
     p->has_readback = true;
 
@@ -550,17 +550,25 @@ static uint64_t gl_timer_query(pl_gpu gpu, pl_timer timer)
     if (timer->index_read == timer->index_write)
         return 0; // no more unprocessed results
 
+    struct pl_gl *p = PL_PRIV(gpu);
+
     const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return 0;
 
     uint64_t res = 0;
     GLuint query = timer->query[timer->index_read];
-    int avail = 0;
-    gl->GetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &avail);
+    GLuint avail = 0;
+    gl->GetQueryObjectuiv(query, GL_QUERY_RESULT_AVAILABLE, &avail);
     if (!avail)
         goto done;
-    gl->GetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
+    if (p->gles_ver || p->gl_ver < 33) {
+        GLuint tmp = 0;
+        gl->GetQueryObjectuiv(query, GL_QUERY_RESULT, &tmp);
+        res = tmp;
+    } else {
+        gl->GetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
+    }
 
     timer->index_read = (timer->index_read + 1) % QUERY_OBJECT_NUM;
     // fall through
