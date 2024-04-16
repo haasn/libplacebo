@@ -119,11 +119,13 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     p->gles_ver = glsl->gles ? ver : 0;
 
     // If possible, query the GLSL version from the implementation
-    const char *glslver = (char *) gl->GetString(GL_SHADING_LANGUAGE_VERSION);
-    if (glslver) {
-        PL_INFO(gpu, "    GL_SHADING_LANGUAGE_VERSION: %s", glslver);
+    const char *glslver_p = (char *) gl->GetString(GL_SHADING_LANGUAGE_VERSION);
+    pl_str glslver = pl_str0(glslver_p);
+    if (glslver.len) {
+        PL_INFO(gpu, "    GL_SHADING_LANGUAGE_VERSION: %.*s", PL_STR_FMT(glslver));
+        pl_str_eatstart0(&glslver, "OpenGL ES GLSL ES ");
         int major = 0, minor = 0;
-        if (sscanf(glslver, "%d.%d", &major, &minor) == 2)
+        if (pl_str_sscanf(glslver, "%d.%d", &major, &minor) == 2)
             glsl->version = major * 100 + minor;
     }
 
