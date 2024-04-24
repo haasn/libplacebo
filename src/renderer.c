@@ -1740,20 +1740,21 @@ static bool pass_read_image(struct pass_state *pass)
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0.
     // Additionally, drop anamorphic subpixel mismatches.
+    const pl_rect2df ref_rc = ref->img.rect;
     pl_rect2d ref_rounded;
-    ref_rounded.x0 = truncf(ref->img.rect.x0);
-    ref_rounded.y0 = truncf(ref->img.rect.y0);
-    ref_rounded.x1 = ref_rounded.x0 + roundf(pl_rect_w(ref->img.rect));
-    ref_rounded.y1 = ref_rounded.y0 + roundf(pl_rect_h(ref->img.rect));
+    ref_rounded.x0 = truncf(ref_rc.x0);
+    ref_rounded.y0 = truncf(ref_rc.y0);
+    ref_rounded.x1 = ref_rounded.x0 + roundf(pl_rect_w(ref_rc));
+    ref_rounded.y1 = ref_rounded.y0 + roundf(pl_rect_h(ref_rc));
 
     PL_TRACE(rr, "Rounded reference rect: {%d %d %d %d}",
              ref_rounded.x0, ref_rounded.y0,
              ref_rounded.x1, ref_rounded.y1);
 
-    float off_x = ref->img.rect.x0 - ref_rounded.x0,
-          off_y = ref->img.rect.y0 - ref_rounded.y0,
-          stretch_x = pl_rect_w(ref_rounded) / pl_rect_w(ref->img.rect),
-          stretch_y = pl_rect_h(ref_rounded) / pl_rect_h(ref->img.rect);
+    float off_x = ref_rc.x0 - ref_rounded.x0,
+          off_y = ref_rc.y0 - ref_rounded.y0,
+          stretch_x = pl_rect_w(ref_rounded) / pl_rect_w(ref_rc),
+          stretch_y = pl_rect_h(ref_rounded) / pl_rect_h(ref_rc);
 
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
@@ -1761,8 +1762,8 @@ static bool pass_read_image(struct pass_state *pass)
         if (!st->type)
             continue;
 
-        float scale_x = pl_rect_w(st->img.rect) / pl_rect_w(ref->img.rect),
-              scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect),
+        float scale_x = pl_rect_w(st->img.rect) / pl_rect_w(ref_rc),
+              scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref_rc),
               base_x = st->img.rect.x0 - scale_x * off_x,
               base_y = st->img.rect.y0 - scale_y * off_y;
 
@@ -1845,8 +1846,8 @@ static bool pass_read_image(struct pass_state *pass)
         .rect   = {
             off_x,
             off_y,
-            off_x + pl_rect_w(ref->img.rect),
-            off_y + pl_rect_h(ref->img.rect),
+            off_x + pl_rect_w(ref_rc),
+            off_y + pl_rect_h(ref_rc),
         },
     };
 
