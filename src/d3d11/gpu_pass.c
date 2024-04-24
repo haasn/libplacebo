@@ -494,7 +494,6 @@ error:;
 }
 
 struct d3d11_cache_header {
-    uint64_t hash;
     bool num_workgroups_used;
     int num_main_cbvs;
     int num_main_srvs;
@@ -551,15 +550,15 @@ static inline size_t cache_payload_size(struct d3d11_cache_header *header)
 
 static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
                                      const struct pl_pass_params *params,
-                                     pl_cache_obj *obj, uint64_t *out_sig,
-                                     pl_str *vert_bc, pl_str *frag_bc, pl_str *comp_bc)
+                                     pl_cache_obj *obj, pl_str *vert_bc,
+                                     pl_str *frag_bc, pl_str *comp_bc)
 {
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     const pl_cache gpu_cache = pl_gpu_cache(gpu);
     if (!gpu_cache)
         return false;
 
-    *out_sig = obj->key = pass_cache_signature(gpu, params);
+    obj->key = pass_cache_signature(gpu, params);
     if (!pl_cache_get(gpu_cache, obj))
         return false;
 
@@ -569,9 +568,6 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
 
     struct d3d11_cache_header *header = (struct d3d11_cache_header *) cache.buf;
     cache = pl_str_drop(cache, sizeof(*header));
-
-    if (header->hash != *out_sig)
-        return false;
 
     // determine required cache size before reading anything
     size_t required = cache_payload_size(header);
@@ -613,9 +609,8 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
 }
 
 static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass_t *pass,
-                                       uint64_t key, uint64_t sig,
-                                       const pl_str *vs_str, const pl_str *ps_str,
-                                       const pl_str *cs_str)
+                                       uint64_t key, const pl_str *vs_str,
+                                       const pl_str *ps_str, const pl_str *cs_str)
 {
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     const pl_cache gpu_cache = pl_gpu_cache(gpu);
@@ -623,7 +618,6 @@ static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass_t *pass,
         return;
 
     struct d3d11_cache_header header = {
-        .hash = sig,
         .num_workgroups_used = pass_p->num_workgroups_used,
         .num_main_cbvs = pass_p->main.cbvs.num,
         .num_main_srvs = pass_p->main.srvs.num,
@@ -695,10 +689,9 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass_t *pass,
     pl_str ps_str = {0};
     D3D11_INPUT_ELEMENT_DESC *in_descs = NULL;
     pl_cache_obj obj = {0};
-    uint64_t sig = 0;
     bool success = false;
 
-    if (d3d11_use_cached_program(gpu, pass, params, &obj, &sig, &vs_str, &ps_str, NULL))
+    if (d3d11_use_cached_program(gpu, pass, params, &obj, &vs_str, &ps_str, NULL))
         PL_DEBUG(gpu, "Using cached DXBC shaders");
 
     pl_assert((vs_str.len == 0) == (ps_str.len == 0));
@@ -773,7 +766,7 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass_t *pass,
     }
     D3D(ID3D11Device_CreateBlendState(p->dev, &bdesc, &pass_p->bstate));
 
-    d3d11_update_program_cache(gpu, pass, obj.key, sig, &vs_str, &ps_str, NULL);
+    d3d11_update_program_cache(gpu, pass, obj.key, &vs_str, &ps_str, NULL);
 
     success = true;
 error:
@@ -793,10 +786,9 @@ static bool pass_create_compute(pl_gpu gpu, struct pl_pass_t *pass,
     ID3DBlob *cs_blob = NULL;
     pl_str cs_str = {0};
     pl_cache_obj obj = {0};
-    uint64_t sig = 0;
     bool success = false;
 
-    if (d3d11_use_cached_program(gpu, pass, params, &obj, &sig, NULL, NULL, &cs_str))
+    if (d3d11_use_cached_program(gpu, pass, params, &obj, NULL, NULL, &cs_str))
         PL_DEBUG(gpu, "Using cached DXBC shader");
 
     if (cs_str.len == 0) {
@@ -823,7 +815,7 @@ static bool pass_create_compute(pl_gpu gpu, struct pl_pass_t *pass,
                                       &pass_p->num_workgroups_buf));
     }
 
-    d3d11_update_program_cache(gpu, pass, obj.key, sig, NULL, NULL, &cs_str);
+    d3d11_update_program_cache(gpu, pass, obj.key, NULL, NULL, &cs_str);
 
     success = true;
 error:
