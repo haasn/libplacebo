@@ -36,7 +36,7 @@ FILESUBTYPE VFT2_UNKNOWN
             VALUE "CompanyName", "libplacebo"
             VALUE "FileDescription", "libplacebo"
             VALUE "FileVersion", BUILD_VERSION
-            VALUE "LegalCopyright", L"Copyright \xA9 2017-2023 libplacebo project"
+            VALUE "LegalCopyright", L"Copyright \xA9 2017-2024 libplacebo project"
             VALUE "OriginalFilename", "libplacebo-@PL_MINOR@.dll"
             VALUE "ProductName", "libplacebo"
             VALUE "ProductVersion", BUILD_VERSION
