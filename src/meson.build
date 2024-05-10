@@ -190,11 +190,16 @@ if libdovi.found()
   build_deps += libdovi
 endif
 
-xxhash_inc = include_directories()
+inc_dirs = [ vulkan_headers_inc ]
+
 xxhash = dependency('libxxhash', required: get_option('xxhash'))
 components.set('xxhash', xxhash.found())
 if xxhash.found()
-  xxhash_inc = xxhash.get_variable('includedir')
+  if xxhash.type_name() == 'internal'
+    build_deps += xxhash
+  else
+    inc_dirs += xxhash.get_variable('includedir')
+  endif
 endif
 
 # Generate configuration files
@@ -233,9 +238,8 @@ if host_machine.system() == 'windows'
                                        include_directories: meson.project_source_root()/'win32')
 endif
 
-fast_float_inc = include_directories()
 if fs.is_dir('../3rdparty/fast_float/include')
-  fast_float_inc = include_directories('../3rdparty/fast_float/include')
+  inc_dirs += include_directories('../3rdparty/fast_float/include')
 endif
 
 ### Main library build process
@@ -245,7 +249,7 @@ lib = library('placebo', sources,
   install: true,
   dependencies: build_deps + glad_dep,
   soversion: apiver,
-  include_directories: [ inc, vulkan_headers_inc, fast_float_inc, xxhash_inc ],
+  include_directories: [ inc, inc_dirs ],
   link_args: link_args,
   link_depends: link_depends,
   gnu_symbol_visibility: 'hidden',
