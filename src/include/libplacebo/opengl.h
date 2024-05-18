@@ -75,6 +75,9 @@ struct pl_opengl_params {
     // Restrict the maximum allowed GLSL version. (Mainly for testing)
     int max_glsl_version;
 
+    // Disable compute shaders.
+    bool no_compute;
+
     // Optional. Required when importing/exporting dmabufs as textures.
     void *egl_display;
     void *egl_context;

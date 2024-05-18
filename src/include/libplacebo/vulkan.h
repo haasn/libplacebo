@@ -258,6 +258,7 @@ struct pl_vulkan_params {
     // for testing purposes
     int max_glsl_version;       // limit the maximum GLSL version
     uint32_t max_api_version;   // limit the maximum vulkan API version
+    bool no_compute;            // disable compute shaders
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
@@ -426,6 +427,7 @@ struct pl_vulkan_import_params {
     // for testing purposes. See `pl_vulkan_params` for a description of these.
     int max_glsl_version;
     uint32_t max_api_version;
+    bool no_compute;
 };
 
 #define pl_vulkan_import_params(...) (&(struct pl_vulkan_import_params) { __VA_ARGS__ })

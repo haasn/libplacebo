@@ -387,7 +387,7 @@ static struct pl_gpu_fns pl_fns_d3d11 = {
     .destroy                = d3d11_gpu_destroy,
 };
 
-pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
+pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx, bool no_compute)
 {
     pl_assert(ctx->dev);
     IDXGIDevice1 *dxgi_dev = NULL;
@@ -505,21 +505,25 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
             1 << D3D11_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP;
     }
 
-    if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
-        gpu->glsl.compute = true;
-        gpu->limits.compute_queues = 1;
-        // Set `gpu->limits.blittable_1d_3d`, since `pl_tex_blit_compute`, which
-        // is used to emulate blits on 11_0 and up, supports 1D and 3D textures
-        gpu->limits.blittable_1d_3d = true;
+    if (!no_compute) {
+        if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
+            gpu->glsl.compute = true;
+            gpu->limits.compute_queues = 1;
+            // Set `gpu->limits.blittable_1d_3d`, since `pl_tex_blit_compute`, which
+            // is used to emulate blits on 11_0 and up, supports 1D and 3D textures
+            gpu->limits.blittable_1d_3d = true;
 
-        gpu->glsl.max_shmem_size = D3D11_CS_TGSM_REGISTER_COUNT * sizeof(float);
-        gpu->glsl.max_group_threads = D3D11_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP;
-        gpu->glsl.max_group_size[0] = D3D11_CS_THREAD_GROUP_MAX_X;
-        gpu->glsl.max_group_size[1] = D3D11_CS_THREAD_GROUP_MAX_Y;
-        gpu->glsl.max_group_size[2] = D3D11_CS_THREAD_GROUP_MAX_Z;
-        gpu->limits.max_dispatch[0] = gpu->limits.max_dispatch[1] =
-            gpu->limits.max_dispatch[2] =
-            D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION;
+            gpu->glsl.max_shmem_size = D3D11_CS_TGSM_REGISTER_COUNT * sizeof(float);
+            gpu->glsl.max_group_threads = D3D11_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP;
+            gpu->glsl.max_group_size[0] = D3D11_CS_THREAD_GROUP_MAX_X;
+            gpu->glsl.max_group_size[1] = D3D11_CS_THREAD_GROUP_MAX_Y;
+            gpu->glsl.max_group_size[2] = D3D11_CS_THREAD_GROUP_MAX_Z;
+            gpu->limits.max_dispatch[0] = gpu->limits.max_dispatch[1] =
+                gpu->limits.max_dispatch[2] =
+                D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION;
+        }
+    } else {
+        PL_INFO(gpu, "Disabling compute shaders");
     }
 
     if (p->fl >= D3D_FEATURE_LEVEL_11_0) {

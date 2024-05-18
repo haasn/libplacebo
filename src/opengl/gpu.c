@@ -154,12 +154,16 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
                 params->max_glsl_version, glsl->version);
     }
 
-    if (gl_test_ext(gpu, "GL_ARB_compute_shader", 43, 0) && glsl->version >= 420) {
-        glsl->compute = true;
-        get(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &glsl->max_shmem_size);
-        get(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &glsl->max_group_threads);
-        for (int i = 0; i < 3; i++)
-            geti(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &glsl->max_group_size[i]);
+    if (!params->no_compute) {
+        if (gl_test_ext(gpu, "GL_ARB_compute_shader", 43, 0) && glsl->version >= 420) {
+            glsl->compute = true;
+            get(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &glsl->max_shmem_size);
+            get(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &glsl->max_group_threads);
+            for (int i = 0; i < 3; i++)
+                geti(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &glsl->max_group_size[i]);
+        }
+    } else {
+        PL_INFO(gpu, "Disabling compute shaders");
     }
 
     if (gl_test_ext(gpu, "GL_ARB_texture_gather", 40, 31) &&

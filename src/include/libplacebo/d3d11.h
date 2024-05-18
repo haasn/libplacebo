@@ -114,6 +114,9 @@ struct pl_d3d11_params {
     int min_feature_level; // Defaults to D3D_FEATURE_LEVEL_9_1 if unset
     int max_feature_level; // Defaults to D3D_FEATURE_LEVEL_12_1 if unset
 
+    // Disable compute shaders.
+    bool no_compute;
+
     // Allow up to N in-flight frames. Similar to swapchain_depth for Vulkan and
     // OpenGL, though with DXGI this is a device-wide setting that affects all
     // swapchains (except for waitable swapchains.) See the documentation for
