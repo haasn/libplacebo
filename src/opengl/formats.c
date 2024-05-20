@@ -49,6 +49,7 @@ enum {
     I16   = GL_SHORT,
     I32   = GL_INT,
     FLT   = GL_FLOAT,
+    HALF  = GL_HALF_FLOAT,
 
     // Component aliases
     R     = GL_RED,
@@ -124,32 +125,52 @@ const struct gl_format formats_snorm16[] = {
 };
 */
 
-// Floating point texture formats
-const struct gl_format formats_float[] = {
-    {GL_R16F,           R,     FLT, FMT("r16f",    16, FLOAT, S|L|F)},
-    {GL_RG16F,          RG,    FLT, FMT("rg16f",   16, FLOAT, S|L|F)},
-    {GL_RGB16F,         RGB,   FLT, FMT("rgb16f",  16, FLOAT, S|L|F)},
-    {GL_RGBA16F,        RGBA,  FLT, FMT("rgba16f", 16, FLOAT, S|L|F)},
+// 32-bit floating point texture formats
+const struct gl_format formats_float32[] = {
     {GL_R32F,           R,     FLT, FMT("r32f",    32, FLOAT, S|L|F|V)},
     {GL_RG32F,          RG,    FLT, FMT("rg32f",   32, FLOAT, S|L|F|V)},
     {GL_RGB32F,         RGB,   FLT, FMT("rgb32f",  32, FLOAT, S|L|F|V)},
     {GL_RGBA32F,        RGBA,  FLT, FMT("rgba32f", 32, FLOAT, S|L|F|V)},
 };
 
+// 16-bit floating point texture formats
+const struct gl_format formats_float16[] = {
+    {GL_R16F,           R,     FLT,  FMT("r16f",    16, FLOAT, S|L|F)},
+    {GL_RG16F,          RG,    FLT,  FMT("rg16f",   16, FLOAT, S|L|F)},
+    {GL_RGB16F,         RGB,   FLT,  FMT("rgb16f",  16, FLOAT, S|L|F)},
+    {GL_RGBA16F,        RGBA,  FLT,  FMT("rgba16f", 16, FLOAT, S|L|F)},
+};
+
+// 16-bit half float texture formats
+const struct gl_format formats_half16[] = {
+    {GL_R16F,           R,     HALF, FMT("r16hf",   16, FLOAT, S|L|F)},
+    {GL_RG16F,          RG,    HALF, FMT("rg16hf",  16, FLOAT, S|L|F)},
+    {GL_RGB16F,         RGB,   HALF, FMT("rgb16hf", 16, FLOAT, S|L|F)},
+    {GL_RGBA16F,        RGBA,  HALF, FMT("rgba16hf",16, FLOAT, S|L|F)},
+};
+
 // Renderable 16-bit float formats (excluding rgb16f)
 const struct gl_format formats_float16_fbo[] = {
-    {GL_R16F,           R,     FLT, FMT("r16f",    16, FLOAT, S|L|F)},
-    {GL_RG16F,          RG,    FLT, FMT("rg16f",   16, FLOAT, S|L|F)},
-    {GL_RGB16F,         RGB,   FLT, FMT("rgb16f",  16, FLOAT, S|L)},
-    {GL_RGBA16F,        RGBA,  FLT, FMT("rgba16f", 16, FLOAT, S|L|F)},
+    {GL_R16F,           R,     HALF, FMT("r16hf",   16, FLOAT, S|L|F)},
+    {GL_RG16F,          RG,    HALF, FMT("rg16hf",  16, FLOAT, S|L|F)},
+    {GL_RGB16F,         RGB,   HALF, FMT("rgb16hf", 16, FLOAT, S|L)},
+    {GL_RGBA16F,        RGBA,  HALF, FMT("rgba16hf",16, FLOAT, S|L|F)},
+    {GL_R16F,           R,     FLT,  FMT("r16f",    16, FLOAT, S|L|F)},
+    {GL_RG16F,          RG,    FLT,  FMT("rg16f",   16, FLOAT, S|L|F)},
+    {GL_RGB16F,         RGB,   FLT,  FMT("rgb16f",  16, FLOAT, S|L)},
+    {GL_RGBA16F,        RGBA,  FLT,  FMT("rgba16f", 16, FLOAT, S|L|F)},
 };
 
 // Non-renderable 16-bit float formats
 const struct gl_format formats_float16_fallback[] = {
-    {GL_R16F,           R,     FLT, FMT("r16f",    16, FLOAT, S|L)},
-    {GL_RG16F,          RG,    FLT, FMT("rg16f",   16, FLOAT, S|L)},
-    {GL_RGB16F,         RGB,   FLT, FMT("rgb16f",  16, FLOAT, S|L)},
-    {GL_RGBA16F,        RGBA,  FLT, FMT("rgba16f", 16, FLOAT, S|L)},
+    {GL_R16F,           R,     HALF, FMT("r16hf",   16, FLOAT, S|L)},
+    {GL_RG16F,          RG,    HALF, FMT("rg16hf",  16, FLOAT, S|L)},
+    {GL_RGB16F,         RGB,   HALF, FMT("rgb16hf", 16, FLOAT, S|L)},
+    {GL_RGBA16F,        RGBA,  HALF, FMT("rgba16hf",16, FLOAT, S|L)},
+    {GL_R16F,           R,     FLT,  FMT("r16f",    16, FLOAT, S|L)},
+    {GL_RG16F,          RG,    FLT,  FMT("rg16f",   16, FLOAT, S|L)},
+    {GL_RGB16F,         RGB,   FLT,  FMT("rgb16f",  16, FLOAT, S|L)},
+    {GL_RGBA16F,        RGBA,  FLT,  FMT("rgba16f", 16, FLOAT, S|L)},
 };
 
 // (Unsigned) integer formats
@@ -258,6 +279,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
         break;
     case GL_SHORT:
     case GL_UNSIGNED_SHORT:
+    case GL_HALF_FLOAT:
         size = 2;
         break;
     case GL_INT:
@@ -424,7 +446,9 @@ bool gl_setup_formats(struct pl_gpu_t *gpu)
         DO_FORMATS(formats_bgra8);
         DO_FORMATS(formats_norm16);
         DO_FORMATS(formats_rgb16_fbo);
-        DO_FORMATS(formats_float);
+        DO_FORMATS(formats_float32);
+        DO_FORMATS(formats_float16);
+        DO_FORMATS(formats_half16);
         DO_FORMATS(formats_uint);
         goto done;
     }
@@ -440,7 +464,12 @@ bool gl_setup_formats(struct pl_gpu_t *gpu)
             DO_FORMATS(formats_bgra8);
             DO_FORMATS(formats_norm16);
             DO_FORMATS(formats_rgb16_fbo);
-            DO_FORMATS(formats_float);
+            DO_FORMATS(formats_float32);
+            DO_FORMATS(formats_float16);
+            if (pl_opengl_has_ext(p->gl, "GL_ARB_half_float_pixel"))
+            {
+                DO_FORMATS(formats_half16);
+            }
         } else {
             // Fallback for GL2
             DO_FORMATS(formats_legacy_gl2);

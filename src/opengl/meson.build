@@ -47,6 +47,7 @@ if opengl_build.allowed()
     'GL_ARB_timer_query',
     'GL_ARB_uniform_buffer_object',
     'GL_ARB_vertex_array_object',
+    'GL_ARB_half_float_pixel',
     'GL_EXT_EGL_image_storage',
     'GL_EXT_color_buffer_float',
     'GL_EXT_color_buffer_half_float',
