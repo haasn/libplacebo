@@ -36,15 +36,24 @@ static int cmp_fmt(const void *pa, const void *pb)
     if (a->emulated != b->emulated)
         return PL_CMP(a->emulated, b->emulated);
 
-    int ca = __builtin_popcount(a->caps),
-        cb = __builtin_popcount(b->caps);
+    // Only test important caps
+    const enum pl_fmt_caps caps_mask = \
+        PL_FMT_CAP_SAMPLEABLE |\
+        PL_FMT_CAP_STORABLE |\
+        PL_FMT_CAP_LINEAR |\
+        PL_FMT_CAP_RENDERABLE |\
+        PL_FMT_CAP_BLENDABLE |\
+        PL_FMT_CAP_BLITTABLE;
+    enum pl_fmt_caps caps_a = a->caps & caps_mask, caps_b = b->caps & caps_mask;
+    int ca = __builtin_popcount(caps_a),
+        cb = __builtin_popcount(caps_b);
     if (ca != cb)
         return -PL_CMP(ca, cb); // invert to sort higher values first
 
     // If the population count is the same but the caps are different, prefer
     // the caps with a "lower" value (which tend to be more fundamental caps)
-    if (a->caps != b->caps)
-        return PL_CMP(a->caps, b->caps);
+    if (caps_a != caps_b)
+        return PL_CMP(caps_a, caps_b);
 
     // If the capabilities are equal, sort based on the component attributes
     for (int i = 0; i < PL_ARRAY_SIZE(a->component_depth); i++) {
@@ -63,6 +72,17 @@ static int cmp_fmt(const void *pa, const void *pb)
         if (oa != ob)
             return PL_CMP(oa, ob);
     }
+
+    // Re-test caps if same depth
+    caps_a = a->caps;
+    caps_b = b->caps;
+    ca = __builtin_popcount(caps_a);
+    cb = __builtin_popcount(caps_b);
+    if (ca != cb)
+        return -PL_CMP(ca, cb);
+
+    if (caps_a != caps_b)
+        return PL_CMP(caps_a, caps_b);
 
     // Fall back to sorting by the name (for stability)
     return strcmp(a->name, b->name);
