@@ -175,7 +175,6 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
         if (!fmt->opaque) {
             pl_assert(fmt->texel_size && fmt->texel_align);
             pl_assert((fmt->texel_size % fmt->texel_align) == 0);
-            pl_assert(fmt->internal_size == fmt->texel_size || fmt->emulated);
         } else {
             pl_assert(!fmt->texel_size && !fmt->texel_align);
             pl_assert(!(fmt->caps & PL_FMT_CAP_HOST_READABLE));

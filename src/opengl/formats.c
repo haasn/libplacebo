@@ -281,10 +281,6 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
         ibits += fmt->component_depth[i];
     fmt->internal_size = (ibits + 7) / 8;
 
-    // We're not the ones actually emulating these texture format - the
-    // driver is - but we might as well set the hint.
-    fmt->emulated = fmt->texel_size != fmt->internal_size;
-
     // 3-component formats are almost surely also emulated
     if (fmt->num_components == 3)
         fmt->emulated = true;
