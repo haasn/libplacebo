@@ -411,6 +411,8 @@ static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
     {"rgb10a2",     FOURCC('A','B','3','0')},
     {"bgr10a2",     FOURCC('A','R','3','0')},
     // 64bpp rgb
+    {"rgba16",      FOURCC('A','B','4','8')},
+    {"bgra16",      FOURCC('A','R','4','8')},
     {"rgba16hf",    FOURCC('A','B','4','H')},
     {"bgra16hf",    FOURCC('A','R','4','H')},
 
