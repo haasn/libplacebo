@@ -36,15 +36,27 @@ static int cmp_fmt(const void *pa, const void *pb)
     if (a->emulated != b->emulated)
         return PL_CMP(a->emulated, b->emulated);
 
-    int ca = __builtin_popcount(a->caps),
-        cb = __builtin_popcount(b->caps);
+    // Prefer formats with many optional rendering capabilities
+    const enum pl_fmt_caps caps_whitelist =
+        PL_FMT_CAP_SAMPLEABLE |
+        PL_FMT_CAP_STORABLE |
+        PL_FMT_CAP_LINEAR |
+        PL_FMT_CAP_RENDERABLE |
+        PL_FMT_CAP_BLENDABLE |
+        PL_FMT_CAP_BLITTABLE;
+
+    enum pl_fmt_caps a_caps = a->caps & caps_whitelist,
+                     b_caps = b->caps & caps_whitelist;
+
+    int ca = __builtin_popcount(a_caps),
+        cb = __builtin_popcount(b_caps);
     if (ca != cb)
         return -PL_CMP(ca, cb); // invert to sort higher values first
 
     // If the population count is the same but the caps are different, prefer
     // the caps with a "lower" value (which tend to be more fundamental caps)
-    if (a->caps != b->caps)
-        return PL_CMP(a->caps, b->caps);
+    if (a_caps != b_caps)
+        return PL_CMP(a_caps, b_caps);
 
     // If the capabilities are equal, sort based on the component attributes
     for (int i = 0; i < PL_ARRAY_SIZE(a->component_depth); i++) {
