@@ -49,7 +49,6 @@ if opengl_build.allowed()
     'GL_ARB_vertex_array_object',
     'GL_EXT_EGL_image_storage',
     'GL_EXT_color_buffer_float',
-    'GL_EXT_color_buffer_half_float',
     'GL_EXT_texture3D',
     'GL_EXT_texture_format_BGRA8888',
     'GL_EXT_texture_integer',
