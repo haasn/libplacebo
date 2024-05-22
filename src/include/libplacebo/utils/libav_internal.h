@@ -893,6 +893,9 @@ PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
 {
     const AVDOVIRpuDataHeader *header;
     const AVDOVIColorMetadata *dovi_color;
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 12, 100)
+    const AVDOVIDmData *dovi_ext;
+#endif
     if (!color || !repr || !dovi)
         return;
 
@@ -909,6 +912,13 @@ PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
             pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, dovi_color->source_min_pq / 4095.0f);
         color->hdr.max_luma =
             pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, dovi_color->source_max_pq / 4095.0f);
+
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 12, 100)
+        if ((dovi_ext = av_dovi_find_level(metadata, 1))) {
+            color->hdr.max_pq_y = dovi_ext->l1.max_pq / 4095.0f;
+            color->hdr.avg_pq_y = dovi_ext->l1.avg_pq / 4095.0f;
+        }
+#endif
     }
 }
 
