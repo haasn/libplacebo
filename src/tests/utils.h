@@ -77,6 +77,43 @@ static inline pl_log pl_test_logger(void)
 #define RANDOM_U8 ((uint8_t) (256.0 * rand() / (RAND_MAX + 1.0)))
 #define SKIP 77
 
+static inline uint16_t random_f16(void)
+{
+    union { uint16_t u; uint8_t b[2]; } x;
+    do {
+        for (int i = 0; i < PL_ARRAY_SIZE(x.b); i++)
+            x.b[i] = RANDOM_U8;
+    } while ((x.u & 0x7C00) == 0x7C00); /* infinity or nan */
+
+    return x.u;
+}
+
+static inline float random_f32(void)
+{
+    union { float f; uint8_t b[4]; } x;
+    do {
+        for (int i = 0; i < PL_ARRAY_SIZE(x.b); i++)
+            x.b[i] = RANDOM_U8;
+    } while (isnan(x.f) || isinf(x.f));
+
+    return x.f;
+}
+
+static inline double random_f64(void)
+{
+    union { double f; uint8_t b[8]; } x;
+    do {
+        for (int i = 0; i < PL_ARRAY_SIZE(x.b); i++)
+            x.b[i] = RANDOM_U8;
+    } while (isnan(x.f) || isinf(x.f));
+
+    return x.f;
+}
+
+#define RANDOM_F16 random_f16()
+#define RANDOM_F32 random_f32()
+#define RANDOM_F64 random_f64()
+
 // Helpers for performing various checks
 #define REQUIRE(cond) do                                                        \
 {                                                                               \
