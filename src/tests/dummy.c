@@ -1,6 +1,7 @@
 #include "gpu_tests.h"
 
 #include <libplacebo/dummy.h>
+#include <libplacebo/renderer.h>
 
 int main()
 {

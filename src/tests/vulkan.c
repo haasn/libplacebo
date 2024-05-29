@@ -4,6 +4,7 @@
 #include "vulkan/command.h"
 #include "vulkan/gpu.h"
 
+#include <libplacebo/renderer.h>
 #include <libplacebo/vulkan.h>
 
 static void vulkan_interop_tests(pl_vulkan pl_vk,

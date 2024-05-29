@@ -2,6 +2,7 @@
 #include "opengl/utils.h"
 
 #include <libplacebo/opengl.h>
+#include <libplacebo/renderer.h>
 
 static void opengl_interop_tests(pl_gpu gpu)
 {
