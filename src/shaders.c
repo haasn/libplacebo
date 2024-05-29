@@ -506,7 +506,7 @@ ident_t sh_attr_vec2(pl_shader sh, const char *name, const pl_rect2df *rc)
     return sh_attr(sh, (struct pl_shader_va) {
         .attr = {
             .name     = name,
-            .fmt      = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
+            .fmt      = fmt,
         },
         .data = { verts[0], verts[1], verts[2], verts[3] },
     });
