@@ -153,8 +153,21 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
     memset(src, 0, bytes);
     memset(dst, 0, bytes);
 
-    for (size_t i = 0; i < bytes; i++)
-        src[i] = RANDOM_U8;
+    for (int i = 0; i < texels; i++) {
+        uint8_t *data = &src[i * fmt->texel_size];
+        if (fmt->type == PL_FMT_FLOAT) {
+            for (int n = 0; n < fmt->num_components; n++) {
+                switch (fmt->component_depth[n]) {
+                case 16: *(uint16_t *) data = RANDOM_F16; data += 2; break;
+                case 32: *(float *)    data = RANDOM_F32; data += 4; break;
+                case 64: *(double *)   data = RANDOM_F64; data += 8; break;
+                }
+            }
+        } else {
+            for (int n = 0; n < fmt->texel_size; n++)
+                data[n] = RANDOM_U8;
+        }
+    }
 
     pl_timer ul, dl;
     ul = pl_timer_create(gpu);
