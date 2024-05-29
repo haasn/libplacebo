@@ -131,16 +131,27 @@ static inline pl_log pl_test_logger(void)
 
 static inline void log_array(const uint8_t *a, const uint8_t *ref, size_t off, size_t size)
 {
+    const int width = 16;
+    unsigned errors = 0;
     for (size_t n = 0; n < size; n++) {
         const char *prefix = "", *suffix = "";
-        char terminator = ' ';
+        bool newline = false;
+        int idx = n % width;
         if (a[n + off] != ref[n + off]) {
             prefix = "\033[31;1m";
             suffix = "\033[0m";
+            errors |= 1 << idx;
         }
-        if (n+1 == size || n % 16 == 15)
-            terminator = '\n';
-        fprintf(stderr, "%s%02"PRIx8"%s%c", prefix, a[n + off], suffix, terminator);
+        if (n + 1 == size || idx == width - 1)
+            newline = true;
+        fprintf(stderr, "%s%02"PRIx8"%s%c", prefix, a[n + off], suffix, newline ? '\n' : ' ');
+        if (newline && errors) {
+            for (int i = 0; i <= idx; i++) {
+                const char mark = errors & (1 << i) ? '^' : ' ';
+                fprintf(stderr, "%c%c%c", mark, mark, i == idx ? '\n' : ' ');
+            }
+            errors = 0;
+        }
     }
 }
 
