@@ -1,4 +1,4 @@
-#include "tests.h"
+#include "utils.h"
 
 #include <libplacebo/dither.h>
 #include <libplacebo/shaders/dithering.h>

@@ -1,4 +1,4 @@
-#include "tests.h"
+#include "utils.h"
 #include "libplacebo/utils/dav1d.h"
 
 int main()

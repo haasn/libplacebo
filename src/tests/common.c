@@ -1,4 +1,4 @@
-#include "tests.h"
+#include "utils.h"
 
 static int irand()
 {
