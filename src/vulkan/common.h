@@ -181,7 +181,6 @@ struct vk_ctx {
     PL_VK_FUN(DestroyFramebuffer);
     PL_VK_FUN(DestroyImage);
     PL_VK_FUN(DestroyImageView);
-    PL_VK_FUN(DestroyInstance);
     PL_VK_FUN(DestroyPipeline);
     PL_VK_FUN(DestroyPipelineCache);
     PL_VK_FUN(DestroyPipelineLayout);

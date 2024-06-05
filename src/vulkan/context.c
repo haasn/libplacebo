@@ -370,7 +370,6 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroyFramebuffer),
     PL_VK_DEV_FUN(DestroyImage),
     PL_VK_DEV_FUN(DestroyImageView),
-    PL_VK_DEV_FUN(DestroyInstance),
     PL_VK_DEV_FUN(DestroyPipeline),
     PL_VK_DEV_FUN(DestroyPipelineCache),
     PL_VK_DEV_FUN(DestroyPipelineLayout),
