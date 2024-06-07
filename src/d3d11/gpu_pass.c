@@ -493,18 +493,18 @@ error:;
     return out;
 }
 
-struct d3d11_cache_header {
-    bool num_workgroups_used;
-    int num_main_cbvs;
-    int num_main_srvs;
-    int num_main_samplers;
-    int num_vertex_cbvs;
-    int num_vertex_srvs;
-    int num_vertex_samplers;
-    int num_uavs;
-    size_t vert_bc_len;
-    size_t frag_bc_len;
-    size_t comp_bc_len;
+struct __attribute__((packed)) d3d11_cache_header {
+    int32_t num_main_cbvs;
+    int32_t num_main_srvs;
+    int32_t num_main_samplers;
+    int32_t num_vertex_cbvs;
+    int32_t num_vertex_srvs;
+    int32_t num_vertex_samplers;
+    int32_t num_uavs;
+    uint32_t vert_bc_len;
+    uint32_t frag_bc_len;
+    uint32_t comp_bc_len;
+    uint8_t num_workgroups_used;
 };
 
 static inline uint64_t pass_cache_signature(pl_gpu gpu,
