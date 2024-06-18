@@ -601,7 +601,7 @@ PL_API pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
                                                 enum pl_rendering_intent intent);
 
 // Return a chromatic adaptation matrix, which converts from one white point to
-// another, using the Bradford matrix. This is an RGB->RGB transformation.
+// another, using the CAT16 matrix. This is an RGB->RGB transformation.
 PL_API pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst);
 
 // Returns true if 'b' is entirely contained in 'a'. Useful for figuring out if

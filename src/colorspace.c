@@ -1229,12 +1229,11 @@ pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim)
     return out;
 }
 
-// LMS<-XYZ revised matrix from CIECAM97, based on a linear transform and
-// normalized for equal energy on monochrome inputs
-static const pl_matrix3x3 m_cat97 = {{
-    {  0.8562,  0.3372, -0.1934 },
-    { -0.8360,  1.8327,  0.0033 },
-    {  0.0357, -0.0469,  1.0112 },
+// Matrix used in CAT16, a revised one-step linear transform method
+static const pl_matrix3x3 m_cat16 = {{
+    {  0.401288, 0.650173, -0.051461 },
+    { -0.250268, 1.204414,  0.045854 },
+    { -0.002079, 0.048952,  0.953127 },
 }};
 
 // M := M * XYZd<-XYZs
@@ -1247,21 +1246,20 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
     if (fabs(src.x - dest.x) < 1e-6 && fabs(src.y - dest.y) < 1e-6)
         return;
 
-    // XYZd<-XYZs = Ma^-1 * (I*[Cd/Cs]) * Ma
+    // Linear "von Kries" method, adapted from CIECAM16
     // http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
-    // For Ma, we use the CIECAM97 revised (linear) matrix
     float C[3][2];
 
     for (int i = 0; i < 3; i++) {
         // source cone
-        C[i][0] = m_cat97.m[i][0] * pl_cie_X(src)
-                + m_cat97.m[i][1] * 1
-                + m_cat97.m[i][2] * pl_cie_Z(src);
+        C[i][0] = m_cat16.m[i][0] * pl_cie_X(src)
+                + m_cat16.m[i][1] * 1
+                + m_cat16.m[i][2] * pl_cie_Z(src);
 
         // dest cone
-        C[i][1] = m_cat97.m[i][0] * pl_cie_X(dest)
-                + m_cat97.m[i][1] * 1
-                + m_cat97.m[i][2] * pl_cie_Z(dest);
+        C[i][1] = m_cat16.m[i][0] * pl_cie_X(dest)
+                + m_cat16.m[i][1] * 1
+                + m_cat16.m[i][2] * pl_cie_Z(dest);
     }
 
     // tmp := I * [Cd/Cs] * Ma
@@ -1269,10 +1267,10 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
     for (int i = 0; i < 3; i++)
         tmp.m[i][i] = C[i][1] / C[i][0];
 
-    pl_matrix3x3_mul(&tmp, &m_cat97);
+    pl_matrix3x3_mul(&tmp, &m_cat16);
 
     // M := M * Ma^-1 * tmp
-    pl_matrix3x3 ma_inv = m_cat97;
+    pl_matrix3x3 ma_inv = m_cat16;
     pl_matrix3x3_invert(&ma_inv);
     pl_matrix3x3_mul(mat, &ma_inv);
     pl_matrix3x3_mul(mat, &tmp);
@@ -1354,7 +1352,7 @@ pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
                                 const struct pl_raw_primaries *prim)
 {
     // LMS<-RGB := LMS<-XYZ * XYZ<-RGB
-    pl_matrix3x3 rgb2lms = m_cat97;
+    pl_matrix3x3 rgb2lms = m_cat16;
     pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
     pl_matrix3x3_mul(&rgb2lms, &rgb2xyz);
 
