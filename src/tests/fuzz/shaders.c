@@ -1,4 +1,4 @@
-#include "../tests.h"
+#include "../utils.h"
 #include "shaders.h"
 
 #include <libplacebo/dummy.h>
