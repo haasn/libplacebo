@@ -18,6 +18,9 @@ int main()
 
     while (__AFL_LOOP(100000)) {
         size_t len = __AFL_FUZZ_TESTCASE_LEN;
+        if (!len)
+            continue;
+
         buf[len - 1] = '\0'; // ensure proper null termination
         pl_options_load(opts, (const char *) buf);
         pl_options_save(opts);
