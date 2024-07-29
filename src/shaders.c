@@ -824,7 +824,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     for (int i = 0; i < sh->descs.num; i++) {
         struct pl_shader_desc *sd = &sh->descs.elem[i];
         FIX_IDENT(sd->desc.name);
-        for (int j = 0; j < sd->num_buffer_vars; sd++)
+        for (int j = 0; j < sd->num_buffer_vars; j++)
             FIX_IDENT(sd->buffer_vars[j].var.name);
     }
 #undef FIX_IDENT
