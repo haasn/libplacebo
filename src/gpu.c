@@ -1113,6 +1113,9 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         struct pl_desc desc = pass->params.descriptors[i];
         struct pl_desc_binding db = params->desc_bindings[i];
         require(db.object);
+        for (int j = 0; j < i; j++)
+            require(db.object != params->desc_bindings[j].object);
+
         switch (desc.type) {
         case PL_DESC_SAMPLED_TEX: {
             pl_tex tex = db.object;
