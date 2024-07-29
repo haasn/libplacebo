@@ -364,9 +364,7 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
 {
     switch (sd.desc.type) {
     case PL_DESC_BUF_UNIFORM:
-    case PL_DESC_BUF_STORAGE:
-        for (int i = 0; i < sh->descs.num; i++) // ensure uniqueness
-            pl_assert(sh->descs.elem[i].binding.object != sd.binding.object);
+    case PL_DESC_BUF_STORAGE:;
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
         sd.buffer_vars = sh_memdup(sh, sd.buffer_vars, bsize,
                                    alignof(struct pl_buffer_var));
