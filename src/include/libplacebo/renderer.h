@@ -362,8 +362,8 @@ struct pl_render_params {
     PL_DEPRECATED_IN(v6.328) bool ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
     PL_DEPRECATED_IN(v6.335) int lut_entries; // hard-coded as 256
     PL_DEPRECATED_IN(v6.335) float polar_cutoff; // hard-coded as 1e-3
-    PL_DEPRECATED_IN(v7.346) bool skip_target_clearing; // `border_background = PL_BACKGROUND_NONE`
-    PL_DEPRECATED_IN(v7.346) bool blend_against_tiles; // `background = PL_BACKGROUND_TILES`
+    PL_DEPRECATED_IN(v7.346) bool skip_target_clearing; // `border = PL_CLEAR_SKIP`
+    PL_DEPRECATED_IN(v7.346) bool blend_against_tiles; // `background = PL_CLEAR_TILES`
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest
