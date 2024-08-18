@@ -131,12 +131,18 @@ PL_DEPRECATED_IN(v7.343) PL_LIBAV_API void pl_frame_map_avdovi_metadata(
 // values from the `AVDOVIMetadata`.
 //
 // Note: The `pl_dovi_metadata` must be allocated externally.
-// Also, currently the metadata is only used if the `AVDOVIRpuDataHeader`
-// `disable_residual_flag` field is not zero and can be checked before allocating.
+// Currently, the metadata can only be mapped if FEL (full enhancement layer)
+// is not used and this can be checked before allocating
+// (see pl_can_map_avdovi_metadata()).
 PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
                                          struct pl_color_repr *repr,
                                          struct pl_dovi_metadata *dovi,
                                          const AVDOVIMetadata *metadata);
+
+// Helper function to check if Dolby Vision metadata can be mapped.
+// Returns true if the `AVDOVIRpuDataHeader` `disable_residual_flag` field is
+// not zero or if the NLQ parameters are trivial.
+PL_LIBAV_API bool pl_avdovi_metadata_supported(const AVDOVIMetadata *metadata);
 #endif
 
 // Helper function to test if a pixfmt would be supported by the GPU.
