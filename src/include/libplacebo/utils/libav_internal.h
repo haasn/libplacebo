@@ -939,12 +939,49 @@ PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
     }
 }
 
+static bool pl_avdovi_nlq_is_trivial(const AVDOVIRpuDataHeader *header,
+                                     const AVDOVINLQParams *nlq)
+{
+    return
+        nlq->nlq_offset == 0
+        && nlq->vdr_in_max == (1ULL << header->coef_log2_denom)
+        && nlq->linear_deadzone_slope == 0
+        && nlq->linear_deadzone_threshold == 0
+    ;
+}
+
+static bool pl_avdovi_mapping_nlq_is_trivial(const AVDOVIRpuDataHeader *header,
+                                             const AVDOVIDataMapping *mapping)
+{
+    return
+        mapping->nlq_method_idc == AV_DOVI_NLQ_LINEAR_DZ
+        && pl_avdovi_nlq_is_trivial(header, &mapping->nlq[0])
+        && pl_avdovi_nlq_is_trivial(header, &mapping->nlq[1])
+        && pl_avdovi_nlq_is_trivial(header, &mapping->nlq[2])
+    ;
+}
+
+PL_LIBAV_API bool pl_avdovi_metadata_supported(const AVDOVIMetadata *metadata)
+{
+    const AVDOVIRpuDataHeader *header;
+    const AVDOVIDataMapping *mapping;
+
+    header = av_dovi_get_header(metadata);
+    if (header->disable_residual_flag)
+        return true;
+
+    mapping = av_dovi_get_mapping(metadata);
+    if (pl_avdovi_mapping_nlq_is_trivial(header, mapping))
+        return true;
+
+    return false;
+}
+
 PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
                                          struct pl_color_repr *repr,
                                          struct pl_dovi_metadata *dovi,
                                          const AVDOVIMetadata *metadata)
 {
-    const AVDOVIRpuDataHeader *header;
     const AVDOVIColorMetadata *dovi_color;
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 12, 100)
     const AVDOVIDmData *dovi_ext;
@@ -952,9 +989,8 @@ PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
     if (!color || !repr || !dovi)
         return;
 
-    header = av_dovi_get_header(metadata);
-    dovi_color = av_dovi_get_color(metadata);
-    if (header->disable_residual_flag) {
+    if (pl_avdovi_metadata_supported(metadata)) {
+        dovi_color = av_dovi_get_color(metadata);
         pl_map_dovi_metadata(dovi, metadata);
 
         repr->dovi = dovi;
@@ -1292,9 +1328,8 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
         AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA);
         if (sd) {
             const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
-            const AVDOVIRpuDataHeader *header = av_dovi_get_header(metadata);
-            // Only automatically map DoVi RPUs that don't require an EL
-            if (header->disable_residual_flag)
+            // Only automatically map DoVi RPUs that don't require a (full) EL
+            if (pl_avdovi_metadata_supported(metadata))
                 pl_map_avdovi_metadata(&out->color, &out->repr, &priv->dovi, metadata);
         }
 
