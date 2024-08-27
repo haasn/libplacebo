@@ -1722,6 +1722,9 @@ static bool pass_read_image(struct pass_state *pass)
         }
 
         if (pass_hook(pass, &st->img, plane_hook_stages[st->type])) {
+            st->plane.texture = st->img.tex;
+            st->plane_w = st->img.w;
+            st->plane_h = st->img.h;
             PL_TRACE(rr, "After user hooks:");
             log_plane_info(rr, st);
         }
