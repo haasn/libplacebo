@@ -40,7 +40,8 @@
 #endif
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(58, 11, 100) && \
-    defined(PL_HAVE_VULKAN) && defined(VK_API_VERSION_1_2)
+    defined(PL_HAVE_VULKAN) && defined(VK_API_VERSION_1_2) && \
+    VK_HEADER_VERSION >= 175
 # define PL_HAVE_LAV_VULKAN
 # include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
