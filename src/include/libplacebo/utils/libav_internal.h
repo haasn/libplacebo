@@ -39,14 +39,11 @@
 # endif
 #endif
 
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && \
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(58, 11, 100) && \
     defined(PL_HAVE_VULKAN) && defined(VK_API_VERSION_1_2)
 # define PL_HAVE_LAV_VULKAN
 # include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
-# if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(58, 11, 100)
-#  define PL_HAVE_LAV_VULKAN_V2
-# endif
 #endif
 
 PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
@@ -1073,11 +1070,7 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
     AVVulkanFramesContext *vkfc = hwfc->hwctx;
     AVVkFrame *vkf = (AVVkFrame *) priv->avframe->data[0];
 
-#ifdef PL_HAVE_LAV_VULKAN_V2
     vkfc->lock_frame(hwfc, vkf);
-#else
-    (void) vkfc;
-#endif
 
     for (int n = 0; n < frame->num_planes; n++) {
         pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
@@ -1120,11 +1113,7 @@ static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
             break;
     }
 
-#ifdef PL_HAVE_LAV_VULKAN_V2
     vkfc->unlock_frame(hwfc, vkf);
-#else
-    (void) vkfc;
-#endif
 }
 
 static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
@@ -1134,14 +1123,9 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
     const AVVulkanFramesContext *vkfc = hwfc->hwctx;
     AVVkFrame *vkf = (AVVkFrame *) frame->data[0];
+    const VkFormat *vk_fmt = vkfc->format;
     struct pl_avframe_priv *priv = out->user_data;
     pl_vulkan vk = pl_vulkan_get(gpu);
-
-#ifdef PL_HAVE_LAV_VULKAN_V2
-    const VkFormat *vk_fmt = vkfc->format;
-#else
-    const VkFormat *vk_fmt = av_vkfmt_from_pixfmt(hwfc->sw_format);
-#endif
 
     assert(frame->format == AV_PIX_FMT_VULKAN);
     priv->planar = NULL;
