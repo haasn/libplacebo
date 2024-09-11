@@ -734,7 +734,7 @@ const struct pl_filter_config pl_filter_sinc = {
     .name        = "sinc",
     .description = "Sinc (unwindowed)",
     .kernel      = &pl_filter_function_sinc,
-    .radius      = 3.0,
+    .radius      = 2.0,
     .allowed     = PL_FILTER_ALL,
 };
 
