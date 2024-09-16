@@ -280,7 +280,7 @@ void pl_d3d11_setup_formats(struct pl_gpu_t *gpu)
         fmt->fourcc = pl_fmt_fourcc(fmt);
 
         // If no caps, D3D11 only supports this for things we don't care about
-        if (!fmt->caps) {
+        if (!fmt->caps || (fmt->emulated && !(fmt->caps & PL_FMT_CAP_READWRITE))) {
             pl_free(fmt);
             continue;
         }
