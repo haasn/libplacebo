@@ -1460,8 +1460,15 @@ static pl_fmt merge_fmt(struct pass_state *pass, const struct img *a,
     // Only return formats that support all relevant caps of both formats
     const enum pl_fmt_caps mask = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR;
     enum pl_fmt_caps req_caps = (fmta->caps & mask) | (fmtb->caps & mask);
+    enum pl_fmt_type req_type = fmta->type;
 
-    return pl_find_fmt(rr->gpu, fmta->type, num_comps, min_depth, 0, req_caps);
+    // If we have integer formats on input, convert now to unorm.
+    if (req_type == PL_FMT_UINT) {
+        req_type = PL_FMT_UNORM;
+        req_caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR;
+    }
+
+    return pl_find_fmt(rr->gpu, req_type, num_comps, min_depth, 0, req_caps);
 }
 
 // Applies a series of rough heuristics to figure out whether we expect any
@@ -1475,6 +1482,10 @@ static bool want_merge(struct pass_state *pass,
     const pl_renderer rr = pass->rr;
     if (!pass->fbofmt[4])
         return false;
+
+    // Integer input
+    if (ref->fmt->type == PL_FMT_UINT)
+        return true;
 
     // Debanding
     if (!(rr->errors & PL_RENDER_ERR_DEBANDING) && params->deband_params)

@@ -108,6 +108,10 @@ static bool setup_src(pl_shader sh, const struct pl_sample_src *src,
     if (scale)
         *scale = PL_DEF(src->scale, 1.0);
 
+    // Support only formats with all components with the same depth
+    if (src->tex && src->tex->params.format->type == PL_FMT_UINT)
+        *scale *= 1.0 / ((1ull << (src->tex->params.format->component_depth[0])) - 1);
+
     if (comp_mask) {
         uint8_t tex_mask = 0x0Fu;
         if (src->tex) {
@@ -277,8 +281,8 @@ bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src)
     if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, &scale, true, BEST))
         return false;
 
-    GLSL("// pl_shader_sample_direct                            \n"
-         "vec4 color = vec4("$") * textureLod("$", "$", 0.0);   \n",
+    GLSL("// pl_shader_sample_direct                                  \n"
+         "vec4 color = vec4("$") * vec4(textureLod("$", "$", 0.0));   \n",
          SH_FLOAT(scale), tex, pos);
     return true;
 }
