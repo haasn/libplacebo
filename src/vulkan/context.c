@@ -1261,7 +1261,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Construct normalized output chain
     vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    vk_features_normalize(vk->alloc, &features, 0, &vk->features);
+    vk_features_normalize(vk->alloc, &features, vk->api_ver, &vk->features);
     if (!check_required_features(vk)) {
         PL_FATAL(vk, "Vulkan device does not support all required features!");
         goto error;
@@ -1285,7 +1285,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &features,
+        .pNext = &vk->features,
         .pQueueCreateInfos = qinfos.elem,
         .queueCreateInfoCount = qinfos.num,
         .ppEnabledExtensionNames = vk->exts.elem,
