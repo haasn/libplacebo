@@ -155,7 +155,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     }
 
     if (gl_test_ext(gpu, "GL_ARB_compute_shader", 43, 0) && glsl->version >= 420) {
-        glsl->compute = true;
+        glsl->compute = !params->no_compute;
         get(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &glsl->max_shmem_size);
         get(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &glsl->max_group_threads);
         for (int i = 0; i < 3; i++)

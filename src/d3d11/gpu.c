@@ -387,7 +387,8 @@ static struct pl_gpu_fns pl_fns_d3d11 = {
     .destroy                = d3d11_gpu_destroy,
 };
 
-pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
+pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx,
+                           const struct pl_d3d11_params *params)
 {
     pl_assert(ctx->dev);
     IDXGIDevice1 *dxgi_dev = NULL;
@@ -506,7 +507,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     }
 
     if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
-        gpu->glsl.compute = true;
+        gpu->glsl.compute = !params->no_compute;
         gpu->limits.compute_queues = 1;
         // Set `gpu->limits.blittable_1d_3d`, since `pl_tex_blit_compute`, which
         // is used to emulate blits on 11_0 and up, supports 1D and 3D textures

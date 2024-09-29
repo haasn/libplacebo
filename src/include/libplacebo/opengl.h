@@ -72,6 +72,11 @@ struct pl_opengl_params {
     // undesirable when GPU-accelerated processing is expected.
     bool allow_software;
 
+    // Disables the use of compute shaders. Some devices/drivers perform better
+    // without them. This may also help prevent image corruption in cases where
+    // the driver is misbehaving. Some features may be disabled if this is set.
+    bool no_compute;
+
     // Restrict the maximum allowed GLSL version. (Mainly for testing)
     int max_glsl_version;
 

@@ -230,6 +230,11 @@ struct pl_vulkan_params {
     // queues for a given QF enabled, regardless of this setting.
     int queue_count;
 
+    // Disables the use of compute shaders. Some devices/drivers perform better
+    // without them. This may also help prevent image corruption in cases where
+    // the driver is misbehaving. Some features may be disabled if this is set.
+    bool no_compute;
+
     // Bitmask of extra queue families to enable. If set, then *all* queue
     // families matching *any* of these flags will be enabled at device
     // creation time. Setting this to VK_QUEUE_FLAG_BITS_MAX_ENUM effectively
@@ -424,6 +429,7 @@ struct pl_vulkan_import_params {
 
     // Restrict specific features to e.g. work around driver bugs, or simply
     // for testing purposes. See `pl_vulkan_params` for a description of these.
+    bool no_compute;
     int max_glsl_version;
     uint32_t max_api_version;
 };

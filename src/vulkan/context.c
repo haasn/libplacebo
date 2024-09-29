@@ -1366,7 +1366,8 @@ static void unlock_queue(pl_vulkan pl_vk, uint32_t qf, uint32_t qidx)
     vk->unlock_queue(vk->queue_ctx, qf, qidx);
 }
 
-static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version)
+static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version,
+                             bool no_compute)
 {
     struct vk_ctx *vk = PL_PRIV(pl_vk);
 
@@ -1383,13 +1384,15 @@ static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version)
         return false;
 
     // Blacklist / restrict features
+    struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
     if (max_glsl_version) {
-        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
         glsl->version = PL_MIN(glsl->version, max_glsl_version);
         glsl->version = PL_MAX(glsl->version, 140); // required for GL_KHR_vulkan_glsl
         PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
                 max_glsl_version, glsl->version);
     }
+
+    glsl->compute &= !no_compute;
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;
@@ -1522,7 +1525,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     if (!device_init(vk, params))
         goto error;
 
-    if (!finalize_context(pl_vk, params->max_glsl_version))
+    if (!finalize_context(pl_vk, params->max_glsl_version, params->no_compute))
         goto error;
 
     return pl_vk;
@@ -1691,7 +1694,7 @@ next_qf: ;
         goto error;
     }
 
-    if (!finalize_context(pl_vk, params->max_glsl_version))
+    if (!finalize_context(pl_vk, params->max_glsl_version, params->no_compute))
         goto error;
 
     pl_free(tmp);

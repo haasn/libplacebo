@@ -29,7 +29,8 @@
 #include "common.h"
 #include "utils.h"
 
-pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx);
+pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx,
+                           const struct pl_d3d11_params *params);
 
 // --- pl_gpu internal structs and helpers
 

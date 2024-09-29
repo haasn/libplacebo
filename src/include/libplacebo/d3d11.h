@@ -70,6 +70,11 @@ struct pl_d3d11_params {
     // Also logs IDXGIInfoQueue messages
     bool debug;
 
+    // Disables the use of compute shaders. Some devices/drivers perform better
+    // without them. This may also help prevent image corruption in cases where
+    // the driver is misbehaving. Some features may be disabled if this is set.
+    bool no_compute;
+
     // Extra flags to pass to D3D11CreateDevice (D3D11_CREATE_DEVICE_FLAG).
     // libplacebo should be compatible with any flags passed here.
     UINT flags;
