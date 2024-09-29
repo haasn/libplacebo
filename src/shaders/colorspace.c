@@ -868,11 +868,11 @@ void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
     float offset = 1.0 / (1 + expf(slope * center));
     float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
 
-    GLSL("// pl_shader_sigmoidize                               \n"
-         "color = clamp(color, 0.0, 1.0);                       \n"
-         "color = vec4("$") - vec4("$") *                       \n"
-         "    log(vec4(1.0) / (color * vec4("$") + vec4("$"))   \n"
-         "        - vec4(1.0));                                 \n",
+    GLSL("// pl_shader_sigmoidize                                 \n"
+         "color.rgb = clamp(color.rgb, 0.0, 1.0);                 \n"
+         "color.rgb = vec3("$") - vec3("$") *                     \n"
+         "    log(vec3(1.0) / (color.rgb * vec3("$") + vec3("$")) \n"
+         "        - vec3(1.0));                                   \n",
          SH_FLOAT(center), SH_FLOAT(1.0 / slope),
          SH_FLOAT(scale), SH_FLOAT(offset));
 }
@@ -890,10 +890,10 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
     float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
 
     GLSL("// pl_shader_unsigmoidize                                 \n"
-         "color = clamp(color, 0.0, 1.0);                           \n"
-         "color = vec4("$") /                                       \n"
-         "    (vec4(1.0) + exp(vec4("$") * (vec4("$") - color)))    \n"
-         "    - vec4("$");                                          \n",
+         "color.rgb = clamp(color.rgb, 0.0, 1.0);                    \n"
+         "color.rgb = vec3("$") /                                    \n"
+         "    (vec3(1.0) + exp(vec3("$") * (vec3("$") - color.rgb))) \n"
+         "    - vec3("$");                                           \n",
          SH_FLOAT(1.0 / scale),
          SH_FLOAT(slope), SH_FLOAT(center),
          SH_FLOAT(offset / scale));
