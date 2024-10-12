@@ -786,6 +786,9 @@ const struct pl_filter_config pl_filter_ewa_lanczossharp = {
     .kernel      = &pl_filter_function_jinc,
     .window      = &pl_filter_function_jinc,
     .radius      = JINC_ZERO3,
+    // Blur value determined by method originally developed by Nicolas
+    // Robidoux for Image Magick, see:
+    //   https://www.imagemagick.org/discourse-server/viewtopic.php?p=89068#p89068
     .blur        = 0.98125058372237073562493,
     .polar       = true,
     .allowed     = PL_FILTER_SCALING,
@@ -798,6 +801,8 @@ const struct pl_filter_config pl_filter_ewa_lanczos4sharpest = {
     .kernel      = &pl_filter_function_jinc,
     .window      = &pl_filter_function_jinc,
     .radius      = JINC_ZERO4,
+    // Similar to above, see:
+    //   https://www.imagemagick.org/discourse-server/viewtopic.php?p=128587#p128587
     .blur        = 0.88451209326050047745788,
     .antiring    = 0.8,
     .polar       = true,
