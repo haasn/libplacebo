@@ -90,6 +90,9 @@ PL_API extern const struct pl_sigmoid_params pl_sigmoid_default_params;
 // to neutral and away from the extremes. If `params` is NULL, it defaults to
 // &pl_sigmoid_default_params.
 //
+// For more information about sigmoidization, see:
+//   https://imagemagick.org/Usage/resize/#resize_sigmoidal
+//
 // Warning: This function clamps the input to the interval [0,1]; and as such
 // it should *NOT* be used on already-decoded high-dynamic range content.
 PL_API void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params);
