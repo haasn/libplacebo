@@ -748,6 +748,7 @@ const struct pl_filter_config pl_filter_lanczos = {
     .recommended = PL_FILTER_SCALING,
 };
 
+// See https://legacy.imagemagick.org/Usage/filter/nicolas/#upsampling
 const struct pl_filter_config pl_filter_ginseng = {
     .name        = "ginseng",
     .description = "Ginseng (Jinc-Sinc)",
