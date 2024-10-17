@@ -472,7 +472,7 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
         PL_MSG(ctx, level, "Using a software adapter");
     }
 
-    d3d11->gpu = pl_gpu_create_d3d11(ctx);
+    d3d11->gpu = pl_gpu_create_d3d11(ctx, params->no_compute);
     if (!d3d11->gpu)
         goto error;
 
