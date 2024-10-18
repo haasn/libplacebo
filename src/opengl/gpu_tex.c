@@ -803,6 +803,7 @@ void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     if (!MAKE_CURRENT())
         return;
 
+    struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     pl_assert(tex_gl->fbo || tex_gl->wrapped_fb);
 
@@ -826,9 +827,12 @@ void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
         pl_unreachable();
     }
 
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+    const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+        GL_FRAMEBUFFER : GL_DRAW_FRAMEBUFFER;
+
+    gl->BindFramebuffer(target, tex_gl->fbo);
     gl->Clear(GL_COLOR_BUFFER_BIT);
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    gl->BindFramebuffer(target, 0);
     gl_check_err(gpu, "gl_tex_clear");
     RELEASE_CURRENT();
 }
@@ -1043,13 +1047,16 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         // No 3D framebuffers
         pl_assert(pl_rect_d(params->rc) == 1);
 
-        gl->BindFramebuffer(GL_READ_FRAMEBUFFER, tex_gl->fbo);
+        const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+            GL_FRAMEBUFFER : GL_READ_FRAMEBUFFER;
+
+        gl->BindFramebuffer(target, tex_gl->fbo);
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
             gl->ReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
                            tex_gl->format, tex_gl->type, (void *) dst);
             dst += params->row_pitch * rows;
         }
-        gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(target, 0);
         gl->PixelStorei(GL_PACK_ALIGNMENT, 4);
         gl->PixelStorei(GL_PACK_ROW_LENGTH, 0);
     } else if (is_copy) {
