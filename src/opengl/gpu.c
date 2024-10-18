@@ -240,7 +240,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     p->has_vao = gl_test_ext(gpu, "GL_ARB_vertex_array_object", 30, 30);
     p->has_invalidate_fb = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
-    p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 30, 30);
+    p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 30, 0);
     p->has_storage = gl_test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 31);
     p->has_readback = true;
 
