@@ -471,7 +471,7 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
     *fmt = (struct pl_fmt_t) {
         .name = "fbo",
         .type = PL_FMT_UNKNOWN,
-        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE | PL_FMT_CAP_BLENDABLE,
+        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLENDABLE,
         .num_components = 4,
         .component_depth = {8, 8, 8, 8}, // default to rgba8
         .sample_order = {0, 1, 2, 3},
@@ -572,6 +572,8 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
     for (int i = 0; i < fmt->num_components; i++)
         fmt->host_bits[i] = 8 * host_size;
     fmt->caps |= PL_FMT_CAP_HOST_READABLE;
+    if (!p->gles_ver || p->gles_ver >= 30)
+        fmt->caps |= PL_FMT_CAP_BLITTABLE;
 
     return true;
 }

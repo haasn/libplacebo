@@ -388,6 +388,10 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     if (gpu->glsl.compute && fmt->glsl_format && p->has_storage)
         fmt->caps |= PL_FMT_CAP_STORABLE | PL_FMT_CAP_READWRITE;
 
+    // GLES 2 can't do blitting
+    if (p->gles_ver && p->gles_ver < 30)
+        fmt->caps &= ~PL_FMT_CAP_BLITTABLE;
+
     // Only float-type formats are considered blendable in OpenGL
     switch (fmt->type) {
     case PL_FMT_UNKNOWN:
