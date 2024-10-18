@@ -52,7 +52,6 @@ if opengl_build.allowed()
     'GL_EXT_color_buffer_float',
     'GL_EXT_texture3D',
     'GL_EXT_texture_format_BGRA8888',
-    'GL_EXT_texture_integer',
     'GL_EXT_texture_norm16',
     'GL_EXT_texture_rg',
     'GL_EXT_unpack_subimage',

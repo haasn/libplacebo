@@ -807,31 +807,36 @@ void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     pl_assert(tex_gl->fbo || tex_gl->wrapped_fb);
 
+    const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+        GL_FRAMEBUFFER : GL_DRAW_FRAMEBUFFER;
+
+    gl->BindFramebuffer(target, tex_gl->fbo);
+
     switch (tex->params.format->type) {
     case PL_FMT_UNKNOWN:
     case PL_FMT_FLOAT:
     case PL_FMT_UNORM:
     case PL_FMT_SNORM:
         gl->ClearColor(color.f[0], color.f[1], color.f[2], color.f[3]);
+        gl->Clear(GL_COLOR_BUFFER_BIT);
         break;
 
-    case PL_FMT_UINT:
-        gl->ClearColorIuiEXT(color.u[0], color.u[1], color.u[2], color.u[3]);
+    case PL_FMT_UINT: {
+        GLuint gl_color[] = { color.u[0], color.u[1], color.u[2], color.u[3] };
+        gl->ClearBufferuiv(GL_COLOR, 0, gl_color);
         break;
+    }
 
-    case PL_FMT_SINT:
-        gl->ClearColorIiEXT(color.i[0], color.i[1], color.i[2], color.i[3]);
+    case PL_FMT_SINT: {
+        GLint gl_color[] = { color.i[0], color.i[1], color.i[2], color.i[3] };
+        gl->ClearBufferiv(GL_COLOR, 0, gl_color);
         break;
+    }
 
     case PL_FMT_TYPE_COUNT:
         pl_unreachable();
     }
 
-    const GLenum target = p->gles_ver && p->gles_ver < 30 ?
-        GL_FRAMEBUFFER : GL_DRAW_FRAMEBUFFER;
-
-    gl->BindFramebuffer(target, tex_gl->fbo);
-    gl->Clear(GL_COLOR_BUFFER_BIT);
     gl->BindFramebuffer(target, 0);
     gl_check_err(gpu, "gl_tex_clear");
     RELEASE_CURRENT();
