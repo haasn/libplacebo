@@ -408,23 +408,26 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             goto error;
         }
 
+        const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+            GL_FRAMEBUFFER : GL_READ_FRAMEBUFFER;
+
         gl->GenFramebuffers(1, &tex_gl->fbo);
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->BindFramebuffer(target, tex_gl->fbo);
         switch (dims) {
         case 1:
-            gl->FramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture1D(target, GL_COLOR_ATTACHMENT0,
                                      GL_TEXTURE_1D, tex_gl->texture, 0);
             break;
         case 2:
-            gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture2D(target, GL_COLOR_ATTACHMENT0,
                                      GL_TEXTURE_2D, tex_gl->texture, 0);
             break;
         case 3: pl_unreachable();
         }
 
-        GLenum err = gl->CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        GLenum err = gl->CheckFramebufferStatus(target);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
-            gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl->BindFramebuffer(target, 0);
             PL_ERR(gpu, "Failed creating framebuffer: %s", fb_err_str(err));
             goto error;
         }
@@ -434,7 +437,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
             gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
             if (read_type != tex_gl->type || read_fmt != tex_gl->format) {
-                gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                gl->BindFramebuffer(target, 0);
                 PL_ERR(gpu, "Trying to create host_readable texture whose "
                        "implementation-defined pixel read format "
                        "(type=0x%X, fmt=0x%X) does not match the texture's "
@@ -446,7 +449,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             }
         }
 
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(target, 0);
         if (!gl_check_err(gpu, "gl_tex_create: fbo"))
             goto error;
     }
@@ -684,22 +687,25 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
                    dims < 3;
 
     if (can_fbo && !tex_gl->fbo) {
+        const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+            GL_FRAMEBUFFER : GL_READ_FRAMEBUFFER;
+
         gl->GenFramebuffers(1, &tex_gl->fbo);
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->BindFramebuffer(target, tex_gl->fbo);
         switch (dims) {
         case 1:
-            gl->FramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture1D(target, GL_COLOR_ATTACHMENT0,
                                      tex_gl->target, tex_gl->texture, 0);
             break;
         case 2:
-            gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture2D(target, GL_COLOR_ATTACHMENT0,
                                      tex_gl->target, tex_gl->texture, 0);
             break;
         }
 
-        GLenum err = gl->CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        GLenum err = gl->CheckFramebufferStatus(target);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
-            gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl->BindFramebuffer(target, 0);
             PL_ERR(gpu, "Failed creating framebuffer: error code %d", err);
             goto error;
         }
@@ -714,7 +720,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
             tex->params.host_readable = true;
         }
 
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(target, 0);
         if (!gl_check_err(gpu, "pl_opengl_wrap: fbo"))
             goto error;
     }
