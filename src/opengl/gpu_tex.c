@@ -408,23 +408,26 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             goto error;
         }
 
+        const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+            GL_FRAMEBUFFER : GL_READ_FRAMEBUFFER;
+
         gl->GenFramebuffers(1, &tex_gl->fbo);
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->BindFramebuffer(target, tex_gl->fbo);
         switch (dims) {
         case 1:
-            gl->FramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture1D(target, GL_COLOR_ATTACHMENT0,
                                      GL_TEXTURE_1D, tex_gl->texture, 0);
             break;
         case 2:
-            gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture2D(target, GL_COLOR_ATTACHMENT0,
                                      GL_TEXTURE_2D, tex_gl->texture, 0);
             break;
         case 3: pl_unreachable();
         }
 
-        GLenum err = gl->CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        GLenum err = gl->CheckFramebufferStatus(target);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
-            gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl->BindFramebuffer(target, 0);
             PL_ERR(gpu, "Failed creating framebuffer: %s", fb_err_str(err));
             goto error;
         }
@@ -434,7 +437,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
             gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
             if (read_type != tex_gl->type || read_fmt != tex_gl->format) {
-                gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                gl->BindFramebuffer(target, 0);
                 PL_ERR(gpu, "Trying to create host_readable texture whose "
                        "implementation-defined pixel read format "
                        "(type=0x%X, fmt=0x%X) does not match the texture's "
@@ -446,7 +449,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             }
         }
 
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(target, 0);
         if (!gl_check_err(gpu, "gl_tex_create: fbo"))
             goto error;
     }
@@ -468,7 +471,7 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
     *fmt = (struct pl_fmt_t) {
         .name = "fbo",
         .type = PL_FMT_UNKNOWN,
-        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE | PL_FMT_CAP_BLENDABLE,
+        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLENDABLE,
         .num_components = 4,
         .component_depth = {8, 8, 8, 8}, // default to rgba8
         .sample_order = {0, 1, 2, 3},
@@ -569,6 +572,8 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
     for (int i = 0; i < fmt->num_components; i++)
         fmt->host_bits[i] = 8 * host_size;
     fmt->caps |= PL_FMT_CAP_HOST_READABLE;
+    if (!p->gles_ver || p->gles_ver >= 30)
+        fmt->caps |= PL_FMT_CAP_BLITTABLE;
 
     return true;
 }
@@ -684,22 +689,25 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
                    dims < 3;
 
     if (can_fbo && !tex_gl->fbo) {
+        const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+            GL_FRAMEBUFFER : GL_READ_FRAMEBUFFER;
+
         gl->GenFramebuffers(1, &tex_gl->fbo);
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->BindFramebuffer(target, tex_gl->fbo);
         switch (dims) {
         case 1:
-            gl->FramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture1D(target, GL_COLOR_ATTACHMENT0,
                                      tex_gl->target, tex_gl->texture, 0);
             break;
         case 2:
-            gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            gl->FramebufferTexture2D(target, GL_COLOR_ATTACHMENT0,
                                      tex_gl->target, tex_gl->texture, 0);
             break;
         }
 
-        GLenum err = gl->CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        GLenum err = gl->CheckFramebufferStatus(target);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
-            gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl->BindFramebuffer(target, 0);
             PL_ERR(gpu, "Failed creating framebuffer: error code %d", err);
             goto error;
         }
@@ -714,7 +722,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
             tex->params.host_readable = true;
         }
 
-        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(target, 0);
         if (!gl_check_err(gpu, "pl_opengl_wrap: fbo"))
             goto error;
     }
@@ -795,8 +803,14 @@ void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     if (!MAKE_CURRENT())
         return;
 
+    struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     pl_assert(tex_gl->fbo || tex_gl->wrapped_fb);
+
+    const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+        GL_FRAMEBUFFER : GL_DRAW_FRAMEBUFFER;
+
+    gl->BindFramebuffer(target, tex_gl->fbo);
 
     switch (tex->params.format->type) {
     case PL_FMT_UNKNOWN:
@@ -804,23 +818,26 @@ void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     case PL_FMT_UNORM:
     case PL_FMT_SNORM:
         gl->ClearColor(color.f[0], color.f[1], color.f[2], color.f[3]);
+        gl->Clear(GL_COLOR_BUFFER_BIT);
         break;
 
-    case PL_FMT_UINT:
-        gl->ClearColorIuiEXT(color.u[0], color.u[1], color.u[2], color.u[3]);
+    case PL_FMT_UINT: {
+        GLuint gl_color[] = { color.u[0], color.u[1], color.u[2], color.u[3] };
+        gl->ClearBufferuiv(GL_COLOR, 0, gl_color);
         break;
+    }
 
-    case PL_FMT_SINT:
-        gl->ClearColorIiEXT(color.i[0], color.i[1], color.i[2], color.i[3]);
+    case PL_FMT_SINT: {
+        GLint gl_color[] = { color.i[0], color.i[1], color.i[2], color.i[3] };
+        gl->ClearBufferiv(GL_COLOR, 0, gl_color);
         break;
+    }
 
     case PL_FMT_TYPE_COUNT:
         pl_unreachable();
     }
 
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
-    gl->Clear(GL_COLOR_BUFFER_BIT);
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    gl->BindFramebuffer(target, 0);
     gl_check_err(gpu, "gl_tex_clear");
     RELEASE_CURRENT();
 }
@@ -1035,13 +1052,16 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         // No 3D framebuffers
         pl_assert(pl_rect_d(params->rc) == 1);
 
-        gl->BindFramebuffer(GL_READ_FRAMEBUFFER, tex_gl->fbo);
+        const GLenum target = p->gles_ver && p->gles_ver < 30 ?
+            GL_FRAMEBUFFER : GL_READ_FRAMEBUFFER;
+
+        gl->BindFramebuffer(target, tex_gl->fbo);
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
             gl->ReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
                            tex_gl->format, tex_gl->type, (void *) dst);
             dst += params->row_pitch * rows;
         }
-        gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(target, 0);
         gl->PixelStorei(GL_PACK_ALIGNMENT, 4);
         gl->PixelStorei(GL_PACK_ROW_LENGTH, 0);
     } else if (is_copy) {
