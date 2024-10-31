@@ -37,18 +37,18 @@ if host_machine.system() == 'windows' and mingw32 != '' and host_machine.cpu() i
   add_project_arguments(['-D__CRT__NO_INLINE'], language: ['c', 'cpp'])
 endif
 
-# Work around missing atomics on some (obscure) platforms
-atomic_test = '''
-#include <stdatomic.h>
-#include <stdint.h>
-int main(void) {
-  _Atomic uint32_t x32;
-  atomic_init(&x32, 0);
-}'''
+# # Work around missing atomics on some (obscure) platforms
+# atomic_test = '''
+# #include <stdatomic.h>
+# #include <stdint.h>
+# int main(void) {
+#   _Atomic uint32_t x32;
+#   atomic_init(&x32, 0);
+# }'''
 
-if not cc.links(atomic_test)
-  build_deps += cc.find_library('atomic')
-endif
+# if not cc.links(atomic_test)
+#   build_deps += cc.find_library('atomic')
+# endif
 
 
 ### Common source files
@@ -92,7 +92,8 @@ sources = [
   'cache.c',
   'colorspace.c',
   'common.c',
-  'convert.cc',
+  'convert.c',
+  # 'convert.cc',
   'dither.c',
   'dispatch.c',
   'dummy.c',
