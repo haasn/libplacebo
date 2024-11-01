@@ -6,7 +6,7 @@ project('libplacebo', ['c', 'cpp'],
     'c_std=c11',
     'cpp_std=c++20',
   ],
-  meson_version: '>=0.63',
+  meson_version: '>=1.3.0',
   version: '@0@.@1@.@2@'.format(
     # Major version
     7,

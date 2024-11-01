@@ -245,7 +245,8 @@ endif
 ### Main library build process
 inc = include_directories('./include')
 lib = library('placebo', sources,
-  c_args: ['-DPL_EXPORT'],
+  c_static_args: ['-DPL_STATIC'],
+  c_shared_args: ['-DPL_EXPORT'],
   install: true,
   dependencies: build_deps + glad_dep,
   soversion: apiver,
