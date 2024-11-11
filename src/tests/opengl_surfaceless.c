@@ -10,6 +10,7 @@ static void opengl_interop_tests(pl_gpu gpu)
                              PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_LINEAR);
     if (!fmt)
         return;
+    printf("opengl_interop_tests:\n");
 
     pl_tex export = pl_tex_create(gpu, pl_tex_params(
         .w = 32,
@@ -60,7 +61,7 @@ static void opengl_swapchain_tests(pl_opengl gl,
     if (surface == EGL_NO_SURFACE)
         return;
 
-    printf("testing opengl swapchain\n");
+    printf("opengl_swapchain_tests:\n");
     pl_gpu gpu = gl->gpu;
     pl_swapchain sw;
     sw = pl_opengl_create_swapchain(gl, pl_opengl_swapchain_params(
