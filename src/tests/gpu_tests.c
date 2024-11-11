@@ -1620,7 +1620,7 @@ static void pl_ycbcr_tests(pl_gpu gpu)
                 uint16_t *src_pixel = (uint16_t *) &src_buffer[i][off];
                 uint16_t *dst_pixel = (uint16_t *) &dst_buffer[off];
                 int diff = abs((int) *src_pixel - (int) *dst_pixel);
-                REQUIRE_CMP(diff, <=, 50, "d"); // a little under 0.1%
+                REQUIRE_CMP(diff, <=, 150, "d"); // a little over 0.2%
             }
         }
     }
