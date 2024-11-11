@@ -12,6 +12,7 @@ void pl_buffer_tests(pl_gpu gpu)
     const size_t buf_size = 1024;
     if (buf_size > gpu->limits.max_buf_size)
         return;
+    printf("pl_buffer_tests:\n");
 
     uint8_t *test_src = malloc(buf_size * 2);
     uint8_t *test_dst = test_src + buf_size;
@@ -22,7 +23,7 @@ void pl_buffer_tests(pl_gpu gpu)
 
     pl_buf buf = NULL, tbuf = NULL;
 
-    printf("test buffer static creation and readback\n");
+    printf("- test buffer static creation and readback\n");
     buf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
         .host_readable = true,
@@ -34,7 +35,7 @@ void pl_buffer_tests(pl_gpu gpu)
     REQUIRE_MEMEQ(test_src, test_dst, buf_size);
     pl_buf_destroy(gpu, &buf);
 
-    printf("test buffer empty creation, update and readback\n");
+    printf("- test buffer empty creation, update and readback\n");
     memset(test_dst, 0, buf_size);
     buf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
@@ -48,7 +49,7 @@ void pl_buffer_tests(pl_gpu gpu)
     REQUIRE_MEMEQ(test_src, test_dst, buf_size);
     pl_buf_destroy(gpu, &buf);
 
-    printf("test buffer-buffer copy and readback\n");
+    printf("- test buffer-buffer copy and readback\n");
     memset(test_dst, 0, buf_size);
     buf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
@@ -68,7 +69,7 @@ void pl_buffer_tests(pl_gpu gpu)
     pl_buf_destroy(gpu, &tbuf);
 
     if (buf_size <= gpu->limits.max_mapped_size) {
-        printf("test host mapped buffer readback\n");
+        printf("- test host mapped buffer readback\n");
         buf = pl_buf_create(gpu, pl_buf_params(
             .size = buf_size,
             .host_mapped = true,
@@ -84,7 +85,7 @@ void pl_buffer_tests(pl_gpu gpu)
     // `compute_queues` check is to exclude dummy GPUs here
     if (buf_size <= gpu->limits.max_ssbo_size && gpu->limits.compute_queues)
     {
-        printf("test endian swapping\n");
+        printf("- test endian swapping\n");
         buf = pl_buf_create(gpu, pl_buf_params(
             .size = buf_size,
             .storable = true,
@@ -227,13 +228,14 @@ void pl_texture_tests(pl_gpu gpu)
     const size_t max_size = 16*16*16 * 4 *sizeof(double);
     uint8_t *test_src = malloc(max_size * 2);
     uint8_t *test_dst = test_src + max_size;
+    printf("pl_texture_tests:\n");
 
     for (int f = 0; f < gpu->num_formats; f++) {
         pl_fmt fmt = gpu->formats[f];
         if (fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE))
             continue;
 
-        printf("testing texture roundtrip for format %s\n", fmt->name);
+        printf("- testing texture roundtrip for format %s\n", fmt->name);
         assert(fmt->texel_size <= 4 * sizeof(double));
 
         struct pl_tex_params ref_params = {
@@ -248,7 +250,7 @@ void pl_texture_tests(pl_gpu gpu)
         pl_tex tex[2];
 
         if (gpu->limits.max_tex_1d_dim >= 16) {
-            printf("... 1D\n");
+            printf("-- 1D\n");
             struct pl_tex_params params = ref_params;
             params.w = 16;
             if (!gpu->limits.blittable_1d_3d)
@@ -261,7 +263,7 @@ void pl_texture_tests(pl_gpu gpu)
         }
 
         if (gpu->limits.max_tex_2d_dim >= 16) {
-            printf("... 2D\n");
+            printf("-- 2D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = 16;
             for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
@@ -272,7 +274,7 @@ void pl_texture_tests(pl_gpu gpu)
         }
 
         if (gpu->limits.max_tex_3d_dim >= 16) {
-            printf("... 3D\n");
+            printf("-- 3D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = params.d = 16;
             if (!gpu->limits.blittable_1d_3d)
@@ -293,6 +295,7 @@ static void pl_planar_tests(pl_gpu gpu)
     pl_fmt fmt = pl_find_named_fmt(gpu, "g8_b8_r8_420");
     if (!fmt)
         return;
+    printf("pl_planar_tests:\n");
     REQUIRE_CMP(fmt->num_planes, ==, 3, "d");
 
     const int width = 64, height = 32;
@@ -329,6 +332,7 @@ static void pl_shader_tests(pl_gpu gpu)
 {
     if (gpu->glsl.version < 410)
         return;
+    printf("pl_shader_tests:\n");
 
     const char *vert_shader =
         "#version 410                               \n"
@@ -432,7 +436,7 @@ static void pl_shader_tests(pl_gpu gpu)
     // Test against the known pattern of `src`, only useful for roundtrip tests
 #define TEST_FBO_PATTERN(eps, fmt, ...)                                     \
     do {                                                                    \
-        printf("testing pattern of " fmt "\n", __VA_ARGS__);                \
+        printf("- testing pattern of " fmt "\n", __VA_ARGS__);                \
         REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {     \
             .tex = fbo,                                                     \
             .ptr = test_data,                                               \
@@ -785,7 +789,7 @@ static void pl_shader_tests(pl_gpu gpu)
     if (fbo->params.storable) {
         for (int i = 0; i < pl_num_error_diffusion_kernels; i++) {
             const struct pl_error_diffusion_kernel *k = pl_error_diffusion_kernels[i];
-            printf("testing error diffusion kernel '%s'\n", k->name);
+            printf("- testing error diffusion kernel '%s'\n", k->name);
             sh = pl_dispatch_begin(dp);
             bool ok = pl_shader_error_diffusion(sh, pl_error_diffusion_params(
                 .input_tex  = src,
@@ -817,6 +821,7 @@ static void pl_scaler_tests(pl_gpu gpu)
     pl_fmt fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32, PL_FMT_CAP_RENDERABLE);
     if (!src_fmt || !fbo_fmt)
         return;
+    printf("pl_scaler_tests:\n");
 
     float *fbo_data = NULL;
     pl_shader_obj lut = NULL;
@@ -1057,6 +1062,7 @@ static void pl_render_tests(pl_gpu gpu)
 {
     pl_tex img_tex = NULL, fbo = NULL;
     pl_renderer rr = NULL;
+    printf("pl_render_tests:\n");
 
     enum { width = 50, height = 50 };
     static float data[width][height];
@@ -1119,7 +1125,7 @@ static void pl_render_tests(pl_gpu gpu)
 #define TEST(SNAME, STYPE, DEFAULT, FIELD, LIMIT)                       \
     do {                                                                \
         for (int i = 0; i <= LIMIT; i++) {                              \
-            printf("testing `" #STYPE "." #FIELD " = %d`\n", i);        \
+            printf("- testing `" #STYPE "." #FIELD " = %d`\n", i);        \
             struct pl_render_params params = pl_render_default_params;  \
             params.force_dither = true;                                 \
             struct STYPE tmp = DEFAULT;                                 \
@@ -1139,7 +1145,7 @@ static void pl_render_tests(pl_gpu gpu)
     for (int i = 0; i < pl_num_scale_filters; i++) {
         struct pl_render_params params = pl_render_default_params;
         params.upscaler = pl_scale_filters[i].filter;
-        printf("testing `params.upscaler = /* %s */`\n", pl_scale_filters[i].name);
+        printf("- testing `params.upscaler = /* %s */`\n", pl_scale_filters[i].name);
         REQUIRE(pl_render_image(rr, &image, &target, &params));
         pl_gpu_flush(gpu);
         REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
@@ -1151,7 +1157,7 @@ static void pl_render_tests(pl_gpu gpu)
     for (int i = 0; i < pl_num_scale_filters; i++) {
         struct pl_render_params params = pl_render_default_params;
         params.downscaler = pl_scale_filters[i].filter;
-        printf("testing `params.downscaler = /* %s */`\n", pl_scale_filters[i].name);
+        printf("- testing `params.downscaler = /* %s */`\n", pl_scale_filters[i].name);
         REQUIRE(pl_render_image(rr, &image, &target, &params));
         pl_gpu_flush(gpu);
         REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
@@ -1234,7 +1240,7 @@ static void pl_render_tests(pl_gpu gpu)
 
     // Test mpv-style custom shaders
     for (int i = 0; i < PL_ARRAY_SIZE(user_shader_tests); i++) {
-        printf("testing user shader:\n\n%s\n", user_shader_tests[i]);
+        printf("- testing user shader:\n\n%s\n", user_shader_tests[i]);
         const struct pl_hook *hook;
         hook = pl_mpv_user_shader_parse(gpu, user_shader_tests[i],
                                         strlen(user_shader_tests[i]));
@@ -1250,7 +1256,7 @@ static void pl_render_tests(pl_gpu gpu)
 
     if (gpu->glsl.compute && gpu->limits.max_ssbo_size) {
         for (int i = 0; i < PL_ARRAY_SIZE(compute_shader_tests); i++) {
-            printf("testing user shader:\n\n%s\n", compute_shader_tests[i]);
+            printf("- testing user shader:\n\n%s\n", compute_shader_tests[i]);
             const struct pl_hook *hook;
             hook = pl_mpv_user_shader_parse(gpu, compute_shader_tests[i],
                                             strlen(compute_shader_tests[i]));
@@ -1268,7 +1274,7 @@ static void pl_render_tests(pl_gpu gpu)
 
     // Test custom LUTs
     for (int i = 0; i < PL_ARRAY_SIZE(test_luts); i++) {
-        printf("testing custom lut %d\n", i);
+        printf("- testing custom lut %d\n", i);
         struct pl_custom_lut *lut;
         lut = pl_lut_parse_cube(gpu->log, test_luts[i], strlen(test_luts[i]));
         REQUIRE(lut);
@@ -1283,7 +1289,7 @@ static void pl_render_tests(pl_gpu gpu)
         image.lut = target.lut = params.lut = lut;
 
         for (enum pl_lut_type t = PL_LUT_UNKNOWN; t <= PL_LUT_CONVERSION; t++) {
-            printf("testing LUT method %d\n", t);
+            printf("- testing LUT method %d\n", t);
             image.lut_type = target.lut_type = params.lut_type = t;
             REQUIRE(pl_render_image(rr, &image, &target, &params));
             REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
@@ -1365,7 +1371,7 @@ static void pl_render_tests(pl_gpu gpu)
     }
 
     // Attempt frame mixing, using the mixer queue helper
-    printf("testing frame mixing \n");
+    printf("- testing frame mixing\n");
     struct pl_render_params mix_params = {
         .frame_mixer = &pl_filter_mitchell_clamp,
         .info_callback = render_info_cb,
@@ -1465,7 +1471,7 @@ static void pl_render_tests(pl_gpu gpu)
 
     // Test deinterlacing
     pl_queue_reset(queue);
-    printf("testing deinterlacing \n");
+    printf("- testing deinterlacing\n");
     for (int i = 0; i < NUM_MIX_FRAMES; i++) {
         struct pl_source_frame *src = &srcframes[i];
         if (i > 10)
@@ -1520,6 +1526,8 @@ static void pl_ycbcr_tests(pl_gpu gpu)
     enum pl_fmt_caps caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE;
     if (!fmt || (fmt->caps & caps) != caps)
         return;
+
+    printf("pl_ycbcr_tests:\nfmt=%s\n", fmt->name);
 
     pl_renderer rr = pl_renderer_create(gpu->log, gpu);
     if (!rr)
@@ -1630,6 +1638,7 @@ error:
 static void pl_test_export_import(pl_gpu gpu,
                                   enum pl_handle_type handle_type)
 {
+    printf("pl_test_export_import:\n");
     // Test texture roundtrip
 
     if (!(gpu->export_caps.tex & handle_type) ||
@@ -1640,7 +1649,7 @@ static void pl_test_export_import(pl_gpu gpu,
     if (!fmt)
         goto skip_tex;
 
-    printf("testing texture import/export with fmt %s\n", fmt->name);
+    printf("- testing texture import/export with fmt %s\n", fmt->name);
 
     pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
@@ -1671,7 +1680,7 @@ skip_tex: ;
         !(gpu->import_caps.buf & handle_type))
         return;
 
-    printf("testing buffer import/export\n");
+    printf("- testing buffer import/export\n");
 
     pl_buf exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = 32,
@@ -1696,9 +1705,11 @@ static void pl_test_host_ptr(pl_gpu gpu)
     if (!(gpu->import_caps.buf & PL_HANDLE_HOST_PTR))
         return;
 
+    printf("pl_test_host_ptr:\n");
+
 #ifdef __unix__
 
-    printf("testing host ptr\n");
+    printf("- testing host ptr\n");
     REQUIRE(gpu->limits.max_mapped_size);
 
     const size_t size = 2 << 20;
