@@ -39,6 +39,10 @@ elif not glslang_req.disabled()
 
     glslang_deps += spirv
 
+    # Glslang 15.0.0 moved some code around, add also linking to glslang, while
+    # this is not needed for older versions, it will still work.
+    glslang_deps += cxx.find_library('glslang', required: required, static: static)
+
     if static
       glslang_deps += [
         # Always required for static linking
