@@ -14,9 +14,6 @@
 #define PL_BASENAME basename
 #endif
 
-#ifdef HAVE_NUKLEAR
-#include "ui.h"
-
 bool parse_args(struct plplay_args *args, int argc, char *argv[])
 {
     static struct option long_options[] = {
@@ -88,6 +85,9 @@ error:
     fprintf(stderr, "  -w, --window    Specify the windowing API\n");
     return false;
 }
+
+#ifdef HAVE_NUKLEAR
+#include "ui.h"
 
 static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *path)
 {
