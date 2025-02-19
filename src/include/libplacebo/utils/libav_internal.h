@@ -256,6 +256,33 @@ PL_LIBAV_API enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc)
     return AVCHROMA_LOC_UNSPECIFIED;
 }
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(60, 11, 100)
+PL_LIBAV_API enum pl_alpha_mode pl_alpha_from_av(enum AVAlphaMode mode)
+{
+    switch (mode) {
+    case AVALPHA_MODE_UNSPECIFIED:   return PL_ALPHA_UNKNOWN;
+    case AVALPHA_MODE_STRAIGHT:      return PL_ALPHA_INDEPENDENT;
+    case AVALPHA_MODE_PREMULTIPLIED: return PL_ALPHA_PREMULTIPLIED;
+    case AVALPHA_MODE_NB:            return PL_ALPHA_MODE_COUNT;
+    }
+
+    return PL_ALPHA_UNKNOWN;
+}
+
+PL_LIBAV_API enum AVAlphaMode pl_alpha_to_av(enum pl_alpha_mode mode)
+{
+    switch (mode) {
+    case PL_ALPHA_NONE:             return AVALPHA_MODE_UNSPECIFIED; // missing
+    case PL_ALPHA_UNKNOWN:          return AVALPHA_MODE_UNSPECIFIED;
+    case PL_ALPHA_INDEPENDENT:      return AVALPHA_MODE_STRAIGHT;
+    case PL_ALPHA_PREMULTIPLIED:    return AVALPHA_MODE_PREMULTIPLIED;
+    case PL_ALPHA_MODE_COUNT:       return AVALPHA_MODE_NB;
+    }
+
+    return AVALPHA_MODE_UNSPECIFIED;
+}
+#endif
+
 #ifdef PL_HAVE_LAV_HDR
 PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
                                       const struct pl_av_hdr_metadata *data)
@@ -702,8 +729,12 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
             .sys = pl_system_from_av(frame->colorspace),
             .levels = pl_levels_from_av(frame->color_range),
             .alpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
-                        ? PL_ALPHA_INDEPENDENT
-                        : PL_ALPHA_NONE,
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(60, 11, 100)
+                ? pl_alpha_from_av(frame->alpha_mode)
+#else
+                ? PL_ALPHA_INDEPENDENT
+#endif
+                : PL_ALPHA_NONE,
 
             // For sake of simplicity, just use the first component's depth as
             // the authoritative color depth for the whole image. Usually, this

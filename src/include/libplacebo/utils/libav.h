@@ -267,6 +267,10 @@ PL_LIBAV_API enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferChar
 PL_LIBAV_API enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc);
 PL_LIBAV_API enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc);
 PL_LIBAV_API enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(60, 11, 100)
+PL_LIBAV_API enum pl_alpha_mode pl_alpha_from_av(enum AVAlphaMode mode);
+PL_LIBAV_API enum AVAlphaMode pl_alpha_to_av(enum pl_alpha_mode mode);
+#endif
 
 // Helper function to generate a `pl_color_space` struct from an AVFrame.
 PL_LIBAV_API void pl_color_space_from_avframe(struct pl_color_space *out_csp,
