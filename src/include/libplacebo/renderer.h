@@ -247,15 +247,11 @@ struct pl_render_params {
     const struct pl_custom_lut *lut;
     enum pl_lut_type lut_type;
 
-    // Controls the image background. The default (PL_CLEAR_AUTO) is equivalent
-    // to PL_CLEAR_NONE, which passes through the alpha channel unmodified. (In
-    // the case of no alpha channel, this implicitly blends against black)
+    // Controls how the image background is drawn for transparent images.
     enum pl_clear_mode background;
 
     // Controls how the remaining empty space in the target is filled up, when
-    // the image does not span the entire framebuffer. The default is equivalent
-    // to PL_CLEAR_COLOR, in which case empty space is automatically colored
-    // according to `background_color`.
+    // the image does not span the entire framebuffer.
     enum pl_clear_mode border;
 
     // The color to use for PL_CLEAR_COLOR.
