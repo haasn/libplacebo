@@ -2411,6 +2411,8 @@ static bool pass_output_target(struct pass_state *pass)
     enum pl_clear_mode background = params->background;
     if (params->blend_against_tiles)
         background = PL_CLEAR_TILES;
+    else if (params->skip_target_clearing)
+        background = PL_CLEAR_SKIP;
 
     bool has_alpha = target->repr.alpha != PL_ALPHA_NONE || params->blend_params;
     bool need_blend = background != PL_CLEAR_SKIP || !has_alpha;
