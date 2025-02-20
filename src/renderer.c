@@ -2450,6 +2450,8 @@ static bool pass_output_target(struct pass_state *pass)
         case PL_CLEAR_SKIP: break;
         case PL_CLEAR_MODE_COUNT: pl_unreachable();
         }
+    } else if (img->comps == 4 && has_alpha) {
+        pl_shader_set_alpha(sh, &img->repr, target->repr.alpha);
     }
 
     // Apply the color scale separately, after encoding is done, to make sure
