@@ -2547,6 +2547,9 @@ static bool pass_output_target(struct pass_state *pass)
                 src.component_mask |= 1 << plane->component_mapping[c];
             }
 
+            if (params->blend_params) /* preserve alpha if blending */
+                src.component_mask |= 1 << PL_CHANNEL_A;
+
             sh = pl_dispatch_begin(rr->dp);
             dispatch_sampler(pass, sh, &rr->samplers_dst[p], SAMPLER_PLANE,
                              plane->texture, &src);
