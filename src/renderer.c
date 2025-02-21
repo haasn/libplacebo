@@ -2464,7 +2464,7 @@ static bool pass_output_target(struct pass_state *pass)
     if (lut_type == PL_LUT_NATIVE) {
         pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_INDEPENDENT);
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
-        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
+        pl_shader_set_alpha(sh, &img->repr, target->repr.alpha);
     }
 
     // Rotation handling
