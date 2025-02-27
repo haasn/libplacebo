@@ -1812,6 +1812,7 @@ static bool pass_read_image(struct pass_state *pass)
             st->img.rect.x0 = st->img.rect.y0 = 0.0f;
             st->img.w = st->img.rect.x1 = src.new_w;
             st->img.h = st->img.rect.y1 = src.new_h;
+            src.scale = 1.0;
         }
 
         pass_hook(pass, &st->img, plane_scaled_hook_stages[st->type]);
@@ -1826,7 +1827,7 @@ static bool pass_read_image(struct pass_state *pass)
             pl_assert(sub);
         }
 
-        GLSL("tmp = "$"(); \n", sub);
+        GLSL("tmp = vec4("$") * "$"(); \n", SH_FLOAT(src.scale), sub);
         for (int c = 0; c < src.components; c++) {
             if (plane->component_mapping[c] < 0)
                 continue;
