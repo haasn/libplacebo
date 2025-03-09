@@ -1831,7 +1831,8 @@ static bool pass_read_image(struct pass_state *pass)
         for (int c = 0; c < src.components; c++) {
             if (plane->component_mapping[c] < 0)
                 continue;
-            GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c], c);
+            GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c],
+                 plane->texture->params.format->sample_order[c]);
         }
 
         // we don't need it anymore
