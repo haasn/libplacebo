@@ -1235,6 +1235,7 @@ struct plane_state {
     enum plane_type type;
     struct pl_plane plane;
     struct img img; // for per-plane shaders
+    pl_fmt fmt; // per-plane format after merge
     float plane_w, plane_h; // logical plane dimensions
 };
 
@@ -1542,6 +1543,7 @@ static bool pass_read_image(struct pass_state *pass)
                 .color = image->color,
                 .comps = image->planes[i].components,
             },
+            .fmt = image->planes[i].texture->params.format,
         };
 
         // Explicitly skip alpha channel when overridden
@@ -1641,6 +1643,7 @@ static bool pass_read_image(struct pass_state *pass)
             GLSL("} \n");
 
             sti->img.fmt = fmt;
+            sti->fmt = fmt;
             pl_dispatch_abort(rr->dp, &stj->img.sh);
             *stj = (struct plane_state) {0};
             did_merge = true;
@@ -1832,7 +1835,7 @@ static bool pass_read_image(struct pass_state *pass)
             if (plane->component_mapping[c] < 0)
                 continue;
             GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c],
-                 plane->texture->params.format->sample_order[c]);
+                 st->fmt->sample_order[c]);
         }
 
         // we don't need it anymore
