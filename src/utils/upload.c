@@ -206,7 +206,7 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             int size = data->component_size[i];
             if (size && (idx >= 4 || fmt->host_bits[idx] != size))
                 goto next_fmt;
-            out_map[fmt->sample_order[idx++]] = data->component_map[i];
+            out_map[idx++] = data->component_map[i];
         }
 
         // Reject misaligned formats, check this last to only log such errors
