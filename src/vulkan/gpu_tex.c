@@ -66,6 +66,14 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         barr.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
+    if (tex_vk->ext_deps.num) {
+        // We need to guarantee that all external dependencies are satisfied
+        // before the barrier begins executing. The easiest way to ensure this
+        // is to add the stage mask at which we wait for the external dependency
+        // to the source stage mask of the image barrier.
+        barr.srcStageMask |= stage;
+    }
+
     if (last.access || is_trans || is_xfer) {
         vk_cmd_barrier(cmd, &(VkDependencyInfo) {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
