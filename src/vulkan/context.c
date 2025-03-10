@@ -796,18 +796,16 @@ next_opt_user_ext: ;
 
 debug_ext_done: ;
 
-    // Limit this to 1.3.250+ because of bugs in older versions.
+    // Limit this to 1.3.296+ because of bugs in older versions.
     if (debug && params->debug_extra &&
-        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 259))
+        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 296))
     {
         // Try enabling as many validation features as possible
         static const VkValidationFeatureEnableEXT validation_features[] = {
             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
             VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-            // Depends on timeline semaphores being implemented:
-            // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7600
-            //VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+            VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
         };
 
         static const VkValidationFeaturesEXT vinfo = {
