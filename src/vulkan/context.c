@@ -606,11 +606,6 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
 
     PL_ARRAY(const char *) layers = {0};
 
-    // Sorted by priority
-    static const char *debug_layers[] = {
-        "VK_LAYER_KHRONOS_validation",
-        "VK_LAYER_LUNARG_standard_validation",
-    };
 
     // This layer has to be initialized first, otherwise all sorts of weirdness
     // happens (random segfaults, yum)
@@ -618,18 +613,17 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
     uint32_t debug_layer = 0; // layer idx of debug layer
     uint32_t debug_layer_version = 0;
     if (debug) {
-        for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
-            for (int n = 0; n < num_layers_avail; n++) {
-                if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
-                    continue;
+        for (int n = 0; n < num_layers_avail; n++) {
+            const char * const layer = "VK_LAYER_KHRONOS_validation";
+            if (strcmp(layer, layers_avail[n].layerName) != 0)
+                continue;
 
-                debug_layer = n;
-                debug_layer_version = layers_avail[n].specVersion;
-                pl_info(log, "Enabling debug meta layer: %s (v%d.%d.%d)",
-                        debug_layers[i], PRINTF_VER(debug_layer_version));
-                PL_ARRAY_APPEND(tmp, layers, debug_layers[i]);
-                goto debug_layers_done;
-            }
+            debug_layer = n;
+            debug_layer_version = layers_avail[n].specVersion;
+            pl_info(log, "Enabling debug layer: %s (v%d.%d.%d)",
+                    layer, PRINTF_VER(debug_layer_version));
+            PL_ARRAY_APPEND(tmp, layers, layer);
+            goto debug_layers_done;
         }
 
         // No layer found..
@@ -791,29 +785,35 @@ next_opt_user_ext: ;
 
 debug_ext_done: ;
 
+    #define ENABLE_BOOL(name) \
+        {"VK_LAYER_KHRONOS_validation", name, VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &(bool){true}}
+    const VkLayerSettingEXT debug_settings[] = {
+        ENABLE_BOOL("validate_best_practices"),
+
+        ENABLE_BOOL("gpuav_enable"),
+        ENABLE_BOOL("gpuav_image_layout"),
+        ENABLE_BOOL("gpuav_debug_validate_instrumented_shaders"),
+
+        ENABLE_BOOL("validate_sync"),
+        ENABLE_BOOL("syncval_shader_accesses_heuristic"),
+        ENABLE_BOOL("syncval_submit_time_validation"),
+    };
+
+    const VkLayerSettingsCreateInfoEXT debug_layer_settings = {
+        .sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+        .settingCount = PL_ARRAY_SIZE(debug_settings),
+        .pSettings = debug_settings,
+    };
+
     // Limit this to 1.3.296+ because of bugs in older versions.
     if (debug && params->debug_extra &&
         debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 296))
     {
-        // Try enabling as many validation features as possible
-        static const VkValidationFeatureEnableEXT validation_features[] = {
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-        };
-
-        static const VkValidationFeaturesEXT vinfo = {
-            .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-            .pEnabledValidationFeatures = validation_features,
-            .enabledValidationFeatureCount = PL_ARRAY_SIZE(validation_features),
-        };
-
-        const char * const ext = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
+        const char * const ext = VK_EXT_LAYER_SETTINGS_EXTENSION_NAME;
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
-                vk_link_struct(&info, &vinfo);
+                vk_link_struct(&info, &debug_layer_settings);
                 goto debug_extra_ext_done;
             }
         }
@@ -821,13 +821,13 @@ debug_ext_done: ;
         for (int n = 0; n < layer_exts[debug_layer].num_exts; n++) {
             if (strcmp(ext, layer_exts[debug_layer].exts[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
-                vk_link_struct(&info, &vinfo);
+                vk_link_struct(&info, &debug_layer_settings);
                 goto debug_extra_ext_done;
             }
         }
 
-        pl_warn(log, "GPU-assisted validation enabled but not supported by "
-                "instance, disabling...");
+        pl_warn(log, "%s not available, debug_extra options were not applied.",
+                VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
     }
 
 debug_extra_ext_done: ;
