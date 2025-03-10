@@ -54,8 +54,6 @@ struct vk_ext {
 static const char *vk_instance_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
 };
 
@@ -699,9 +697,6 @@ debug_layers_done: ;
                      layers_avail[i].layerName);
         }
     }
-
-    // Add mandatory extensions
-    PL_ARRAY_APPEND(tmp, exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // Add optional extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_instance_extensions); i++) {
