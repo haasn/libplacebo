@@ -759,12 +759,26 @@ next_user_ext: ;
 next_opt_user_ext: ;
     }
 
+    const VkDebugUtilsMessengerCreateInfoEXT dinfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = vk_dbg_utils_cb,
+        .pUserData = (void *) log,
+    };
+
     // If debugging is enabled, load the necessary debug utils extension
     if (debug) {
         const char * const ext = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
+                vk_link_struct(&info, &dinfo);
                 goto debug_ext_done;
             }
         }
@@ -772,6 +786,7 @@ next_opt_user_ext: ;
         for (int n = 0; n < layer_exts[debug_layer].num_exts; n++) {
             if (strcmp(ext, layer_exts[debug_layer].exts[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
+                vk_link_struct(&info, &dinfo);
                 goto debug_ext_done;
             }
         }
@@ -870,19 +885,6 @@ debug_extra_ext_done: ;
 
     // Set up a debug callback to catch validation messages
     if (debug) {
-        VkDebugUtilsMessengerCreateInfoEXT dinfo = {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-            .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-            .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            .pfnUserCallback = vk_dbg_utils_cb,
-            .pUserData = (void *) log,
-        };
-
         PL_VK_LOAD_FUN(inst, CreateDebugUtilsMessengerEXT, get_addr);
         CreateDebugUtilsMessengerEXT(inst, &dinfo, PL_VK_ALLOC, &p->debug_utils_cb);
     }
