@@ -139,6 +139,8 @@ gpu:
     tags:
         - gpu
     script:
+        - git clone --depth 1 -b v1.16 https://github.com/linux-test-project/lcov.git
+        - export PATH="`realpath lcov/bin`:$PATH"
         - meson build --buildtype release
                       --werror
                       -Dtests=true
