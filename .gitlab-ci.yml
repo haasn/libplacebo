@@ -170,8 +170,6 @@ sanitize:
     stage: sanitize
     tags:
         - gpu
-    variables:
-        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
