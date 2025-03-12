@@ -43,7 +43,14 @@ static inline uint64_t pl_str0_hash(const char *str)
 #define XXH_NAMESPACE pl_
 #define XXH_INLINE_ALL
 #define XXH_NO_STREAM
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Warray-bounds="
+#endif
 #include <xxhash.h>
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic pop
+#endif
 
 XXH_FORCE_INLINE uint64_t pl_mem_hash(const void *mem, size_t size)
 {
