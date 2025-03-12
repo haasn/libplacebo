@@ -172,6 +172,12 @@ sanitize:
     stage: sanitize
     tags:
         - gpu
+    variables:
+        # Disable leak detection, mesa likes to leak some memory, and since
+        # the driver is unloaded we can't really add suppressions for them.
+        # https://gitlab.freedesktop.org/mesa/mesa/-/issues/12805
+        # https://gitlab.freedesktop.org/mesa/mesa/-/issues/12811
+        ASAN_OPTIONS: "halt_on_error=1:abort_on_error=1:print_summary=1:detect_leaks=0"
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
