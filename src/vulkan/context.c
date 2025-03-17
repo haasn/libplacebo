@@ -801,7 +801,7 @@ next_opt_user_ext: ;
 debug_ext_done: ;
 
     #define ENABLE_BOOL(name) \
-        {"VK_LAYER_KHRONOS_validation", name, VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &(bool){true}}
+        {"VK_LAYER_KHRONOS_validation", name, VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &(VkBool32){VK_TRUE}}
     const VkLayerSettingEXT debug_settings[] = {
         ENABLE_BOOL("validate_best_practices"),
 
