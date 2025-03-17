@@ -2604,7 +2604,11 @@ static bool pass_output_target(struct pass_state *pass)
             rr->prev_dither = applied_dither;
         }
 
-        GLSL("color *= vec4(1.0 / "$"); \n", SH_FLOAT(scale));
+        GLSL("color.%s *= vec%d(1.0 / "$"); \n",
+             params->blend_params ? "rgb" : "rgba",
+             params->blend_params ? 3 : 4,
+             SH_FLOAT(scale));
+
         swizzle_color(sh, plane->components, plane->component_mapping,
                       params->blend_params);
 
