@@ -463,6 +463,8 @@ error:
     return NULL;
 }
 
+const char *pl_fmt_color_format(pl_fmt fmt, int components, bool only_glsl);
+
 static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
                         struct gl_format *glfmt)
 {
@@ -574,6 +576,8 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
     fmt->caps |= PL_FMT_CAP_HOST_READABLE;
     if (!p->gles_ver || p->gles_ver >= 30)
         fmt->caps |= PL_FMT_CAP_BLITTABLE;
+
+    fmt->name = pl_fmt_color_format(fmt, fmt->num_components, false);
 
     return true;
 }
