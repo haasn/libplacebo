@@ -30,6 +30,7 @@
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
+#include <libavformat/version.h>
 #include <libavcodec/version.h>
 
 // Try importing <vulkan.h> dynamically if it wasn't already
