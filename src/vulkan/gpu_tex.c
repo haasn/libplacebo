@@ -470,9 +470,9 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if (params->w > max.width || params->h > max.height || params->d > max.depth)
     {
         PL_ERR(gpu, "Requested image size %dx%dx%d exceeds the maximum allowed "
-               "dimensions %dx%dx%d for vulkan image format %x",
+               "dimensions %dx%dx%d for vulkan image format %s",
                params->w, params->h, params->d, max.width, max.height, max.depth,
-               (unsigned) iinfo.format);
+               vk_fmt_name(iinfo.format));
         goto error;
     }
 
