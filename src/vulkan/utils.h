@@ -20,6 +20,7 @@
 #include "common.h"
 
 // Return a human-readable name for various vulkan enums
+const char *vk_driver_id_name(VkDriverId driver);
 const char *vk_res_str(VkResult res);
 const char *vk_fmt_name(VkFormat fmt);
 const char *vk_csp_name(VkColorSpaceKHR csp);

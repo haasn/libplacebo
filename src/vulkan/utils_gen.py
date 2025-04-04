@@ -211,6 +211,7 @@ if __name__ == '__main__':
             vkhandles = get_vkenum(registry, 'VkExternalMemoryHandleTypeFlagBits'),
             vkalphas  = get_vkenum(registry, 'VkCompositeAlphaFlagBitsKHR'),
             vktransforms = get_vkenum(registry, 'VkSurfaceTransformFlagBitsKHR'),
+            vkdrivers = get_vkenum(registry, 'VkDriverId'),
             vkobjects = get_vkobjects(registry),
             vkstructs = get_vkstructs(registry),
             vkaccess = get_vkaccess(registry),

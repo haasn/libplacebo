@@ -1485,8 +1485,13 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
         }
     }
 
+    VkPhysicalDeviceDriverProperties driver_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+    };
+
     VkPhysicalDeviceIDPropertiesKHR id_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+        .pNext = &driver_props,
     };
 
     VkPhysicalDeviceProperties2KHR prop = {
@@ -1504,6 +1509,15 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
     PL_INFO(vk, "    Driver version: %"PRIx32, prop.properties.driverVersion);
     PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
+    PL_INFO(vk, "    Driver ID: %s", vk_driver_id_name(driver_props.driverID));
+    PL_INFO(vk, "    Driver name: %s", driver_props.driverName);
+    PL_INFO(vk, "    Driver info: %s", driver_props.driverInfo);
+    PL_INFO(vk, "    Conformance version: %u.%u.%u.%u",
+            driver_props.conformanceVersion.major,
+            driver_props.conformanceVersion.minor,
+            driver_props.conformanceVersion.subminor,
+            driver_props.conformanceVersion.patch);
+    PL_INFO(vk, "    Driver UUID: %s", PRINT_UUID(id_props.driverUUID));
 
     // Needed by device_init
     vk->api_ver = prop.properties.apiVersion;
