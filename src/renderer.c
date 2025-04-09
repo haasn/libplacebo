@@ -1627,23 +1627,32 @@ static bool pass_read_image(struct pass_state *pass)
             if (!sub)
                 break; // skip merging
 
+            int comp_map[4] = {-1, -1, -1, -1};
+            for (int ic = 0; ic < sti->img.comps; ic++) {
+                int map = sti->plane.component_mapping[sti->fmt->sample_order[ic]];
+                if (map == PL_CHANNEL_NONE)
+                    continue;
+                comp_map[fmt->sample_order[ic]] = map;
+            }
+
             sh_describe(sh, "merging planes");
             GLSL("{                 \n"
                  "vec4 tmp = "$"(); \n", sub);
             for (int jc = 0; jc < stj->img.comps; jc++) {
-                int map = stj->plane.component_mapping[jc];
+                int map = stj->plane.component_mapping[stj->fmt->sample_order[jc]];
                 if (map == PL_CHANNEL_NONE)
                     continue;
                 int ic = sti->img.comps++;
                 pl_assert(ic < 4);
                 GLSL("color[%d] = tmp[%d]; \n", ic, jc);
                 sti->plane.components = sti->img.comps;
-                sti->plane.component_mapping[ic] = map;
+                comp_map[fmt->sample_order[ic]] = map;
             }
             GLSL("} \n");
 
             sti->img.fmt = fmt;
             sti->fmt = fmt;
+            memcpy(sti->plane.component_mapping, comp_map, sizeof(comp_map));
             pl_dispatch_abort(rr->dp, &stj->img.sh);
             *stj = (struct plane_state) {0};
             did_merge = true;
