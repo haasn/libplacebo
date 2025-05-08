@@ -13,15 +13,15 @@ int main()
     pl_generate_bayer_matrix(&data[0][0], SIZE);
     for (int y = 0; y < SIZE; y++) {
         for (int x = 0; x < SIZE; x++)
-            printf(" %3d", (int)(data[y][x] * SIZE * SIZE));
+            printf(" %3d,", (int)(data[y][x] * SIZE * SIZE));
         printf("\n");
     }
 
     printf("Blue noise dither matrix:\n");
-    pl_generate_blue_noise(&data[0][0], SHIFT);
+    pl_generate_blue_noise(&data[0][0], SIZE);
     for (int y = 0; y < SIZE; y++) {
         for (int x = 0; x < SIZE; x++)
-            printf(" %3d", (int)(data[y][x] * SIZE * SIZE));
+            printf(" %3d,", (int)(data[y][x] * SIZE * SIZE));
         printf("\n");
     }
 
