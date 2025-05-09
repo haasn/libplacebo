@@ -103,10 +103,10 @@ struct vk_ctx {
     PL_VK_FUN(GetInstanceProcAddr);
     PL_VK_FUN(GetPhysicalDeviceExternalBufferProperties);
     PL_VK_FUN(GetPhysicalDeviceExternalSemaphoreProperties);
-    PL_VK_FUN(GetPhysicalDeviceFeatures2KHR);
+    PL_VK_FUN(GetPhysicalDeviceFeatures2);
     PL_VK_FUN(GetPhysicalDeviceFormatProperties);
-    PL_VK_FUN(GetPhysicalDeviceFormatProperties2KHR);
-    PL_VK_FUN(GetPhysicalDeviceImageFormatProperties2KHR);
+    PL_VK_FUN(GetPhysicalDeviceFormatProperties2);
+    PL_VK_FUN(GetPhysicalDeviceImageFormatProperties2);
     PL_VK_FUN(GetPhysicalDeviceMemoryProperties);
     PL_VK_FUN(GetPhysicalDeviceProperties);
     PL_VK_FUN(GetPhysicalDeviceProperties2);

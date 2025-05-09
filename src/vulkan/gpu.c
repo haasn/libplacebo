@@ -355,7 +355,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
         };
 
         VkResult res;
-        res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+        res = vk->GetPhysicalDeviceImageFormatProperties2(vk->physd, &pinfo, &props);
         if (res != VK_SUCCESS) {
             PL_DEBUG(vk, "Tex caps for %s (0x%x) unsupported: %s",
                      vk_handle_name(ext_pinfo.handleType),

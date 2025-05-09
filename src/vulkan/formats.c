@@ -415,14 +415,14 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             .pNext = has_drm_mods ? &drm_props : NULL,
         };
 
-        vk->GetPhysicalDeviceFormatProperties2KHR(vk->physd, vk_fmt->tfmt, &prop2);
+        vk->GetPhysicalDeviceFormatProperties2(vk->physd, vk_fmt->tfmt, &prop2);
 
         // If wholly unsupported, try falling back to the emulation formats
         // for texture operations
         VkFormatProperties *prop = &prop2.formatProperties;
         while (has_emu && !prop->optimalTilingFeatures && vk_fmt->emufmt) {
             vk_fmt = vk_fmt->emufmt;
-            vk->GetPhysicalDeviceFormatProperties2KHR(vk->physd, vk_fmt->tfmt, &prop2);
+            vk->GetPhysicalDeviceFormatProperties2(vk->physd, vk_fmt->tfmt, &prop2);
         }
 
         VkFormatFeatureFlags texflags = prop->optimalTilingFeatures;

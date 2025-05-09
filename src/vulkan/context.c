@@ -65,10 +65,10 @@ static const struct vk_fun vk_inst_funs[] = {
     PL_VK_INST_FUN(GetDeviceProcAddr),
     PL_VK_INST_FUN(GetPhysicalDeviceExternalBufferProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceExternalSemaphoreProperties),
-    PL_VK_INST_FUN(GetPhysicalDeviceFeatures2KHR),
+    PL_VK_INST_FUN(GetPhysicalDeviceFeatures2),
     PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties),
-    PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties2KHR),
-    PL_VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2KHR),
+    PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties2),
+    PL_VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2),
     PL_VK_INST_FUN(GetPhysicalDeviceMemoryProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceProperties2),
@@ -1242,7 +1242,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         memset(&out[1], 0, size - sizeof(out[0]));
     }
 
-    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, features_sup);
+    vk->GetPhysicalDeviceFeatures2(vk->physd, features_sup);
 
     // Filter out unsupported features
     for (VkBaseOutStructure *f = (VkBaseOutStructure *) &features; f; f = f->pNext) {

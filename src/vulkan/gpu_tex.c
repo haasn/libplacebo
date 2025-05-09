@@ -458,7 +458,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     };
 
     VkResult res;
-    res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+    res = vk->GetPhysicalDeviceImageFormatProperties2(vk->physd, &pinfo, &props);
     if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
         PL_DEBUG(gpu, "Texture creation failed: not supported");
         goto error;
