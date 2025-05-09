@@ -1116,6 +1116,22 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
     return idx;
 }
 
+static const struct vk_fun *promote_vk_fun(void *parent, const struct vk_fun *f)
+{
+    // Functions get their extension suffix stripped when promoted
+    // to core. Strip the suffixes to query core alias of the function.
+    static const char *const ext_suffixes[] = { "KHR", "EXT" };
+    pl_str fun_name = pl_str0(f->name);
+    for (int i = 0; i < PL_ARRAY_SIZE(ext_suffixes); i++) {
+        if (pl_str_eatend0(&fun_name, ext_suffixes[i])) {
+            struct vk_fun *pf = (struct vk_fun *)pl_memdup_ptr(parent, f);
+            pf->name = pl_strdup0(pf, fun_name);
+            return pf;
+        }
+    }
+    return f;
+}
+
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
     pl_assert(vk->physd);
@@ -1196,7 +1212,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         if (core_ver && vk->api_ver >= core_ver) {
             // Layer is already implicitly enabled by the API version
             for (const struct vk_fun *f = ext->funs; f && f->name; f++)
-                PL_ARRAY_APPEND(tmp, ext_funs,  f);
+                PL_ARRAY_APPEND(tmp, ext_funs, promote_vk_fun(tmp, f));
             continue;
         }
 
@@ -1625,7 +1641,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         uint32_t core_ver = vk_ext_promoted_ver(ext->name);
         if (core_ver && vk->api_ver >= core_ver) {
             for (const struct vk_fun *f = ext->funs; f && f->name; f++)
-                load_vk_fun(vk, f);
+                load_vk_fun(vk, promote_vk_fun(tmp, f));
             continue;
         }
         for (int n = 0; n < params->num_extensions; n++) {
