@@ -157,7 +157,6 @@ struct vk_ctx {
     PL_VK_FUN(CreateDebugReportCallbackEXT);
     PL_VK_FUN(CreateDescriptorPool);
     PL_VK_FUN(CreateDescriptorSetLayout);
-    PL_VK_FUN(CreateFence);
     PL_VK_FUN(CreateFramebuffer);
     PL_VK_FUN(CreateGraphicsPipelines);
     PL_VK_FUN(CreateImage);
@@ -177,7 +176,6 @@ struct vk_ctx {
     PL_VK_FUN(DestroyDescriptorPool);
     PL_VK_FUN(DestroyDescriptorSetLayout);
     PL_VK_FUN(DestroyDevice);
-    PL_VK_FUN(DestroyFence);
     PL_VK_FUN(DestroyFramebuffer);
     PL_VK_FUN(DestroyImage);
     PL_VK_FUN(DestroyImageView);
@@ -213,12 +211,10 @@ struct vk_ctx {
     PL_VK_FUN(QueueSubmit);
     PL_VK_FUN(QueueSubmit2KHR);
     PL_VK_FUN(QueueWaitIdle);
-    PL_VK_FUN(ResetFences);
     PL_VK_FUN(ResetQueryPool);
     PL_VK_FUN(SetDebugUtilsObjectNameEXT);
     PL_VK_FUN(SetHdrMetadataEXT);
     PL_VK_FUN(UpdateDescriptorSets);
-    PL_VK_FUN(WaitForFences);
     PL_VK_FUN(WaitSemaphores);
 
 #ifdef PL_HAVE_WIN32

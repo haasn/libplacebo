@@ -346,7 +346,6 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CreateComputePipelines),
     PL_VK_DEV_FUN(CreateDescriptorPool),
     PL_VK_DEV_FUN(CreateDescriptorSetLayout),
-    PL_VK_DEV_FUN(CreateFence),
     PL_VK_DEV_FUN(CreateFramebuffer),
     PL_VK_DEV_FUN(CreateGraphicsPipelines),
     PL_VK_DEV_FUN(CreateImage),
@@ -364,7 +363,6 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroyDescriptorPool),
     PL_VK_DEV_FUN(DestroyDescriptorSetLayout),
     PL_VK_DEV_FUN(DestroyDevice),
-    PL_VK_DEV_FUN(DestroyFence),
     PL_VK_DEV_FUN(DestroyFramebuffer),
     PL_VK_DEV_FUN(DestroyImage),
     PL_VK_DEV_FUN(DestroyImageView),
@@ -391,11 +389,9 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(MapMemory),
     PL_VK_DEV_FUN(QueueSubmit),
     PL_VK_DEV_FUN(QueueWaitIdle),
-    PL_VK_DEV_FUN(ResetFences),
     PL_VK_DEV_FUN(ResetQueryPool),
     PL_VK_DEV_FUN(SetDebugUtilsObjectNameEXT),
     PL_VK_DEV_FUN(UpdateDescriptorSets),
-    PL_VK_DEV_FUN(WaitForFences),
     PL_VK_DEV_FUN(WaitSemaphores),
 };
 
