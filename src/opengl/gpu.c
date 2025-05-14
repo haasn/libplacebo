@@ -118,7 +118,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     int ver = pl_gl->major * 10 + pl_gl->minor;
     p->gl_ver = glsl->gles ? 0 : ver;
     p->gles_ver = glsl->gles ? ver : 0;
-    p->sig = pl_str0_hash((const char *) gl->GetString(GL_VENDOR));
+    p->sig = pl_str0_hash((const char *) gl->GetString(GL_VERSION));
     pl_hash_merge(&p->sig, pl_str0_hash((const char *) gl->GetString(GL_VENDOR)));
     pl_hash_merge(&p->sig, pl_str0_hash((const char *) gl->GetString(GL_RENDERER)));
 
