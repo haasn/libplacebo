@@ -464,3 +464,83 @@ int pl_cache_load(pl_cache cache, const uint8_t *data, size_t size)
         .size = size,
     });
 }
+
+// File I/O wrappers
+
+#ifdef _WIN32
+#  define DIR_SEP '\\'
+#else
+#  define DIR_SEP '/'
+#endif
+
+void pl_cache_set_dir(void *priv, pl_cache_obj obj)
+{
+    const char *dir = priv;
+    if (!dir || !dir[0])
+        return;
+
+    char *path = pl_asprintf(NULL, "%s%c%016"PRIx64, dir, DIR_SEP, obj.key);
+    if (!obj.size) {
+        remove(path);
+        pl_free(path);
+        return;
+    }
+
+    // Check if file exists
+    FILE *fp = fopen(path, "rb");
+    if (fp) {
+        pl_free(path);
+        fclose(fp);
+        return; // ignore already existing files
+    }
+
+    fp = fopen(path, "wb");
+    pl_free(path);
+    if (!fp)
+        return;
+
+    size_t written = fwrite(obj.data, 1, obj.size, fp);
+    fclose(fp);
+    if (written != obj.size)
+        remove(path);
+}
+
+pl_cache_obj pl_cache_get_dir(void *priv, uint64_t key)
+{
+    const char *dir = priv;
+    if (!dir || !dir[0])
+        return (pl_cache_obj) {0};
+
+    char *path = pl_asprintf(NULL, "%s%c%016"PRIx64, dir, DIR_SEP, key);
+    FILE *fp = fopen(path, "rb");
+    pl_free(path);
+    if (!fp)
+        return (pl_cache_obj) {0};
+
+    if (fseek(fp, 0, SEEK_END) != 0)
+        goto error;
+    long size = ftell(fp);
+    if (size <= 0)
+        goto error;
+    if (fseek(fp, 0, SEEK_SET) != 0)
+        goto error;
+
+    char *buffer = pl_alloc(NULL, size);
+    size_t read = fread(buffer, 1, size, fp);
+    if (read != size) {
+        pl_free(buffer);
+        goto error;
+    }
+
+    fclose(fp);
+    return (pl_cache_obj) {
+        .key  = key,
+        .size = size,
+        .data = buffer,
+        .free = pl_free,
+    };
+
+error:
+    fclose(fp);
+    return (pl_cache_obj) {0};
+}

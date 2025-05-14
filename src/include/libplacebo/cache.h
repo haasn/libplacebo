@@ -157,6 +157,17 @@ static inline bool pl_read_file_cb(void *priv, size_t size, void *ptr)
     return fread(ptr, 1, size, (FILE *) priv) == size;
 }
 
+// --- Standard callbacks for caching to a files inside a directory.
+
+// Write the cache object to a file inside `dir`, which must be a 0-terminated
+// string pointing to an already existing directory. If `obj` has size 0, the
+// file will instead be unlinked. The filename will be `<dir>/<obj.key>`, where
+// the key is formatted as a sequence of 16 lowercase hexadecimal digits.
+PL_API void pl_cache_set_dir(void *dir, pl_cache_obj obj);
+
+// Retrieve a cache object from a file inside `dir`. See `pl_cache_set_dir`.
+PL_API pl_cache_obj pl_cache_get_dir(void *dir, uint64_t key);
+
 // --- Object modification API. Mostly intended for internal use.
 
 // Insert a new cached object into a `pl_cache`. Returns whether successful.
