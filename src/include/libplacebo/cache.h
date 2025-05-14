@@ -75,7 +75,7 @@ struct pl_cache_params {
     // Note: This function must be thread safe.
     pl_cache_obj (*get)(void *priv, uint64_t key);
 
-    // External context for insert/lookup.
+    // External context for get/set.
     void *priv;
 };
 
