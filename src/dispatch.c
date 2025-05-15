@@ -1100,7 +1100,19 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     });
 
     ident_t base = sh_var(sh, (struct pl_shader_var) {
-        .data    = &(int[2]){ rc->x0, rc->y0 },
+        .data    = &(int[2]){
+            // When dealing with flipped coordinates, we need to subtract one
+            // from the effective sample position; this is because instead of
+            // IDs normally spanning from [0, size - 1], the inverted math
+            // would end up with [size, 1] instead.
+            //
+            // Put another way, because we are dealing with integer coordinates,
+            // the calculated position is rounded towards zero - but when the
+            // coordinate system is flipped, that ends up rounding up instead
+            // of down.
+            rc->x0 - (rc->x0 > rc->x1),
+            rc->y0 - (rc->y0 > rc->y1),
+        },
         .dynamic = true,
         .var     = {
             .name  = "base",
