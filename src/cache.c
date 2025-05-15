@@ -467,19 +467,13 @@ int pl_cache_load(pl_cache cache, const uint8_t *data, size_t size)
 
 // File I/O wrappers
 
-#ifdef _WIN32
-#  define DIR_SEP '\\'
-#else
-#  define DIR_SEP '/'
-#endif
-
-void pl_cache_set_dir(void *priv, pl_cache_obj obj)
+void pl_cache_set_file(void *priv, pl_cache_obj obj)
 {
     const char *dir = priv;
     if (!dir || !dir[0])
         return;
 
-    char *path = pl_asprintf(NULL, "%s%c%016"PRIx64, dir, DIR_SEP, obj.key);
+    char *path = pl_asprintf(NULL, "%s%016"PRIx64, dir, obj.key);
     if (!obj.size) {
         remove(path);
         pl_free(path);
@@ -505,13 +499,13 @@ void pl_cache_set_dir(void *priv, pl_cache_obj obj)
         remove(path);
 }
 
-pl_cache_obj pl_cache_get_dir(void *priv, uint64_t key)
+pl_cache_obj pl_cache_get_file(void *priv, uint64_t key)
 {
     const char *dir = priv;
     if (!dir || !dir[0])
         return (pl_cache_obj) {0};
 
-    char *path = pl_asprintf(NULL, "%s%c%016"PRIx64, dir, DIR_SEP, key);
+    char *path = pl_asprintf(NULL, "%s%016"PRIx64, dir, key);
     FILE *fp = fopen(path, "rb");
     pl_free(path);
     if (!fp)
