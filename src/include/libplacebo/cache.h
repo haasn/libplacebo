@@ -166,9 +166,16 @@ static inline bool pl_read_file_cb(void *priv, size_t size, void *ptr)
 // already exist.
 //
 // If `obj` has size 0, the file will instead be removed.
+//
+// Note: The files written by this callback use the same internal format as
+// `pl_cache_save_file`, and could thus also be loaded directly using
+// `pl_cache_load`.
 PL_API void pl_cache_set_file(void *path, pl_cache_obj obj);
 
 // Retrieve a cache object from a file inside `dir`. See `pl_cache_set_dir`.
+//
+// If the cached file is missing, truncated or otherwise corrupt, it is
+// instead removed (if needed) and {0} is returned.
 PL_API pl_cache_obj pl_cache_get_file(void *path, uint64_t key);
 
 #define pl_cache_set_dir pl_cache_set_file
