@@ -527,14 +527,6 @@ PL_LIBAV_API int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
     first = true;
     for (int p = 0; p < planes; p++) {
         aligned_data[p] = out_data[p];
-
-        // Planes with only an alpha component should be ignored
-        if (pl_plane_data_num_comps(&aligned_data[p]) == 1 &&
-            aligned_data[p].component_map[0] == PL_CHANNEL_A)
-        {
-            continue;
-        }
-
         if (!pl_plane_data_align(&aligned_data[p], &bits))
             goto misaligned;
 

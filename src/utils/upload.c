@@ -113,12 +113,6 @@ bool pl_plane_data_align(struct pl_plane_data *data, struct pl_bit_encoding *out
         if (!aligned.component_size[i])
             break;
 
-        // Can't meaningfully align alpha channel, so just skip it. This is a
-        // limitation of the fact that `pl_bit_encoding` only applies to the
-        // main color channels, and changing this would be very nontrivial.
-        if (aligned.component_map[i] == PL_CHANNEL_A)
-            continue;
-
         // Color depth is the original component size, before alignment
         SET_TEST(bits.color_depth, aligned.component_size[i]);
 
