@@ -1023,6 +1023,7 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"blackman",        &pl_filter_function_blackman},
     {"bohman",          &pl_filter_function_bohman},
     {"gaussian",        &pl_filter_function_gaussian},
+    {"pow_garamond",    &pl_filter_function_pow_garamond},
     {"quadratic",       &pl_filter_function_quadratic},
     {"quadric",         &filter_function_quadric}, // alias
     {"sinc",            &pl_filter_function_sinc},
