@@ -399,6 +399,23 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .tunable   = {true},
 };
 
+static double pow_garamond(const struct pl_filter_ctx *f, double x)
+{
+    const double n = fmax(f->params[0], 0.0);
+    const double m = fmax(f->params[1], 0.0);
+    if (n == 0.0)
+        return 1.0;
+    return pow(1.0 - pow(x, n), m);
+}
+
+const struct pl_filter_function pl_filter_function_pow_garamond = {
+    .name    = "pow_garamond",
+    .weight  = pow_garamond,
+    .radius  = 1.0,
+    .params  = {2.0, 1.0},
+    .tunable = {true, true},
+};
+
 static double quadratic(const struct pl_filter_ctx *f, double x)
 {
     if (x < 0.5) {
@@ -623,6 +640,7 @@ const struct pl_filter_function * const pl_filter_functions[] = {
     &pl_filter_function_blackman,
     &pl_filter_function_bohman,
     &pl_filter_function_gaussian,
+    &pl_filter_function_pow_garamond,
     &pl_filter_function_quadratic,
     &filter_function_quadric, // alias
     &pl_filter_function_sinc,
