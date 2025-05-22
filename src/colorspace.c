@@ -1559,10 +1559,14 @@ static inline float xy_dist2(struct pl_cie_xy a, struct pl_cie_xy b)
 bool pl_primaries_compatible(const struct pl_raw_primaries *a,
                              const struct pl_raw_primaries *b)
 {
-    float RR = xy_dist2(a->red, b->red),    RG = xy_dist2(a->red, b->green),
-          RB = xy_dist2(a->red, b->blue),   GG = xy_dist2(a->green, b->green),
-          GB = xy_dist2(a->green, b->blue), BB = xy_dist2(a->blue, b->blue);
-    return RR < RG && RR < RB && GG < RG && GG < GB && BB < RB && BB < GB;
+    float RR = xy_dist2(a->red, b->red),   RG = xy_dist2(a->red, b->green),
+          RB = xy_dist2(a->red, b->blue);
+    float GR = xy_dist2(a->green, b->red), GG = xy_dist2(a->green, b->green),
+          GB = xy_dist2(a->green, b->blue);
+    float BR = xy_dist2(a->blue, b->red),  BG = xy_dist2(a->blue, b->green),
+          BB = xy_dist2(a->blue, b->blue);
+
+    return RR < RG && RR < RB && GG < GR && GG < GB && BB < BR && BB < BG;
 }
 
 // returns the intersection of the two lines defined by ab and cd
