@@ -2427,6 +2427,10 @@ static bool pass_output_target(struct pass_state *pass)
     else if (params->skip_target_clearing)
         background = PL_CLEAR_SKIP;
 
+    /* Avoid unnecessary round trip through premultiplied alpha */
+    if (params->background_transparency >= 1.0)
+        background = PL_CLEAR_SKIP;
+
     bool has_alpha = target->repr.alpha != PL_ALPHA_NONE || params->blend_params;
     bool need_blend = background != PL_CLEAR_SKIP || !has_alpha;
     if (img->comps == 4 && need_blend) {
