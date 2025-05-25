@@ -1031,7 +1031,7 @@ static inline float iir_coeff(float rate)
 
 static float measure_peak(const struct peak_buf_data *data, float percentile)
 {
-    unsigned frame_max_pq = data->frame_max_pq[0]+data->frame_max_pq[1];
+    unsigned frame_max_pq = PL_MAX(data->frame_max_pq[0],data->frame_max_pq[1]);
     const float frame_max = (float) frame_max_pq / PQ_MAX;
     if (percentile <= 0 || percentile >= 100)
         return frame_max;
