@@ -493,6 +493,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
 
     default:
         PL_VK_ASSERT(res, "vkAllocateMemory");
+        vk_malloc_print_stats(ma, PL_LOG_TRACE);
     }
 
     slab->mtype = *mtype;
