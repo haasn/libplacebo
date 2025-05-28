@@ -953,7 +953,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     case PL_HANDLE_HOST_PTR:
         PL_TRACE(vk, "Imported %s bytes from ptr: %p%s",
                  PRINT_SIZE(slab->size), shmem->handle.ptr,
-                 params->ded_image ? " (dedicated" : "");
+                 params->ded_image ? " (dedicated)" : "");
         slab->handle.ptr = ptrinfo.pHostPointer;
         break;
     case PL_HANDLE_WIN32:
