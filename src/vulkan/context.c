@@ -185,6 +185,11 @@ static const struct vk_ext vk_device_extensions[] = {
             PL_VK_DEV_FUN(QueueSubmit2KHR),
             {0}
         },
+    }, {
+        .name = VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+        .funs = (const struct vk_fun[]) {
+            {0}
+        },
     },
 };
 
@@ -212,6 +217,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
 #endif
     VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+    VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =

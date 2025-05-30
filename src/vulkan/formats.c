@@ -379,6 +379,56 @@ static const struct vk_format vk_formats[] = {
 #undef REGFMT
 #undef FMT
 
+/* Backwards compatibility with older versions of the drm mods ext */
+static VkDrmFormatModifierPropertiesList2EXT get_drm_mods_v2(struct vk_ctx *vk, VkFormat fmt)
+{
+    const bool has_v2 = vk->api_ver >= VK_API_VERSION_1_3;
+
+    VkDrmFormatModifierPropertiesList2EXT drm_props = {
+        .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT,
+    };
+
+    VkDrmFormatModifierPropertiesListEXT drm_props_v1 = {
+        .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
+    };
+
+    VkFormatProperties2KHR prop = {
+        .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2_KHR,
+        .pNext = has_v2 ? (void *) &drm_props : (void *) &drm_props_v1,
+    };
+
+    vk->GetPhysicalDeviceFormatProperties2(vk->physd, fmt, &prop);
+    if (!has_v2)
+        drm_props.drmFormatModifierCount = drm_props_v1.drmFormatModifierCount;
+    if (!drm_props.drmFormatModifierCount)
+        return drm_props;
+
+    drm_props.pDrmFormatModifierProperties = pl_zalloc(NULL,
+        sizeof(VkDrmFormatModifierProperties2EXT) * drm_props.drmFormatModifierCount);
+
+    if (!has_v2) {
+        drm_props_v1.pDrmFormatModifierProperties = pl_zalloc(NULL,
+            sizeof(VkDrmFormatModifierPropertiesEXT) * drm_props_v1.drmFormatModifierCount);
+    }
+
+    vk->GetPhysicalDeviceFormatProperties2(vk->physd, fmt, &prop);
+
+    if (!has_v2) {
+        for (int i = 0; i < drm_props_v1.drmFormatModifierCount; i++) {
+            const VkDrmFormatModifierPropertiesEXT props = drm_props_v1.pDrmFormatModifierProperties[i];
+            drm_props.pDrmFormatModifierProperties[i] = (VkDrmFormatModifierProperties2EXT) {
+                .drmFormatModifier = props.drmFormatModifier,
+                .drmFormatModifierPlaneCount = props.drmFormatModifierPlaneCount,
+                .drmFormatModifierTilingFeatures = props.drmFormatModifierTilingFeatures,
+            };
+        }
+
+        pl_free(drm_props_v1.pDrmFormatModifierProperties);
+    }
+
+    return drm_props;
+}
+
 void vk_setup_formats(struct pl_gpu_t *gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -402,38 +452,34 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
         // Suppress some errors/warnings spit out by the format probing code
         pl_log_level_cap(vk->log, PL_LOG_INFO);
 
-        bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
-        VkDrmFormatModifierPropertiesEXT modifiers[16] = {0};
-        VkDrmFormatModifierPropertiesListEXT drm_props = {
-            .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
-            .drmFormatModifierCount = PL_ARRAY_SIZE(modifiers),
-            .pDrmFormatModifierProperties = modifiers,
+        VkFormatProperties3KHR prop3 = {
+            .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3_KHR,
         };
 
         VkFormatProperties2KHR prop2 = {
             .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
-            .pNext = has_drm_mods ? &drm_props : NULL,
+            .pNext = vk->api_ver >= VK_API_VERSION_1_3 ? &prop3 : NULL,
         };
 
         vk->GetPhysicalDeviceFormatProperties2(vk->physd, vk_fmt->tfmt, &prop2);
 
         // If wholly unsupported, try falling back to the emulation formats
         // for texture operations
-        VkFormatProperties *prop = &prop2.formatProperties;
+        const VkFormatProperties *prop = &prop2.formatProperties;
         while (has_emu && !prop->optimalTilingFeatures && vk_fmt->emufmt) {
             vk_fmt = vk_fmt->emufmt;
             vk->GetPhysicalDeviceFormatProperties2(vk->physd, vk_fmt->tfmt, &prop2);
         }
 
-        VkFormatFeatureFlags texflags = prop->optimalTilingFeatures;
-        VkFormatFeatureFlags bufflags = prop->bufferFeatures;
+        VkFormatFeatureFlags2 texflags = prop->optimalTilingFeatures | prop3.optimalTilingFeatures;
+        VkFormatFeatureFlags2 bufflags = prop->bufferFeatures | prop3.bufferFeatures;
         if (vk_fmt->fmt.emulated) {
             // Emulated formats might have a different buffer representation
             // than their texture representation. If they don't, assume their
             // buffer representation is nonsensical (e.g. r16f)
             if (vk_fmt->bfmt) {
-                vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, prop);
-                bufflags = prop->bufferFeatures;
+                vk->GetPhysicalDeviceFormatProperties2(vk->physd, vk_fmt->bfmt, &prop2);
+                bufflags = prop->bufferFeatures | prop3.bufferFeatures;
             } else {
                 bufflags = 0;
             }
@@ -465,21 +511,21 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
         // We can set this universally
         fmt->fourcc = pl_fmt_fourcc(fmt);
 
-        if (has_drm_mods) {
+        if (vk->GetImageDrmFormatModifierPropertiesEXT) {
 
-            if (drm_props.drmFormatModifierCount == PL_ARRAY_SIZE(modifiers)) {
-                PL_WARN(gpu, "DRM modifier list for format %s possibly truncated",
-                        fmt->name);
-            }
+            PL_ARRAY(uint64_t) modlist = {0};
 
             // Query the list of supported DRM modifiers from the driver
-            PL_ARRAY(uint64_t) modlist = {0};
+            VkDrmFormatModifierPropertiesList2EXT drm_props =
+                get_drm_mods_v2(vk, vk_fmt->tfmt);
+
             for (int i = 0; i < drm_props.drmFormatModifierCount; i++) {
-                if (modifiers[i].drmFormatModifierPlaneCount > 1) {
+                const VkDrmFormatModifierProperties2EXT mod = drm_props.pDrmFormatModifierProperties[i];
+                if (mod.drmFormatModifierPlaneCount > 1) {
                     PL_TRACE(gpu, "Ignoring format modifier %s of "
                              "format %s because its plane count %d > 1",
-                             PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
-                             fmt->name, modifiers[i].drmFormatModifierPlaneCount);
+                             PRINT_DRM_MOD(mod.drmFormatModifier),
+                             fmt->name, mod.drmFormatModifierPlaneCount);
                     continue;
                 }
 
@@ -493,19 +539,19 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
                     VK_FORMAT_FEATURE_BLIT_SRC_BIT |
                     VK_FORMAT_FEATURE_BLIT_DST_BIT;
 
-
-                VkFormatFeatureFlags flags = modifiers[i].drmFormatModifierTilingFeatures;
+                VkFormatFeatureFlags2 flags = mod.drmFormatModifierTilingFeatures;
                 if ((flags & flag_mask) != (texflags & flag_mask)) {
                     PL_DEBUG(gpu, "DRM format modifier %s of format %s "
-                            "supports fewer caps (0x%"PRIx32") than optimal tiling "
-                            "(0x%"PRIx32"), may result in limited capability!",
-                            PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
+                            "supports fewer caps (0x%"PRIx64") than optimal tiling "
+                            "(0x%"PRIx64"), may result in limited capability!",
+                            PRINT_DRM_MOD(mod.drmFormatModifier),
                             fmt->name, flags, texflags);
                 }
 
-                PL_ARRAY_APPEND(fmt, modlist, modifiers[i].drmFormatModifier);
+                PL_ARRAY_APPEND(fmt, modlist, mod.drmFormatModifier);
             }
 
+            pl_free(drm_props.pDrmFormatModifierProperties);
             fmt->num_modifiers = modlist.num;
             fmt->modifiers = modlist.elem;
 
