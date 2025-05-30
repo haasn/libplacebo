@@ -150,6 +150,8 @@ struct vk_ctx {
     PL_VK_FUN(CmdSetViewport);
     PL_VK_FUN(CmdUpdateBuffer);
     PL_VK_FUN(CmdWriteTimestamp);
+    PL_VK_FUN(CopyImageToMemoryEXT);
+    PL_VK_FUN(CopyMemoryToImageEXT);
     PL_VK_FUN(CreateBuffer);
     PL_VK_FUN(CreateBufferView);
     PL_VK_FUN(CreateCommandPool);
@@ -214,6 +216,7 @@ struct vk_ctx {
     PL_VK_FUN(ResetQueryPool);
     PL_VK_FUN(SetDebugUtilsObjectNameEXT);
     PL_VK_FUN(SetHdrMetadataEXT);
+    PL_VK_FUN(TransitionImageLayoutEXT);
     PL_VK_FUN(UpdateDescriptorSets);
     PL_VK_FUN(WaitSemaphores);
 

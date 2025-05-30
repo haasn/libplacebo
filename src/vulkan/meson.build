@@ -15,7 +15,7 @@ if fs.is_dir(vulkan_headers_dir/'include')
 endif
 
 vulkan_build = vulkan_build.require(
-  cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_3',
+  cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_4',
                        include_directories: vulkan_headers_inc,
                        dependencies: vulkan_headers),
   error_message: 'vulkan.h was not found on the system, nor inside ' +

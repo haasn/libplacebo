@@ -477,6 +477,13 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     }
 #endif
 
+    VkPhysicalDeviceHostImageCopyPropertiesEXT copy_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES_EXT,
+    };
+
+    if (vk->CopyMemoryToImageEXT)
+        vk_link_struct(&props, &copy_props);
+
     vk->GetPhysicalDeviceProperties2(vk->physd, &props);
     VkPhysicalDeviceLimits limits = props.properties.limits;
 
@@ -575,6 +582,16 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
     if (vk->CmdPushDescriptorSetKHR)
         p->max_push_descriptors = pushd_props.maxPushDescriptors;
+
+    if (copy_props.copyDstLayoutCount || copy_props.copySrcLayoutCount) {
+        PL_ARRAY_REALLOC(gpu, p->host_ul_layouts, copy_props.copyDstLayoutCount);
+        PL_ARRAY_REALLOC(gpu, p->host_dl_layouts, copy_props.copySrcLayoutCount);
+        p->host_ul_layouts.num = copy_props.copyDstLayoutCount;
+        p->host_dl_layouts.num = copy_props.copySrcLayoutCount;
+        copy_props.pCopyDstLayouts = p->host_ul_layouts.elem;
+        copy_props.pCopySrcLayouts = p->host_dl_layouts.elem;
+        vk->GetPhysicalDeviceProperties2(vk->physd, &props);
+    }
 
     vk_setup_formats(gpu);
 

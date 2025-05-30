@@ -530,14 +530,15 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
                 }
 
                 // Only warn about texture format features relevant to us
-                const VkFormatFeatureFlags flag_mask =
+                const VkFormatFeatureFlags2 flag_mask =
                     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
                     VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
                     VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                     VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT |
                     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                     VK_FORMAT_FEATURE_BLIT_SRC_BIT |
-                    VK_FORMAT_FEATURE_BLIT_DST_BIT;
+                    VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                    VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT;
 
                 VkFormatFeatureFlags2 flags = mod.drmFormatModifierTilingFeatures;
                 if ((flags & flag_mask) != (texflags & flag_mask)) {
@@ -600,6 +601,10 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             if ((texflags & bits[i].flags) == bits[i].flags)
                 fmt->caps |= bits[i].caps;
         }
+
+        // Internal capabilities
+        if (texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)
+            fmtp->can_host_copy = true;
 
         // For blit emulation via compute shaders
         if (!(fmt->caps & PL_FMT_CAP_BLITTABLE) && (fmt->caps & PL_FMT_CAP_STORABLE)) {

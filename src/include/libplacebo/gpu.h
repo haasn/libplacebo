@@ -881,10 +881,10 @@ struct pl_tex_transfer_params {
     // field, so it's more useful for `ptr` transfers. (Though it can still be
     // helpful to avoid having to manually poll buffers all the time)
     //
-    // When this is *not* specified, uploads from `ptr` are still asynchronous
-    // but require a host memcpy, while downloads from `ptr` are blocking. As
-    // such, it's recommended to always try using asynchronous texture
-    // transfers wherever possible.
+    // When this is *not* specified, uploads from `ptr` are either synchronous,
+    // or internally asynchronous but with an extra host memcpy, while
+    // downloads from `ptr` are blocking. As such, it's recommended to always
+    // try using asynchronous texture transfers wherever possible.
     //
     // Note: Requires `pl_gpu_limits.callbacks`
     //

@@ -190,6 +190,14 @@ static const struct vk_ext vk_device_extensions[] = {
         .funs = (const struct vk_fun[]) {
             {0}
         },
+    }, {
+        .name = VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,
+        .funs = (const struct vk_fun[]) {
+            PL_VK_DEV_FUN(CopyImageToMemoryEXT),
+            PL_VK_DEV_FUN(CopyMemoryToImageEXT),
+            PL_VK_DEV_FUN(TransitionImageLayoutEXT),
+            {0}
+        },
     },
 };
 
@@ -218,6 +226,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
 #endif
     VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
     VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+    VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -230,8 +239,14 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "vk_device_extensions?");
 
 // Recommended features; keep in sync with libavutil vulkan hwcontext
+static const VkPhysicalDeviceVulkan14Features recommended_vk14 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+    .hostImageCopy = true,
+};
+
 static const VkPhysicalDeviceVulkan13Features recommended_vk13 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    .pNext = (void *) &recommended_vk14,
     .computeFullSubgroups = true,
     .maintenance4 = true,
     .shaderZeroInitializeWorkgroupMemory = true,
