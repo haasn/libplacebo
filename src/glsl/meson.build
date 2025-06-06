@@ -4,6 +4,14 @@ components.set('shaderc', shaderc.found())
 if shaderc.found()
   build_deps += shaderc
   sources += 'glsl/spirv_shaderc.c'
+
+  # Version check for shaderc is not possible because everything after v2023.8
+  # uses this version due to a malformed version line.
+  # See https://github.com/google/shaderc/issues/1496
+  conf_internal.set('PL_HAVE_SHADERC_VK_1_4',
+    cc.has_header_symbol('shaderc/shaderc.h', 'shaderc_env_version_vulkan_1_4', dependencies: shaderc))
+  conf_internal.set('PL_HAVE_SHADERC_VK_1_3',
+    cc.has_header_symbol('shaderc/shaderc.h', 'shaderc_env_version_vulkan_1_3', dependencies: shaderc))
 endif
 
 # glslang
