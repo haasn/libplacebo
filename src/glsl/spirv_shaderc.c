@@ -26,11 +26,11 @@
 #define VK_API_VERSION_MINOR(version) (((uint32_t)(version) >> 12U) & 0x3FFU)
 
 #if defined(PL_HAVE_SHADERC_VK_1_4)
-# define SHADERC_VULKAN_MAX PL_VLK_VERSION(1, 4)
+# define SHADERC_VULKAN_MAX shaderc_env_version_vulkan_1_4
 #elif defined(PL_HAVE_SHADERC_VK_1_3)
-# define SHADERC_VULKAN_MAX PL_VLK_VERSION(1, 3)
+# define SHADERC_VULKAN_MAX shaderc_env_version_vulkan_1_3
 #else
-# define SHADERC_VULKAN_MAX PL_VLK_VERSION(1, 2)
+# define SHADERC_VULKAN_MAX shaderc_env_version_vulkan_1_2
 #endif
 
 const struct spirv_compiler pl_spirv_shaderc;
