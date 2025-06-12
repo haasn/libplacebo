@@ -152,14 +152,14 @@ endif
 # Headless vulkan demos
 if components.get('vk-proc-addr')
   executable('video-filtering', 'video-filtering.c',
-    dependencies: [ libplacebo, pl_clock, pl_thread, vulkan_loader ],
+    dependencies: [ libplacebo, pl_clock, pl_thread, vulkan_loader, vulkan_headers ],
     c_args: '-O2',
     link_args: link_args,
     link_depends: link_depends,
   )
 
   executable('multigpu-bench', 'multigpu-bench.c',
-    dependencies: [ libplacebo, pl_clock, vulkan_loader ],
+    dependencies: [ libplacebo, pl_clock, vulkan_loader, vulkan_headers ],
     c_args: '-O2',
     link_args: link_args,
     link_depends: link_depends,
