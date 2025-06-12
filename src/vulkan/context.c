@@ -465,6 +465,11 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     case 0x54023d1d: // VUID-VkDescriptorSetLayoutCreateInfo-flags-00281
         // Work around https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9542
         return false;
+
+    case 0x8d2176ff: // VUID-VkCopyMemoryToImageInfo-dstImageLayout-09060
+    case 0xa662049a: // VUID-VkHostImageLayoutTransitionInfo-newLayout-09057
+        // Work around https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/10241
+        return false;
     }
 
     enum pl_log_level lev;
