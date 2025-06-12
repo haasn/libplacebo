@@ -9,6 +9,9 @@ foreach t : tests
   if t == 'opengl_surfaceless.c'
     deps += glad_dep
   endif
+  if t == 'vulkan.c'
+    deps += vulkan_headers
+  endif
   sources = []
   if gpu_tests.contains(t)
     sources += 'gpu_tests.c'
