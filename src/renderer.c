@@ -2469,13 +2469,20 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
-    if (img->comps == 4 && has_alpha)
-        pl_shader_set_alpha(sh, &img->repr, target->repr.alpha);
 
     // Apply the color scale separately, after encoding is done, to make sure
     // that the intermediate FBO (if any) has the correct precision.
     struct pl_color_repr repr = target->repr;
     float scale = pl_color_repr_normalize(&repr);
+
+    // If the alpha mode is already applied, don't double-apply it
+    if (img->repr.alpha == repr.alpha || !has_alpha || img->comps == 4) {
+        repr.alpha = PL_ALPHA_NONE;
+    } else {
+        // `pl_shader_encode_color` expects independent alpha
+        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_INDEPENDENT);
+    }
+
     enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
     if (lut_type != PL_LUT_CONVERSION)
         pl_shader_encode_color(sh, &repr);
