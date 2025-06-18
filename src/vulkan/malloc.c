@@ -54,7 +54,7 @@
 // The threshold for which allocations to serve from host-mapped VRAM, as
 // opposed to host memory. Will not allocate more than this fraction of VRAM in
 // one go. (For a 256 MB non-resizable BAR, this is equivalent to 4 MB)
-#define MAPPED_VRAM_THRESHOLD 64
+#define MAPPED_VRAM_THRESHOLD 256
 
 // A single slab represents a contiguous region of allocated memory. Actual
 // allocations are served as pages of this. Slabs are organized into pools,
