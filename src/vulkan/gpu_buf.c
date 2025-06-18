@@ -188,11 +188,8 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         // of other requirements could potentially exclude it, so just mark it
         // as optimal by default. Additionally, don't do this if the available
         // VRAM size is very small.
-        if (!(mparams.optimal & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) &&
-            params->size * MAPPED_VRAM_THRESHOLD <= gpu->limits.max_mapped_vram)
-        {
+        if (!(mparams.optimal & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
             mparams.optimal |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        }
         break;
     case PL_BUF_MEM_DEVICE:
         // Force device local memory.
