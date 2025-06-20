@@ -107,6 +107,17 @@ PL_API extern const struct pl_filter_function pl_filter_function_bohman;
 // Parameter [0]: Scale (t), increasing makes the result blurrier.
 PL_API extern const struct pl_filter_function pl_filter_function_gaussian;
 
+// Power of Garamond filter: Based on power filter Garamond, named after Claude Garamond.
+// Parameter [0]: "n". Influences the shape.
+// Parameter [1]: "m". Controls falloff.
+//            m = 1.0:  Garamond filter.
+// n = 2.0,   m = 1.0:  Welch filter.
+// n = 1.0,   m = 1.0:  Linear filter.
+// n -> +inf, m <= 1.0: Box filter.
+// n = 0:               Box filter.
+//            m = 0.0:  Box filter.
+PL_API extern const struct pl_filter_function pl_filter_function_pow_garamond;
+
 // Quadratic function: 2nd order approximation of the gaussian function. Also
 // sometimes called a "quadric" window.
 PL_API extern const struct pl_filter_function pl_filter_function_quadratic;
