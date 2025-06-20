@@ -305,8 +305,11 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
     // Opportunistically try and use host image copies if possible
+    const VkDeviceSize size_estimate = fmt->internal_size * PL_ALIGN2(params->w, 8) *
+                                       PL_MAX(params->h, 1) * PL_MAX(params->d, 1);
     if (((tex->params.host_readable && p->host_dl_layouts.num) ||
-         (host_writable && p->host_ul_layouts.num)) && fmtp->can_host_copy)
+         (host_writable && p->host_ul_layouts.num)) && fmtp->can_host_copy &&
+        (p->rebar_enabled || size_estimate < gpu->limits.max_mapped_vram / 1024))
         usage |= VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
 
     if (!usage) {

@@ -60,6 +60,7 @@ struct pl_vk {
     // Some additional cached device limits and features checks
     uint32_t max_push_descriptors;
     size_t min_texel_alignment;
+    bool rebar_enabled;
 
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
