@@ -50,6 +50,7 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
             .d3d11_fmt = DXGI_FORMAT_R10G10B10A2_UNORM,
             .out_csp   = pl_csp,
         };
+#if 0 // TODO: Add support for scRGB
     } else if (pl_color_primaries_is_wide_gamut(hint->primaries) ||
                hint->transfer == PL_COLOR_TRC_LINEAR)
     {
@@ -64,6 +65,7 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
                 .transfer  = PL_COLOR_TRC_LINEAR,
             }
         };
+#endif
     }
 
     return (struct d3d11_csp_mapping){
