@@ -236,8 +236,10 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 score += 100;
             if (pl_color_primaries_is_wide_gamut(space.primaries) == wide_gamut)
                 score += 1000;
-            if (space.primaries == hint->primaries)
+            if (space.transfer == PL_COLOR_TRC_LINEAR)
                 score += 2000;
+            if (space.primaries == hint->primaries)
+                score += 4000;
             if (pl_color_transfer_is_hdr(space.transfer) == prefer_hdr)
                 score += 10000;
             if (space.transfer == hint->transfer)
