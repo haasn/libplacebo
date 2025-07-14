@@ -77,7 +77,7 @@ struct pl_renderer_t {
 
     // Temporary storage for vertex/index data
     PL_ARRAY(struct osd_vertex) osd_vertices;
-    PL_ARRAY(uint16_t) osd_indices;
+    PL_ARRAY(uint32_t) osd_indices;
     struct pl_vertex_attrib osd_attribs[3];
 
     // Frame cache (for frame mixing / interpolation)
@@ -994,6 +994,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
             .vertex_count = rr->osd_indices.num,
             .vertex_data = rr->osd_vertices.elem,
             .index_data = rr->osd_indices.elem,
+            .index_fmt = PL_INDEX_UINT32,
         ));
 
         if (!ok) {
