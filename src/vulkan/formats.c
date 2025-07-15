@@ -603,8 +603,10 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
         }
 
         // Internal capabilities
-        if (texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)
-            fmtp->can_host_copy = true;
+        if (vk->props.vendorID != VK_VENDOR_ID_NVIDIA) { // FIXME: remove when upstream works
+            if (texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)
+                fmtp->can_host_copy = true;
+        }
 
         // For blit emulation via compute shaders
         if (!(fmt->caps & PL_FMT_CAP_BLITTABLE) && (fmt->caps & PL_FMT_CAP_STORABLE)) {
