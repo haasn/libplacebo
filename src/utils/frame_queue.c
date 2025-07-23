@@ -847,7 +847,12 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
         }
     }
 
-    if (!entry_complete(p->queue.elem[p->queue.num - 1])) {
+    // Ensure the last frame is complete (for interlaced sources)
+    int last_idx = p->queue.num - 1;
+    while (last_idx && p->queue.elem[last_idx]->pts > max_pts)
+        last_idx--;
+
+    if (!entry_complete(p->queue.elem[last_idx])) {
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
