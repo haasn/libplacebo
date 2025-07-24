@@ -2488,7 +2488,7 @@ static bool pass_output_target(struct pass_state *pass)
     float scale = pl_color_repr_normalize(&repr);
 
     // If the alpha mode is already applied, don't double-apply it
-    if (img->repr.alpha == repr.alpha || !has_alpha || img->comps == 4) {
+    if (img->repr.alpha == repr.alpha || img->comps < 4) {
         repr.alpha = PL_ALPHA_NONE;
     } else {
         // `pl_shader_encode_color` expects independent alpha
