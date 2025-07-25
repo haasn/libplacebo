@@ -36,6 +36,9 @@ struct priv {
     VkSurfaceKHR surf;
     PL_ARRAY(VkSurfaceFormatKHR) formats;
 
+    // true if host implementation has color management support enabled
+    bool have_color_management_support;
+
     // current swapchain and metadata:
     struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
@@ -324,6 +327,17 @@ static void set_hdr_metadata(struct priv *p, const struct pl_hdr_metadata *metad
     p->color_space.hdr = p->hdr_metadata;
 }
 
+// Heuristic to determine if we have actual support for VK_EXT_swapchain_colorspace
+static bool check_color_management_support(const struct priv *p)
+{
+    for (int i = 0; i < p->formats.num; i++) {
+        if (p->formats.elem[i].colorSpace != VK_COLOR_SPACE_SRGB_NONLINEAR_KHR && p->formats.elem[i].colorSpace != VK_COLOR_SPACE_PASS_THROUGH_EXT) {
+            return true;
+        }
+    }
+    return false;
+}
+
 pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
                               const struct pl_vulkan_swapchain_params *params)
 {
@@ -391,6 +405,8 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     PL_ARRAY_RESIZE(sw, p->formats, num_formats);
     VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, p->surf, &num_formats, p->formats.elem));
     p->formats.num = num_formats;
+
+    p->have_color_management_support = check_color_management_support(p);
 
     PL_INFO(gpu, "Available surface configurations:");
     for (int i = 0; i < p->formats.num; i++) {
@@ -689,7 +705,22 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->color_repr.bits.color_depth = bits;
 
     // Note: `p->color_space.hdr` is (re-)applied by `set_hdr_metadata`
-    map_color_space(sinfo.imageColorSpace, &p->color_space);
+    if (p->have_color_management_support) {
+        map_color_space(sinfo.imageColorSpace, &p->color_space);
+    } else {
+        // Compositor doesn't have color management support
+        switch (sinfo.imageColorSpace) {
+        case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+            p->color_space = pl_color_space_monitor;
+            break;
+        case VK_COLOR_SPACE_PASS_THROUGH_EXT:
+            p->color_space = pl_color_space_unknown;
+            break;
+        default:
+            // This should never happen
+            pl_unreachable();
+        }
+    }
 
     // To convert to XYZ color system for VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT
     if (p->color_space.transfer == PL_COLOR_TRC_ST428) {
