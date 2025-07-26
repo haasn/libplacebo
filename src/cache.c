@@ -285,7 +285,7 @@ uint64_t pl_cache_signature(pl_cache cache)
 #define PAD_ALIGN(x)  PL_ALIGN2(x, sizeof(uint32_t))
 
 struct __attribute__((__packed__)) cache_header {
-    char     magic[8];
+    char     magic[8] PL_NONSTRING;
     uint32_t version;
     uint32_t num_entries;
 };
