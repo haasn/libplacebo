@@ -1462,11 +1462,9 @@ static pl_fmt merge_fmt(struct pass_state *pass, const struct img *a,
     enum pl_fmt_caps req_caps = (fmta->caps & mask) | (fmtb->caps & mask);
     enum pl_fmt_type req_type = fmta->type;
 
-    // If we have integer formats on input, convert now to unorm.
-    if (req_type == PL_FMT_UINT) {
-        req_type = PL_FMT_UNORM;
-        req_caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR;
-    }
+    // If we have integer formats on input, convert now to FBO format.
+    if (req_type == PL_FMT_UINT)
+        return pass->fbofmt[num_comps];
 
     return pl_find_fmt(rr->gpu, req_type, num_comps, min_depth, 0, req_caps);
 }
@@ -1482,10 +1480,6 @@ static bool want_merge(struct pass_state *pass,
     const pl_renderer rr = pass->rr;
     if (!pass->fbofmt[4])
         return false;
-
-    // Integer input
-    if (ref->fmt->type == PL_FMT_UINT)
-        return true;
 
     // Debanding
     if (!(rr->errors & PL_RENDER_ERR_DEBANDING) && params->deband_params)
@@ -1678,6 +1672,20 @@ static bool pass_read_image(struct pass_state *pass)
             memset(pass->fbofmt, 0, sizeof(pass->fbofmt));
             rr->errors |= PL_RENDER_ERR_FBO;
             return false;
+        }
+    }
+
+    // If plane was not merged, convert it alone.
+    for (int i = 0; i < image->num_planes; i++) {
+        struct plane_state *st = &planes[i];
+        if (!want_merge(pass, st, ref))
+            continue;
+
+        if (st->img.tex && st->img.tex->params.format->type == PL_FMT_UINT) {
+            st->img.sh = img_sh(pass, &st->img);
+            st->img.err_msg = "Integer conversion failed";
+            sh_describe(st->img.sh, "integer conversion");
+            st->img.fmt = NULL; // pick float format instead
         }
     }
 
