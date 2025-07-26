@@ -48,6 +48,16 @@
 
 #define PL_NOINLINE __attribute__((noinline))
 
+#ifndef __has_attribute
+#define __has_attribute(x) 0
+#endif
+
+#if __has_attribute(nonstring)
+#define PL_NONSTRING __attribute__((nonstring))
+#else
+#define PL_NONSTRING
+#endif
+
 #include "os.h"
 
 #include "config_internal.h"
