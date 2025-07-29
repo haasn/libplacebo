@@ -3118,10 +3118,6 @@ static bool draw_empty_overlays(pl_renderer rr,
                                 const struct pl_frame *ptarget,
                                 const struct pl_render_params *params)
 {
-    clear_target(rr, ptarget, params);
-    if (!ptarget->num_overlays)
-        return true;
-
     struct pass_state pass = {
         .rr = rr,
         .params = params,
@@ -3133,6 +3129,10 @@ static bool draw_empty_overlays(pl_renderer rr,
 
     if (!pass_init(&pass, false))
         return false;
+
+    clear_target(rr, ptarget, params);
+    if (!ptarget->num_overlays)
+        goto done;
 
     pass_begin_frame(&pass);
     struct pl_frame *target = &pass.target;
@@ -3162,6 +3162,7 @@ static bool draw_empty_overlays(pl_renderer rr,
                       &tscale);
     }
 
+done:
     pass_uninit(&pass);
     return true;
 }
