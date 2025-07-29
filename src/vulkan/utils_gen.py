@@ -202,7 +202,8 @@ if __name__ == '__main__':
     if not xmlfile or xmlfile == '':
         xmlfile = find_registry_xml(datadir)
 
-    registry = VkXML(ET.parse(xmlfile))
+    tree = ET.parse(xmlfile)
+    registry = VkXML(tree.getroot())
     with open(outfile, 'w') as f:
         f.write(TEMPLATE.render(
             vkresults = get_vkenum(registry, 'VkResult'),
