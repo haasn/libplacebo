@@ -552,6 +552,7 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     // the synchronous case, we still force a host memcpy to avoid stalling the
     // host until the GPU memcpy completes.
     bool can_import = gpu->import_caps.buf & PL_HANDLE_HOST_PTR;
+    can_import &= !gpu->limits.host_ptr_slow;
     can_import &= !params->no_import;
     can_import &= params->callback != NULL;
     can_import &= size > (32 << 10); // 32 KiB
@@ -620,6 +621,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     // (sometimes). In the cases where it isn't avoidable, the extra memcpy
     // will happen inside VRAM, which is typically faster anyway.
     bool can_import = gpu->import_caps.buf & PL_HANDLE_HOST_PTR;
+    can_import &= !gpu->limits.host_ptr_slow;
     can_import &= !params->no_import;
     can_import &= size > (32 << 10); // 32 KiB
     if (can_import) {

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '352': 'add pl_gpu_limits.host_ptr_slow',
       '351': 'add pl_cache_{set,get}_dir()',
       '350': 'add pl_{opengl,vulkan,d3d11}_params.no_compute',
       '349': 'add pl_color_{primaries,system,transfer}_name(s)',
