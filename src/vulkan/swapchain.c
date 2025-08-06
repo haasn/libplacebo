@@ -143,9 +143,9 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
     case VK_COLOR_SPACE_PASS_THROUGH_EXT:
         // On color-managed Wayland compositors, it behaves similar to 
         // VK_COLOR_SPACE_SRGB_NONLINEAR_KHR as they would treat un-tagged surface
-        // as sRGB
-        *out = pl_color_space_unknown;
-        return true;
+        // as sRGB, but on other OSes it's behavior is not clearly defined, so
+        // don't use it.
+        return false;
 
 #ifdef VK_AMD_display_native_hdr
     case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD:
@@ -232,8 +232,6 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
             int score = 0;
             for (int c = 0; c < 3; c++)
                 score += plfmt->component_depth[c];
-            if (p->formats.elem[i].colorSpace == VK_COLOR_SPACE_PASS_THROUGH_EXT)
-                score += 100;
             if (pl_color_primaries_is_wide_gamut(space.primaries) == wide_gamut)
                 score += 1000;
             if (space.transfer == PL_COLOR_TRC_LINEAR)
