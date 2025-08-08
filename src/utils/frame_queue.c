@@ -565,12 +565,15 @@ static bool entry_complete(struct entry *entry)
 }
 
 // Advance the queue as needed to make sure idx 0 is the last frame before
-// `pts`, and idx 1 is the first frame after `pts` (unless this is the last).
+// `pts`, and idx 1 is the first frame after `pts`; exceptions apply if this
+// is the first or last frame.
 //
-// Returns PL_QUEUE_OK only if idx 0 is still legal under ZOH semantics.
+// On EOF, continues to return PL_QUEUE_OK until idx 0 is no longer legal under
+// ZOH semantics.
 static enum pl_queue_status advance(pl_queue p, double pts,
                                     const struct pl_queue_params *params)
 {
+retry: ;
     // Cull all frames except the last frame before `pts`
     int culled = 0;
     for (int i = 1; i < p->queue.num; i++) {
@@ -583,27 +586,22 @@ static enum pl_queue_status advance(pl_queue p, double pts,
 
     // Keep adding new frames until we find one in the future, or EOF
     enum pl_queue_status ret = PL_QUEUE_OK;
-    while (p->queue.num < 2) {
+    if (!p->queue.num || p->queue.elem[p->queue.num - 1]->pts <= pts) {
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_ERR:
+        case PL_QUEUE_MORE:
             return ret;
         case PL_QUEUE_EOF:
             if (!p->queue.num)
                 return ret;
             goto done;
-        case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
-            while (p->queue.num > 1 && p->queue.elem[1]->pts <= pts) {
-                entry_cull(p, p->queue.elem[0], true);
-                PL_ARRAY_REMOVE_AT(p->queue, 0);
-            }
-            if (ret == PL_QUEUE_MORE)
-                return ret;
-            continue;
+            goto retry;
         }
     }
 
-    if (!entry_complete(p->queue.elem[1])) {
+    pl_assert(p->queue.num);
+    if (!entry_complete(p->queue.elem[PL_MIN(p->queue.num - 1, 1)])) {
         switch (get_frame(p, params)) {
         case PL_QUEUE_ERR:
             return PL_QUEUE_ERR;
