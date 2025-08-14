@@ -2897,6 +2897,15 @@ static void fix_frame(struct pl_frame *frame)
     if (tex && !frame->color.primaries)
         frame->color.primaries = pl_color_primaries_guess(tex->params.w, tex->params.h);
 
+    bool has_alpha = false;
+    for (int p = 0; p < frame->num_planes; p++) {
+        for (int c = 0; c < frame->planes[p].components; c++)
+            has_alpha |= frame->planes[p].component_mapping[c] == PL_CHANNEL_A;
+    }
+
+    if (!has_alpha)
+        frame->repr.alpha = PL_ALPHA_NONE;
+
     // For UNORM formats, we can infer the sampled bit depth from the texture
     // itself. This is ignored for other format types, because the logic
     // doesn't really work out for them anyways, and it's best not to do
@@ -3006,35 +3015,14 @@ static void pass_fix_frames(struct pass_state *pass)
         pl_color_space_infer(&target->color);
     }
 
-    // Detect the presence of an alpha channel in the frames and explicitly
-    // default the alpha mode in this case, so we can use it to detect whether
-    // or not to strip the alpha channel during rendering.
-    //
     // Note the different defaults for the image and target, because files
     // are usually independent but windowing systems usually expect
-    // premultiplied. (We also premultiply for internal rendering, so this
-    // way of doing it avoids a possible division-by-zero path!)
-    if (image && !image->repr.alpha) {
-        image->repr.alpha = PL_ALPHA_NONE;
-        for (int i = 0; i < image->num_planes; i++) {
-            const struct pl_plane *plane = &image->planes[i];
-            for (int c = 0; c < plane->components; c++) {
-                if (plane->component_mapping[c] == PL_CHANNEL_A)
-                    image->repr.alpha = PL_ALPHA_INDEPENDENT;
-            }
-        }
-    }
+    // premultiplied.
+    if (image && image->repr.alpha == PL_ALPHA_UNKNOWN)
+        image->repr.alpha = PL_ALPHA_INDEPENDENT;
 
-    if (!target->repr.alpha) {
-        target->repr.alpha = PL_ALPHA_NONE;
-        for (int i = 0; i < target->num_planes; i++) {
-            const struct pl_plane *plane = &target->planes[i];
-            for (int c = 0; c < plane->components; c++) {
-                if (plane->component_mapping[c] == PL_CHANNEL_A)
-                    target->repr.alpha = PL_ALPHA_PREMULTIPLIED;
-            }
-        }
-    }
+    if (target->repr.alpha == PL_ALPHA_UNKNOWN)
+        target->repr.alpha = PL_ALPHA_PREMULTIPLIED;
 }
 
 void pl_frames_infer(pl_renderer rr, struct pl_frame *image,
