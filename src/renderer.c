@@ -2440,10 +2440,10 @@ static bool pass_output_target(struct pass_state *pass)
         background = PL_CLEAR_SKIP;
 
     /* Avoid unnecessary round trip through premultiplied alpha */
-    if (params->background_transparency >= 1.0)
+    bool has_alpha = target->repr.alpha != PL_ALPHA_NONE || params->blend_params;
+    if (params->background_transparency >= 1.0 && has_alpha)
         background = PL_CLEAR_SKIP;
 
-    bool has_alpha = target->repr.alpha != PL_ALPHA_NONE || params->blend_params;
     bool need_blend = background != PL_CLEAR_SKIP || !has_alpha;
     if (img->comps == 4 && need_blend) {
         pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
@@ -2454,7 +2454,7 @@ static bool pass_output_target(struct pass_state *pass)
                  SH_FLOAT(params->background_color[1]),
                  SH_FLOAT(params->background_color[2]),
                  SH_FLOAT(1.0 - params->background_transparency));
-            if (!params->background_transparency) {
+            if (!params->background_transparency || !has_alpha) {
                 img->repr.alpha = PL_ALPHA_NONE;
                 img->comps = 3;
             }
