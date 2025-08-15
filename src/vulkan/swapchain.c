@@ -418,7 +418,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     }
 
     // Ensure there exists at least some valid renderable surface format
-    struct pl_color_space hint = {0};
+    struct pl_color_space hint = pl_color_space_srgb;
     if (!pick_surf_format(sw, &hint))
         goto error;
 
