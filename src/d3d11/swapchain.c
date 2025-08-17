@@ -32,8 +32,7 @@ struct d3d11_csp_mapping {
 static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space *hint,
                                                     bool use_8bit_sdr)
 {
-    if (pl_color_space_is_hdr(hint) &&
-        hint->transfer != PL_COLOR_TRC_LINEAR)
+    if (pl_color_space_is_hdr(hint))
     {
         struct pl_color_space pl_csp = pl_color_space_hdr10;
         pl_csp.hdr = (struct pl_hdr_metadata) {
@@ -49,6 +48,15 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
             .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
             .d3d11_fmt = DXGI_FORMAT_R10G10B10A2_UNORM,
             .out_csp   = pl_csp,
+        };
+    } else if (pl_color_primaries_is_wide_gamut(hint->primaries)) {
+        return (struct d3d11_csp_mapping){
+            .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020,
+            .d3d11_fmt = DXGI_FORMAT_R10G10B10A2_UNORM,
+            .out_csp = {
+                .primaries = PL_COLOR_PRIM_BT_2020,
+                .transfer  = PL_COLOR_TRC_GAMMA22,
+            },
         };
 #if 0 // TODO: Add support for scRGB
     } else if (pl_color_primaries_is_wide_gamut(hint->primaries) ||
