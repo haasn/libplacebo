@@ -72,7 +72,7 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
         .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
         .d3d11_fmt = use_8bit_sdr ? DXGI_FORMAT_R8G8B8A8_UNORM :
                                     DXGI_FORMAT_R10G10B10A2_UNORM,
-        .out_csp = pl_color_space_monitor,
+        .out_csp = pl_color_space_srgb,
     };
 }
 
@@ -171,7 +171,7 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
                                              DXGI_FORMAT_R8G8B8A8_UNORM, desc.Flags));
 
             // re-configure the colorspace to 8-bit RGB SDR fallback
-            p->csp_map = map_pl_csp_to_d3d11(&pl_color_space_unknown, true);
+            p->csp_map = map_pl_csp_to_d3d11(&pl_color_space_monitor, true);
             p->fallback_8bit_rgb = true;
         }
         else if (FAILED(hr))
@@ -399,7 +399,7 @@ static void update_swapchain_color_config(pl_swapchain sw,
                fmt_supported ? "supported" : "unsupported",
                csp_supported ? "supported" : "unsupported");
         // fall back to 8bit sRGB if requested configuration is not supported
-        csp_map = map_pl_csp_to_d3d11(&pl_color_space_unknown, true);
+        csp_map = map_pl_csp_to_d3d11(&pl_color_space_monitor, true);
     }
 
     p->csp_map = csp_map;
@@ -656,7 +656,7 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
 
     p->csp_map.d3d11_fmt = scd.BufferDesc.Format;
 
-    update_swapchain_color_config(sw, &pl_color_space_unknown, true);
+    update_swapchain_color_config(sw, &pl_color_space_srgb, true);
 
     success = true;
 error:
