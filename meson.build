@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '354': 'pl_shader_{encode,decode}_color no longer linearizes/delinearizes XYZ',
       '353': 'add PL_DEINTERLACE_BWDIF',
       '352': 'add pl_gpu_limits.host_ptr_slow',
       '351': 'add pl_cache_{set,get}_dir()',

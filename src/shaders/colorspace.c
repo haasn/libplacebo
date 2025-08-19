@@ -282,17 +282,10 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     GLSL("// pl_shader_decode_color \n"
          "{ \n");
 
-    if (repr->sys == PL_COLOR_SYSTEM_XYZ ||
-        repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
     {
         ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
         GLSL("color.rgb *= vec3("$"); \n", scale);
-    }
-
-    if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
-        pl_shader_linearize(sh, &(struct pl_color_space) {
-            .transfer = PL_COLOR_TRC_ST428,
-        });
     }
 
     if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
@@ -556,10 +549,6 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 
     if (!skip) {
         struct pl_color_repr copy = *repr;
-        ident_t xyzscale = NULL_IDENT;
-        if (repr->sys == PL_COLOR_SYSTEM_XYZ)
-            xyzscale = SH_FLOAT(1.0 / pl_color_repr_normalize(&copy));
-
         pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
         pl_transform3x3_invert(&tr);
 
@@ -574,13 +563,6 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
         });
 
         GLSL("color.rgb = "$" * color.rgb + "$"; \n", cmat, cmat_c);
-
-        if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
-            pl_shader_delinearize(sh, &(struct pl_color_space) {
-                .transfer = PL_COLOR_TRC_ST428,
-            });
-            GLSL("color.rgb *= vec3("$"); \n", xyzscale);
-        }
     }
 
     GLSL("}\n");

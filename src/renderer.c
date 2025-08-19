@@ -1912,8 +1912,10 @@ static bool pass_read_image(struct pass_state *pass)
     }
 
     if (needs_conversion) {
-        if (pass->img.repr.sys == PL_COLOR_SYSTEM_XYZ)
+        if (pass->img.repr.sys == PL_COLOR_SYSTEM_XYZ) {
+            pl_shader_linearize(sh, &pass->img.color);
             pass->img.color.transfer = PL_COLOR_TRC_LINEAR;
+        }
         pl_shader_decode_color(sh, &pass->img.repr, params->color_adjustment);
     }
 
@@ -2504,8 +2506,13 @@ static bool pass_output_target(struct pass_state *pass)
     }
 
     enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
-    if (lut_type != PL_LUT_CONVERSION)
+    if (lut_type != PL_LUT_CONVERSION) {
         pl_shader_encode_color(sh, &repr);
+        if (repr.sys == PL_COLOR_SYSTEM_XYZ) {
+            img->color.transfer = PL_COLOR_TRC_ST428;
+            pl_shader_delinearize(sh, &img->color);
+        }
+    }
     if (lut_type == PL_LUT_NATIVE)
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
 
