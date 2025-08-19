@@ -159,8 +159,19 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
             [VK_IMAGE_TYPE_3D] = VK_IMAGE_VIEW_TYPE_3D,
         };
 
+        static const VkFlags view_whitelist =
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
+
+        const VkImageViewUsageCreateInfo usage_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+            .usage = tex_vk->usage_flags & view_whitelist,
+        };
+
         const VkImageViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = &usage_info,
             .image = tex_vk->img,
             .viewType = viewType[tex_vk->type],
             .format = tex_vk->img_fmt,
