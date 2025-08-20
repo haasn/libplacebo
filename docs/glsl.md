@@ -397,7 +397,7 @@ int seed = ${dynamic int: rand()};
 ```
 
 For sampling from component masks, the special types `swizzle` and
-`(u|i)vecType` can be used to generate the appropriate texture swizzle and
+`(b|u|i)vecType` can be used to generate the appropriate texture swizzle and
 corresponding vector type:
 
 ```glsl

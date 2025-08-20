@@ -375,6 +375,18 @@ static inline const char *sh_float_type(uint8_t mask)
     pl_unreachable();
 }
 
+static inline const char *sh_bool_type(uint8_t mask)
+{
+    switch (sh_num_comps(mask)) {
+    case 1: return "bool";
+    case 2: return "bvec2";
+    case 3: return "bvec3";
+    case 4: return "bvec4";
+    }
+
+    pl_unreachable();
+}
+
 static inline const char *sh_swizzle(uint8_t mask)
 {
     static const char * const swizzles[0x10] = {
