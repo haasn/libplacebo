@@ -75,7 +75,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
          src->field == PL_FIELD_TOP ? 0 : 1,
          cur);
 
-    ident_t prev1 = cur, next1 = cur, prev2 = cur, next2 = cur;
+    ident_t prev2 = cur, next2 = cur, prev = cur, next = cur;
     if (params->algo >= PL_DEINTERLACE_YADIF) {
         // Try using a compute shader for these, for the sole reason of
         // optimizing for thread group synchronicity. Otherwise, because we
@@ -87,24 +87,24 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         if (src->prev.top && src->prev.top != src->cur.top) {
             pl_assert(src->prev.top->params.w == texparams->w);
             pl_assert(src->prev.top->params.h == texparams->h);
-            prev2 = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
-                            PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
-            if (!prev2)
+            prev = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
+                           PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
+            if (!prev)
                 return;
         }
 
         if (src->next.top && src->next.top != src->cur.top) {
             pl_assert(src->next.top->params.w == texparams->w);
             pl_assert(src->next.top->params.h == texparams->h);
-            next2 = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
-                            PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
-            if (!next2)
+            next = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
+                           PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
+            if (!next)
                 return;
         }
 
         enum pl_field first_field = PL_DEF(src->first_field, PL_FIELD_TOP);
-        prev1 = src->field == first_field ? prev2 : cur;
-        next1 = src->field == first_field ? cur : next2;
+        prev2 = src->field == first_field ? prev : cur;
+        next2 = src->field == first_field ? cur : next;
     }
 
     switch (params->algo) {
@@ -226,11 +226,11 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
              "T J = GET("$", 0, +2); \n"
              "T K = GET("$", 0, -1); \n"
              "T L = GET("$", 0, +1); \n",
-             prev2, prev2,
-             prev1, prev1, prev1,
+             prev, prev,
+             prev2, prev2, prev2,
              cur, cur,
-             next1, next1, next1,
-             next2, next2);
+             next2, next2, next2,
+             next, next);
 
         if (num_comps == 1) {
             GLSL("res = "$"(A, B, C, D, E, F, G, H, I, J, K, L, res); \n", temporal_pred);
