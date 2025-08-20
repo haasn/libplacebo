@@ -375,6 +375,30 @@ static inline const char *sh_float_type(uint8_t mask)
     pl_unreachable();
 }
 
+static inline const char *sh_int_type(uint8_t mask)
+{
+    switch (sh_num_comps(mask)) {
+    case 1: return "int";
+    case 2: return "ivec2";
+    case 3: return "ivec3";
+    case 4: return "ivec4";
+    }
+
+    pl_unreachable();
+}
+
+static inline const char *sh_uint_type(uint8_t mask)
+{
+    switch (sh_num_comps(mask)) {
+    case 1: return "uint";
+    case 2: return "uvec2";
+    case 3: return "uvec3";
+    case 4: return "uvec4";
+    }
+
+    pl_unreachable();
+}
+
 static inline const char *sh_bool_type(uint8_t mask)
 {
     switch (sh_num_comps(mask)) {

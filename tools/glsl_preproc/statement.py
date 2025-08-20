@@ -60,8 +60,8 @@ VAR_TYPES = {
     # component mask types
     'swizzle':          FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_swizzle')),
     'bvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_bool_type')),
-    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
-    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
+    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_int_type')),
+    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_uint_type')),
     'vecType':          FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
 }
 
