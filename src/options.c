@@ -1088,7 +1088,8 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_ENUM("deinterlace_algo", "Deinterlacing algorithm", deinterlace_params.algo, LIST(
              {"weave", PL_DEINTERLACE_WEAVE},
              {"bob",   PL_DEINTERLACE_BOB},
-             {"yadif", PL_DEINTERLACE_YADIF})),
+             {"yadif", PL_DEINTERLACE_YADIF},
+             {"bwdif", PL_DEINTERLACE_BWDIF})),
     OPT_BOOL("deinterlace_skip_spatial", "Skip spatial interlacing check", deinterlace_params.skip_spatial_check),
 
     // Distortion

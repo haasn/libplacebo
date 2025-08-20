@@ -757,6 +757,8 @@ following algorithms are available:
 - `yadif`: "Yet another deinterlacing filter". Deinterlacer with temporal and
   spatial information. Based on FFmpeg's Yadif filter algorithm, but adapted
   slightly for the GPU.
+- `bwdif`: "Bob weaver deinterlacing filter". Motion-adaptive deinterlacer
+  based on yadif, with the use of w3fdif and cubic interpolation algorithms.
 
 ### `deinterlace_skip_spatial=<yes|no>`
 

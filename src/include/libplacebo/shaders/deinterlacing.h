@@ -102,13 +102,17 @@ enum pl_deinterlace_algorithm {
     // adapted slightly for the GPU.
     PL_DEINTERLACE_YADIF,
 
+    // "Bob weaver" deinterlacer. Motion-adaptive deinterlacer based on yadif,
+    // with the use of w3fdif and cubic interpolation algorithms.
+    PL_DEINTERLACE_BWDIF,
+
     PL_DEINTERLACE_ALGORITHM_COUNT,
 };
 
 // Returns whether or not an algorithm requires `prev`/`next` refs to be set.
 static inline bool pl_deinterlace_needs_refs(enum pl_deinterlace_algorithm algo)
 {
-    return algo == PL_DEINTERLACE_YADIF;
+    return algo >= PL_DEINTERLACE_YADIF;
 }
 
 struct pl_deinterlace_params {

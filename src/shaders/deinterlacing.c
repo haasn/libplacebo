@@ -75,7 +75,15 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
          src->field == PL_FIELD_TOP ? 0 : 1,
          cur);
 
-    ident_t prev2 = cur, next2 = cur, prev = cur, next = cur;
+    const enum pl_field first_field = PL_DEF(src->first_field, PL_FIELD_TOP);
+
+    bool intra_only = params->algo != PL_DEINTERLACE_YADIF;
+    if (params->algo == PL_DEINTERLACE_BWDIF) {
+        intra_only = (!src->prev.top && src->field == first_field) ||
+                     (!src->next.top && src->field != first_field);
+    }
+
+    ident_t prev = cur, next = cur;
     if (params->algo >= PL_DEINTERLACE_YADIF) {
         // Try using a compute shader for these, for the sole reason of
         // optimizing for thread group synchronicity. Otherwise, because we
@@ -83,29 +91,28 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         // half of our thread group will be mostly idle at any point in time.
         const int bw = PL_DEF(sh_glsl(sh).subgroup_size, 32);
         sh_try_compute(sh, bw, 1, true, 0);
-
-        if (src->prev.top && src->prev.top != src->cur.top) {
-            pl_assert(src->prev.top->params.w == texparams->w);
-            pl_assert(src->prev.top->params.h == texparams->h);
-            prev = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
-                           PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
-            if (!prev)
-                return;
-        }
-
-        if (src->next.top && src->next.top != src->cur.top) {
-            pl_assert(src->next.top->params.w == texparams->w);
-            pl_assert(src->next.top->params.h == texparams->h);
-            next = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
-                           PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
-            if (!next)
-                return;
-        }
-
-        enum pl_field first_field = PL_DEF(src->first_field, PL_FIELD_TOP);
-        prev2 = src->field == first_field ? prev : cur;
-        next2 = src->field == first_field ? cur : next;
     }
+
+    if (!intra_only && src->prev.top && src->prev.top != src->cur.top) {
+        pl_assert(src->prev.top->params.w == texparams->w);
+        pl_assert(src->prev.top->params.h == texparams->h);
+        prev = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
+                        PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
+        if (!prev)
+            return;
+    }
+
+    if (!intra_only && src->next.top && src->next.top != src->cur.top) {
+        pl_assert(src->next.top->params.w == texparams->w);
+        pl_assert(src->next.top->params.h == texparams->h);
+        next = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
+                        PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
+        if (!next)
+            return;
+    }
+
+    ident_t prev2 = src->field == first_field ? prev : cur;
+    ident_t next2 = src->field == first_field ? cur : next;
 
     switch (params->algo) {
     case PL_DEINTERLACE_WEAVE:
@@ -243,6 +250,101 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
                      c, temporal_pred, c, c, c, c, c, c, c, c, c, c, c, c, c);
             }
         }
+        break;
+    }
+
+    case PL_DEINTERLACE_BWDIF: {
+        // cur[]         = { mrefs3, mrefs, prefs, prefs3 }
+        // prev/next[]   = { mrefs, prefs }
+        // prev2/next2[] = { mrefs4, mrefs2, 0, prefs2, prefs4 }
+        ident_t process = sh_fresh(sh, "process_bwdif");
+        ident_t intra = sh_fresh(sh, "process_intra_bwdif");
+
+#pragma GLSLH                                                                   \
+        #define T ${vecType: comp_mask}                                         \
+        T $process(T cur[4], T prev[2], T next[2], T prev2[5], T next2[5])      \
+        {                                                                       \
+            const float lf[2] = { 4309.0/8192.0,  213/8192.0 };                 \
+            const float hf[3] = { 5570.0/8192.0, 3801/8192.0, 1016/8192.0 };    \
+            const float sp[2] = { 5077.0/8192.0,  981/8192.0 };                 \
+                                                                                \
+            T s = prev2[2] + next2[2];                                          \
+            T d = s / 2.0;                                                      \
+            T c = cur[1];                                                       \
+            T e = cur[2];                                                       \
+                                                                                \
+            T tdiff0 = abs(prev2[2] - next2[2]);                                \
+            T tdiff1 = abs(prev[0] - c) + abs(prev[1] - e);                     \
+            T tdiff2 = abs(next[0] - c) + abs(next[1] - e);                     \
+            T diff = max(tdiff0, max(tdiff1, tdiff2)) / 2.0;                    \
+                                                                                \
+            @if (num_comps > 1)                                                 \
+            ${bvecType: comp_mask} diff_mask = equal(diff, T(0.0));             \
+            @else                                                               \
+            bool diff_mask = diff == 0.0;                                       \
+                                                                                \
+            T bs = prev2[1] + next2[1];                                         \
+            T fs = prev2[3] + next2[3];                                         \
+            T b = (bs / 2.0) - c;                                               \
+            T f = (fs / 2.0) - c;                                               \
+            T dc = d - c;                                                       \
+            T de = d - e;                                                       \
+            T mmax = max(de, max(dc, min(b, f)));                               \
+            T mmin = min(de, min(dc, max(b, f)));                               \
+            diff = max(diff, max(mmin, -mmax));                                 \
+                                                                                \
+            T single = sp[0] * (c+e) - sp[1] * (cur[0] + cur[3]);               \
+            T all = (hf[0]*s - hf[1] * (bs+fs) +                                \
+            hf[2] * (prev2[0] + next2[0] + prev2[4] + next2[4])) / 4.0;         \
+            all += lf[0] * (c + e) - lf[1] * (cur[0] + cur[3]);                 \
+                                                                                \
+            @if (num_comps > 1)                                                 \
+            ${bvecType: comp_mask} mask = greaterThan(abs(c - e), tdiff0);      \
+            @else                                                               \
+            bool mask = abs(c - e) > tdiff0;                                    \
+                                                                                \
+            T interpol = mix(single, all, mask);                                \
+            interpol = clamp(interpol, d - diff, d + diff);                     \
+            return mix(interpol, d, diff_mask);                                 \
+        }                                                                       \
+                                                                                \
+        T $intra(T cur[4])                                                      \
+        {                                                                       \
+            const float sp[2] = { 5077.0/8192.0,  981/8192.0 };                 \
+            return sp[0] * (cur[1] + cur[2]) - sp[1] * (cur[0] + cur[3]);       \
+        }                                                                       \
+        #undef T                                                                \
+
+#pragma GLSL /* pl_shader_deinterlace (bwdif) */                                \
+        T cur[4];                                                               \
+        cur[0] = GET($cur, 0, -3);                                              \
+        cur[1] = GET($cur, 0, -1);                                              \
+        cur[2] = GET($cur, 0,  1);                                              \
+        cur[3] = GET($cur, 0,  3);                                              \
+                                                                                \
+        @if (!intra_only) {                                                     \
+            T prev[2], next[2], prev2[5], next2[5];                             \
+            prev[0] = GET($prev, 0, -1);                                        \
+            prev[1] = GET($prev, 0,  1);                                        \
+            next[0] = GET($next, 0, -1);                                        \
+            next[1] = GET($next, 0,  1);                                        \
+                                                                                \
+            prev2[0] = GET($prev2, 0, -4);                                      \
+            prev2[1] = GET($prev2, 0, -2);                                      \
+            prev2[2] = GET($prev2, 0,  0);                                      \
+            prev2[3] = GET($prev2, 0,  2);                                      \
+            prev2[4] = GET($prev2, 0,  4);                                      \
+                                                                                \
+            next2[0] = GET($next2, 0, -4);                                      \
+            next2[1] = GET($next2, 0, -2);                                      \
+            next2[2] = GET($next2, 0,  0);                                      \
+            next2[3] = GET($next2, 0,  2);                                      \
+            next2[4] = GET($next2, 0,  4);                                      \
+                                                                                \
+            res = $process(cur, prev, next, prev2, next2);                      \
+        @} else {                                                               \
+            res = $intra(cur);                                                  \
+        @}
         break;
     }
 
