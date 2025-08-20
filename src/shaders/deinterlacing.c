@@ -75,6 +75,38 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
          src->field == PL_FIELD_TOP ? 0 : 1,
          cur);
 
+    ident_t prev1 = cur, next1 = cur, prev2 = cur, next2 = cur;
+    if (params->algo >= PL_DEINTERLACE_YADIF) {
+        // Try using a compute shader for these, for the sole reason of
+        // optimizing for thread group synchronicity. Otherwise, because we
+        // alternate between lines output as-is and lines output deinterlaced,
+        // half of our thread group will be mostly idle at any point in time.
+        const int bw = PL_DEF(sh_glsl(sh).subgroup_size, 32);
+        sh_try_compute(sh, bw, 1, true, 0);
+
+        if (src->prev.top && src->prev.top != src->cur.top) {
+            pl_assert(src->prev.top->params.w == texparams->w);
+            pl_assert(src->prev.top->params.h == texparams->h);
+            prev2 = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
+                            PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
+            if (!prev2)
+                return;
+        }
+
+        if (src->next.top && src->next.top != src->cur.top) {
+            pl_assert(src->next.top->params.w == texparams->w);
+            pl_assert(src->next.top->params.h == texparams->h);
+            next2 = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
+                            PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
+            if (!next2)
+                return;
+        }
+
+        enum pl_field first_field = PL_DEF(src->first_field, PL_FIELD_TOP);
+        prev1 = src->field == first_field ? prev2 : cur;
+        next1 = src->field == first_field ? cur : next2;
+    }
+
     switch (params->algo) {
     case PL_DEINTERLACE_WEAVE:
         GLSL("res = GET("$", 0, 0); \n", cur);
@@ -85,15 +117,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
              src->field == PL_FIELD_TOP ? -1 : 1);
         break;
 
-
     case PL_DEINTERLACE_YADIF: {
-        // Try using a compute shader for this, for the sole reason of
-        // optimizing for thread group synchronicity. Otherwise, because we
-        // alternate between lines output as-is and lines output deinterlaced,
-        // half of our thread group will be mostly idle at any point in time.
-        const int bw = PL_DEF(sh_glsl(sh).subgroup_size, 32);
-        sh_try_compute(sh, bw, 1, true, 0);
-
         // This magic constant is hard-coded in the original implementation as
         // '1' on an 8-bit scale. Since we work with arbitrary bit depth
         // floating point textures, we have to convert this somehow. Hard-code
@@ -189,29 +213,6 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
               "      spatial_pred = p2 - diff;                                  \n"
               "    return spatial_pred;                                         \n"
               "}                                                                \n");
-
-        ident_t prev2 = cur, next2 = cur;
-        if (src->prev.top && src->prev.top != src->cur.top) {
-            pl_assert(src->prev.top->params.w == texparams->w);
-            pl_assert(src->prev.top->params.h == texparams->h);
-            prev2 = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
-                            PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
-            if (!prev2)
-                return;
-        }
-
-        if (src->next.top && src->next.top != src->cur.top) {
-            pl_assert(src->next.top->params.w == texparams->w);
-            pl_assert(src->next.top->params.h == texparams->h);
-            next2 = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
-                            PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
-            if (!next2)
-                return;
-        }
-
-        enum pl_field first_field = PL_DEF(src->first_field, PL_FIELD_TOP);
-        ident_t prev1 = src->field == first_field ? prev2 : cur;
-        ident_t next1 = src->field == first_field ? cur : next2;
 
         GLSL("T A = GET("$", 0, -1); \n"
              "T B = GET("$", 0,  1); \n"
