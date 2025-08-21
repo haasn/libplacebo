@@ -30,6 +30,9 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
     if (!fmt)
         return;
 
+    if (handle_type == PL_HANDLE_DMA_BUF && !fmt->num_modifiers)
+        return;
+
     // Test interop API
     if (gpu->export_caps.tex & handle_type) {
         VkSemaphore sem = pl_vulkan_sem_create(gpu, pl_vulkan_sem_params(

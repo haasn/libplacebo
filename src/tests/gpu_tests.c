@@ -1646,7 +1646,7 @@ static void pl_test_export_import(pl_gpu gpu,
         goto skip_tex;
 
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 4, 0, 0, PL_FMT_CAP_BLITTABLE);
-    if (!fmt)
+    if (!fmt || (handle_type == PL_HANDLE_DMA_BUF && !fmt->num_modifiers))
         goto skip_tex;
 
     printf("- testing texture import/export with fmt %s\n", fmt->name);
