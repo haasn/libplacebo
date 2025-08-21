@@ -584,10 +584,10 @@ static bool map_entry(pl_queue p, struct entry *entry)
     return true;
 }
 
-static bool entry_complete(struct entry *entry)
+static bool entry_complete(pl_queue p, struct entry *entry)
 {
     pl_assert(!(entry->next && entry->defer_second_field));
-    return entry->field ? !!entry->next : true;
+    return entry->field ? (entry->next || p->eof) : true;
 }
 
 // Advance the queue as needed to make sure idx 0 is the last frame before
@@ -627,7 +627,7 @@ retry: ;
     }
 
     pl_assert(p->queue.num);
-    if (!entry_complete(p->queue.elem[PL_MIN(p->queue.num - 1, 1)])) {
+    if (!entry_complete(p, p->queue.elem[PL_MIN(p->queue.num - 1, 1)])) {
         switch (get_frame(p, params)) {
         case PL_QUEUE_ERR:
             return PL_QUEUE_ERR;
@@ -876,7 +876,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
     while (last_idx && p->queue.elem[last_idx]->pts > max_pts)
         last_idx--;
 
-    if (!entry_complete(p->queue.elem[last_idx])) {
+    if (!entry_complete(p, p->queue.elem[last_idx])) {
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
