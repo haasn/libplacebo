@@ -124,8 +124,8 @@ struct pl_deinterlace_params {
     bool skip_spatial_check;
 };
 
-#define PL_DEINTERLACE_DEFAULTS     \
-    .algo   = PL_DEINTERLACE_YADIF,
+#define PL_DEINTERLACE_DEFAULTS \
+    .algo   = PL_DEINTERLACE_BWDIF,
 
 #define pl_deinterlace_params(...) (&(struct pl_deinterlace_params) { PL_DEINTERLACE_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_deinterlace_params pl_deinterlace_default_params;
