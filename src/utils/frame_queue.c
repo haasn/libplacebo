@@ -712,7 +712,7 @@ static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
              entry->signature, entry->pts, params->pts);
 
     report_estimates(p);
-    return PL_QUEUE_OK;
+    return entry_complete(p, entry) ? PL_QUEUE_OK : PL_QUEUE_MORE;
 }
 
 // Present a single frame as appropriate for `pts`
