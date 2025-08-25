@@ -271,6 +271,14 @@ struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
 
         // Last access is on different queue, so no pipeline barrier needed
         last.access = 0;
+
+        // Special case: this is a pure layout transition (with no command),
+        // in this case we need to ensure that we still emit some sort of
+        // synchronization scope or else the layers complain
+        if (stage == VK_PIPELINE_STAGE_2_NONE) {
+            last.stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+            last.access = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+        }
     }
 
     if (!is_write && sem->read.queue == cmd->queue &&
