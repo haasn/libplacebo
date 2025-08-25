@@ -141,7 +141,7 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
         };
         return true;
     case VK_COLOR_SPACE_PASS_THROUGH_EXT:
-        // On color-managed Wayland compositors, it behaves similar to 
+        // On color-managed Wayland compositors, it behaves similar to
         // VK_COLOR_SPACE_SRGB_NONLINEAR_KHR as they would treat un-tagged surface
         // as sRGB, but on other OSes it's behavior is not clearly defined, so
         // don't use it.
