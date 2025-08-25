@@ -614,6 +614,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 
     VkImage *vkimages = NULL;
     uint32_t num_images = 0;
+    char name[32];
 
     if (!update_swapchain_info(p, &p->protoInfo, w, h))
         return false;
@@ -659,19 +660,19 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     vkimages = pl_calloc_ptr(NULL, num_images, vkimages);
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
 
-    for (int i = 0; i < num_images; i++)
-        PL_VK_NAME(IMAGE, vkimages[i], "swapchain");
-
     // If needed, allocate some more semaphores
     while (num_images > p->sems.num) {
+        int idx = p->sems.num;
         VkSemaphore sem_in = VK_NULL_HANDLE, sem_out = VK_NULL_HANDLE;
         static const VkSemaphoreCreateInfo seminfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
         VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_in));
         VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_out));
-        PL_VK_NAME(SEMAPHORE, sem_in, "swapchain in");
-        PL_VK_NAME(SEMAPHORE, sem_out, "swapchain out");
+        snprintf(name, sizeof(name), "swapchain in #%d", idx);
+        PL_VK_NAME(SEMAPHORE, sem_in, name);
+        snprintf(name, sizeof(name), "swapchain out #%d", idx);
+        PL_VK_NAME(SEMAPHORE, sem_out, name);
 
         PL_ARRAY_APPEND(sw, p->sems, (struct sem_pair) {
             .in = sem_in,
@@ -686,12 +687,14 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 
     for (int i = 0; i < num_images; i++) {
         const VkExtent2D *ext = &sinfo.imageExtent;
+        snprintf(name, sizeof(name), "swapchain #%d", i);
         pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
             .image = vkimages[i],
             .width = ext->width,
             .height = ext->height,
             .format = sinfo.imageFormat,
             .usage = sinfo.imageUsage,
+            .debug_tag = name,
         ));
         if (!tex)
             goto error;
