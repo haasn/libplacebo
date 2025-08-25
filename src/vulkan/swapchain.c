@@ -43,6 +43,7 @@ struct priv {
     struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
     VkSwapchainKHR swapchain;
+    uint32_t queue_families[3];
     int cur_width, cur_height;
     int swapchain_depth;
     pl_rc_t frames_in_flight;       // number of frames currently queued
@@ -367,11 +368,18 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = p->surf,
         .imageArrayLayers = 1, // non-stereoscopic
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .imageSharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
+                                              : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = vk->pools.num,
+        .pQueueFamilyIndices = p->queue_families,
         .minImageCount = p->swapchain_depth + 1, // +1 for the FB
         .presentMode = params->present_mode,
         .clipped = true,
     };
+
+    pl_assert(vk->pools.num <= PL_ARRAY_SIZE(p->queue_families));
+    for (int i = 0; i < vk->pools.num; i++)
+        p->queue_families[i] = vk->pools.elem[i]->qf;
 
     // These fields will be updated by `vk_sw_recreate`
     p->color_space = pl_color_space_unknown;
