@@ -23,11 +23,6 @@
 #include "swapchain.h"
 #include "pl_thread.h"
 
-struct sem_pair {
-    VkSemaphore in;
-    VkSemaphore out;
-};
-
 struct priv {
     struct pl_sw_fns impl;
 
@@ -55,8 +50,9 @@ struct priv {
 
     // state of the images:
     PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
-    PL_ARRAY(struct sem_pair) sems; // pool of semaphores used to synchronize images
-    int idx_sems;                   // index of next free semaphore pair
+    PL_ARRAY(VkSemaphore) sems_in;  // pool of semaphores used to acquire images
+    PL_ARRAY(VkSemaphore) sems_out; // pool of semaphores used to present images
+    int idx_sems_in;                // index of next free semaphore to acquire
     int last_imgidx;                // the image index last acquired (for submit)
 };
 
@@ -455,10 +451,10 @@ static void vk_sw_destroy(pl_swapchain sw)
 
     for (int i = 0; i < p->images.num; i++)
         pl_tex_destroy(gpu, &p->images.elem[i]);
-    for (int i = 0; i < p->sems.num; i++) {
-        vk->DestroySemaphore(vk->dev, p->sems.elem[i].in, PL_VK_ALLOC);
-        vk->DestroySemaphore(vk->dev, p->sems.elem[i].out, PL_VK_ALLOC);
-    }
+    for (int i = 0; i < p->sems_in.num; i++)
+        vk->DestroySemaphore(vk->dev, p->sems_in.elem[i], PL_VK_ALLOC);
+    for (int i = 0; i < p->sems_out.num; i++)
+        vk->DestroySemaphore(vk->dev, p->sems_out.elem[i], PL_VK_ALLOC);
 
     vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
     pl_mutex_destroy(&p->lock);
@@ -660,24 +656,25 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     vkimages = pl_calloc_ptr(NULL, num_images, vkimages);
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
 
-    // If needed, allocate some more semaphores
-    while (num_images > p->sems.num) {
-        int idx = p->sems.num;
-        VkSemaphore sem_in = VK_NULL_HANDLE, sem_out = VK_NULL_HANDLE;
-        static const VkSemaphoreCreateInfo seminfo = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        };
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_in));
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_out));
-        snprintf(name, sizeof(name), "swapchain in #%d", idx);
-        PL_VK_NAME(SEMAPHORE, sem_in, name);
-        snprintf(name, sizeof(name), "swapchain out #%d", idx);
-        PL_VK_NAME(SEMAPHORE, sem_out, name);
+    static const VkSemaphoreCreateInfo seminfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
 
-        PL_ARRAY_APPEND(sw, p->sems, (struct sem_pair) {
-            .in = sem_in,
-            .out = sem_out,
-        });
+    // If needed, allocate some more semaphores
+    while (p->sems_in.num < num_images + 1) { // +1 in case all images are queued
+        VkSemaphore sem = VK_NULL_HANDLE;
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem));
+        snprintf(name, sizeof(name), "swapchain in #%d", p->sems_in.num);
+        PL_VK_NAME(SEMAPHORE, sem, name);
+        PL_ARRAY_APPEND(sw, p->sems_in,  sem);
+    }
+
+    while (p->sems_out.num < num_images) {
+        VkSemaphore sem = VK_NULL_HANDLE;
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem));
+        snprintf(name, sizeof(name), "swapchain out #%d", p->sems_out.num);
+        PL_VK_NAME(SEMAPHORE, sem, name);
+        PL_ARRAY_APPEND(sw, p->sems_out,  sem);
     }
 
     // Recreate the pl_tex wrappers
@@ -773,7 +770,8 @@ static bool vk_sw_start_frame(pl_swapchain sw,
         return false;
     }
 
-    VkSemaphore sem_in = p->sems.elem[p->idx_sems].in;
+    VkSemaphore sem_in = p->sems_in.elem[p->idx_sems_in];
+    p->idx_sems_in = (p->idx_sems_in + 1) % p->sems_in.num;
     PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
 
     for (int attempts = 0; attempts < 2; attempts++) {
@@ -839,8 +837,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     pl_assert(p->last_imgidx >= 0);
     pl_assert(p->swapchain);
     uint32_t idx = p->last_imgidx;
-    VkSemaphore sem_out = p->sems.elem[p->idx_sems++].out;
-    p->idx_sems %= p->sems.num;
+    VkSemaphore sem_out = p->sems_out.elem[idx];
     p->last_imgidx = -1;
 
     bool held = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
