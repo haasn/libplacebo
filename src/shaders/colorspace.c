@@ -679,7 +679,7 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000.0 / PL_COLOR_SDR_WHITE);
         return;
     case PL_COLOR_TRC_HLG: {
-        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         // OETF^-1
         GLSL("color.rgb = "$" * color.rgb + vec3("$");                  \n"
@@ -809,7 +809,7 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
              10000 / PL_COLOR_SDR_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         return;
     case PL_COLOR_TRC_HLG: {
-        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         // OOTF^-1
         GLSL("color.rgb *= 1.0 / "$";                                       \n"

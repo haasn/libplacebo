@@ -598,7 +598,7 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         MAP3(10000 / PL_COLOR_SDR_WHITE * powf(X, 1 / PQ_M1));
         goto scale_out;
     case PL_COLOR_TRC_HLG: {
-        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         const pl_matrix3x3 rgb2xyz =
             pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
@@ -686,7 +686,7 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
         MAP3(powf((PQ_C1 + PQ_C2 * X) / (1 + PQ_C3 * X), PQ_M2));
         return;
     case PL_COLOR_TRC_HLG: {
-        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         const pl_matrix3x3 rgb2xyz =
             pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
