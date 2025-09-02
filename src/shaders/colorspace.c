@@ -53,9 +53,9 @@ static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
                                int min_order, int max_order)
 {
     if (single) {
-        GLSL("const uint mmr_idx = 0u; \n");
+        GLSL("const int mmr_idx = 0; \n");
     } else {
-        GLSL("uint mmr_idx = uint(coeffs.y); \n");
+        GLSL("int mmr_idx = int(coeffs.y); \n");
     }
 
     assert(min_order <= max_order);
