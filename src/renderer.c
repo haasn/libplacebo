@@ -2325,6 +2325,20 @@ error:
         1.0 - (params)->background_transparency,                                \
     }
 
+static uint8_t plane_comps(const struct pl_plane *plane,
+                           const struct pl_render_params *params)
+{
+    uint8_t comps = 0;
+    for (int c = 0; c < plane->components; c++) {
+        if (plane->component_mapping[c] < 0)
+            continue;
+        comps |= 1 << plane->component_mapping[c];
+    }
+    if (params->blend_params) /* preserve alpha if blending */
+        comps |= 1 << PL_CHANNEL_A;
+    return comps;
+}
+
 static void clear_target(pl_renderer rr, const struct pl_frame *target,
                          const struct pl_render_params *params)
 {
@@ -2577,6 +2591,7 @@ static bool pass_output_target(struct pass_state *pass)
                     .y0 = (ry0 - plane_rectf.y0) / rry,
                     .y1 = (ry1 - plane_rectf.y0) / rry,
                 },
+                .component_mask = plane_comps(plane, params),
             };
 
             if (!src.tex) {
@@ -2589,15 +2604,6 @@ static bool pass_output_target(struct pass_state *pass)
                      pass->img.w, pass->img.h,
                      src.rect.x0, src.rect.y0,
                      src.rect.x1, src.rect.y1);
-
-            for (int c = 0; c < plane->components; c++) {
-                if (plane->component_mapping[c] < 0)
-                    continue;
-                src.component_mask |= 1 << plane->component_mapping[c];
-            }
-
-            if (params->blend_params) /* preserve alpha if blending */
-                src.component_mask |= 1 << PL_CHANNEL_A;
 
             sh = pl_dispatch_begin(rr->dp);
             dispatch_sampler(pass, sh, &rr->samplers_dst[p], SAMPLER_PLANE,
