@@ -1130,7 +1130,8 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_ENUM("border", "Border clearing mode", params.border, LIST(
              {"color",      PL_CLEAR_COLOR},
              {"tiles",      PL_CLEAR_TILES},
-             {"skip",       PL_CLEAR_SKIP})),
+             {"skip",       PL_CLEAR_SKIP},
+             {"blur",       PL_CLEAR_BLUR})),
     OPT_FLOAT("background_r", "Background color R", params.background_color[0], .max = 1.0),
     OPT_FLOAT("background_g", "Background color G", params.background_color[1], .max = 1.0),
     OPT_FLOAT("background_b", "Background color B", params.background_color[2], .max = 1.0),
@@ -1144,6 +1145,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("tile_color_lo_r", "Dark tile R", params.tile_colors[1][0], .max = 1.0),
     OPT_FLOAT("tile_color_lo_g", "Dark tile G", params.tile_colors[1][1], .max = 1.0),
     OPT_FLOAT("tile_color_lo_b", "Dark tile B", params.tile_colors[1][2], .max = 1.0),
+    OPT_FLOAT("blur_radius", "Background blur radius (in pixels)", params.blur_radius),
     OPT_INT("tile_size", "Tile size", params.tile_size, .min = 2, .max = 256),
 
     // Performance / quality trade-offs and debugging options

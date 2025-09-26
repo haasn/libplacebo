@@ -241,16 +241,18 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_CLEAR_COLOR]    = "Solid color",
                 [PL_CLEAR_TILES]    = "Tiled pattern",
                 [PL_CLEAR_SKIP]     = "Skip clearing",
+                [PL_CLEAR_BLUR]     = "Blurred copy",
             };
 
             nk_label(nk, "Background:", NK_TEXT_LEFT);
-            par->background = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT,
+            par->background = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT - 1,
                                        par->background, 16, nk_vec2(nk_widget_width(nk), 300));
 
             nk_label(nk, "Borders:", NK_TEXT_LEFT);
             par->border = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT,
                                    par->border, 16, nk_vec2(nk_widget_width(nk), 300));
 
+            nk_label(nk, "Background color:", NK_TEXT_LEFT);
             if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
                 nk_layout_row_dynamic(nk, 200, 1);
                 nk_color_pick(nk, &bg, NK_RGBA);
@@ -262,6 +264,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 par->background_transparency = 1.0 - bg.a;
             }
 
+            nk_property_float(nk, "Blur radius", 0, &par->blur_radius, 100.0, 1, 0.1);
             nk_property_int(nk, "Tile size", 2, &par->tile_size, 256, 1, 1);
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 3, (float[]){ 0.4, 0.3, 0.3 });

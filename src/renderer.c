@@ -2320,6 +2320,128 @@ error:
     return false;
 }
 
+static pl_tex pass_blur(struct pass_state *pass, pl_tex src_tex, int comps,
+                        struct pl_rect2df *rect, float radius)
+{
+    pl_renderer rr = pass->rr;
+    if (radius <= 0.0f || (src_tex->params.w == 1 && src_tex->params.h == 1))
+        return src_tex;
+
+    #define MAX_BLUR_PASSES 10
+    pl_tex tmp[MAX_BLUR_PASSES+1];
+    ident_t pos, tex;
+
+    const float a_min = 1.0, a_max = 1.8;
+    int passes = ceilf(logf(1.0 + radius * radius / (a_max * a_max)) / logf(4.0f));
+    passes = PL_CLAMP(passes, 2, MAX_BLUR_PASSES);
+
+    float offset = radius / sqrtf(powf(4, passes) - 1.0f);
+    if (offset < a_min && passes > 2)
+        offset = radius / sqrtf(powf(4, --passes) - 1.0f);
+    if (offset > a_max)
+        offset = radius / sqrtf(powf(4, ++passes) - 1.0f);
+
+    int w = rect ? fabsf(pl_rect_w(*rect)) : src_tex->params.w;
+    int h = rect ? fabsf(pl_rect_h(*rect)) : src_tex->params.h;
+    for (int i = 0; i < passes + 1; i++) {
+        tmp[i] = get_fbo(pass, w, h, NULL, comps, PL_DEBUG_TAG);
+        if (!tmp[i])
+            goto error;
+        if (w == 1 && h == 1) {
+            passes = i;
+            break;
+        }
+        w = PL_MAX(w / 2, 1);
+        h = PL_MAX(h / 2, 1);
+    }
+
+    pl_tex prev = src_tex;
+    w = prev->params.w;
+    h = prev->params.h;
+
+    for (int i = 0; i < passes; i++) {
+        pl_shader sh = pl_dispatch_begin(rr->dp);
+        sh_describef(sh, "blur downscale pass %d", i+1);
+        sh->output = PL_SHADER_SIG_COLOR;
+
+        tex = sh_bind(sh, prev, PL_TEX_ADDRESS_MIRROR, PL_TEX_SAMPLE_LINEAR,
+                      "prev", i == 0 ? rect : NULL, &pos, NULL);
+        if (!tex)
+            goto error;
+
+
+    #pragma GLSL /* pass_blur */                                                \
+        vec4 color;                                                             \
+        {                                                                       \
+            vec2 step = vec2(${float: offset / w}, ${float: offset / h});       \
+            color  = textureLod($tex, $pos, 0.0) * 4.0;                         \
+            color += textureLod($tex, $pos - step, 0.0);                        \
+            color += textureLod($tex, $pos + step, 0.0);                        \
+            color += textureLod($tex, $pos - vec2(step.x, -step.y), 0.0);       \
+            color += textureLod($tex, $pos + vec2(step.x, -step.y), 0.0);       \
+            color /= 8.0;                                                       \
+        }
+
+        bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+            .shader = &sh,
+            .target = tmp[i+1],
+        ));
+        if (!ok)
+            goto error;
+
+        prev = tmp[i+1];
+        w = prev->params.w;
+        h = prev->params.h;
+    }
+
+    if (w == 1 && h == 1)
+        return prev; // upscaling won't change result
+
+    for (int i = passes - 1; i >= 0; i--) {
+        pl_shader sh = pl_dispatch_begin(rr->dp);
+        sh_describef(sh, "blur upscale pass %d", passes - i);
+        sh->output = PL_SHADER_SIG_COLOR;
+
+        tex = sh_bind(sh, prev, PL_TEX_ADDRESS_MIRROR, PL_TEX_SAMPLE_LINEAR,
+                      "prev", NULL, &pos, NULL);
+        if (!tex)
+            goto error;
+
+    #pragma GLSL /* pass_blur */                                                \
+        vec4 color;                                                             \
+        {                                                                       \
+            vec2 step = vec2(${float: offset / w}, ${float: offset / h});       \
+            vec2 step2 = step + step;                                           \
+            color  = textureLod($tex, $pos - vec2(step2.x, 0.0), 0.0);          \
+            color += textureLod($tex, $pos + vec2(step2.x, 0.0), 0.0);          \
+            color += textureLod($tex, $pos - vec2(0.0, step2.y), 0.0);          \
+            color += textureLod($tex, $pos + vec2(0.0, step2.y), 0.0);          \
+            color += textureLod($tex, $pos + vec2(-step.x, -step.y), 0.0) * 2.0;\
+            color += textureLod($tex, $pos + vec2( step.x, -step.y), 0.0) * 2.0;\
+            color += textureLod($tex, $pos + vec2(-step.x,  step.y), 0.0) * 2.0;\
+            color += textureLod($tex, $pos + vec2( step.x,  step.y), 0.0) * 2.0;\
+            color /= 12.0;                                                      \
+        }
+
+        bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+            .shader = &sh,
+            .target = tmp[i],
+        ));
+        if (!ok)
+            goto error;
+
+        prev = tmp[i];
+        w = prev->params.w;
+        h = prev->params.h;
+    }
+
+    return prev;
+
+error:
+    rr->errors |= PL_RENDER_ERR_BLUR;
+    return NULL;
+}
+
 #define CLEAR_COL(params)                                                       \
     (float[4]) {                                                                \
         (params)->background_color[0],                                          \
@@ -2342,12 +2464,17 @@ static uint8_t plane_comps(const struct pl_plane *plane,
     return comps;
 }
 
+static int frame_ref(const struct pl_frame *frame);
+
 static void clear_target(pl_renderer rr, const struct pl_frame *target,
+                         const pl_tex background, float bg_scale,
                          const struct pl_render_params *params)
 {
     enum pl_clear_mode border = params->border;
     if (params->skip_target_clearing)
         border = PL_CLEAR_SKIP;
+    if (border == PL_CLEAR_BLUR && !background)
+        border = PL_CLEAR_COLOR;
 
     switch (border) {
     case PL_CLEAR_COLOR:
@@ -2355,6 +2482,104 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
         break;
     case PL_CLEAR_TILES:
         pl_frame_clear_tiles(rr->gpu, target, params->tile_colors, params->tile_size);
+        break;
+    case PL_CLEAR_BLUR: ;
+        // Map of the output frame buffer:
+        //
+        //   0-----1-------------2-----------3
+        //   |     .             .           |
+        //   |     8-------------9           | <- y0
+        //   |     |             |           |
+        //   |     |             |           |
+        //   |     A-------------B           | <- y1
+        //   |     .             .           |
+        //   4-----5-------------6-----------7
+        //         ^x0           ^x1
+        //
+        // Generate the following quads:
+        //
+        //   0-1-4-5 (if x0 > 0)
+        //   2-3-6-7 (if x1 < w)
+        //   1-2-8-9 (if y0 > 0)
+        //   A-B-5-6 (if y1 < h)
+
+        const struct pl_plane *ref = &target->planes[frame_ref(target)];
+        const float w  = ref->texture->params.w, h = ref->texture->params.h;
+        const float x0 = target->crop.x0 / w, x1 = target->crop.x1 / w;
+        const float y0 = target->crop.y0 / h, y1 = target->crop.y1 / h;
+
+        float vertices[12][2] = {
+            {  0,  0 }, { x0,  0 }, { x1,  0 }, {  1,  0 },
+            {  0,  1 }, { x0,  1 }, { x1,  1 }, {  1,  1 },
+            { x0, y0 }, { x1, y0 }, { x0, y1 }, { x1, y1 },
+        };
+
+        uint16_t indices[4 * 6];
+        int nb_indices = 0;
+        #define ADD_QUAD(A, B, C, D)   \
+        do {                           \
+            indices[nb_indices++] = A; \
+            indices[nb_indices++] = B; \
+            indices[nb_indices++] = C; \
+            indices[nb_indices++] = C; \
+            indices[nb_indices++] = B; \
+            indices[nb_indices++] = D; \
+        } while (0)
+
+        if (x0 > 0)
+            ADD_QUAD(0, 1, 4, 5);
+        if (x1 < 1)
+            ADD_QUAD(2, 3, 6, 7);
+        if (y0 > 0)
+            ADD_QUAD(1, 2, 8, 9);
+        if (y1 < 1)
+            ADD_QUAD(10, 11, 5, 6);
+
+        for (int p = 0; p < target->num_planes; p++) {
+            const struct pl_plane *plane = &target->planes[p];
+
+            pl_shader sh = pl_dispatch_begin(rr->dp);
+            sh_describe(sh, "draw border");
+            sh->output = PL_SHADER_SIG_COLOR;
+
+            ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
+                .desc = {
+                    .name = "bg_tex",
+                    .type = PL_DESC_SAMPLED_TEX,
+                },
+                .binding = {
+                    .object = background,
+                    .address_mode = PL_TEX_ADDRESS_CLAMP,
+                    .sample_mode = PL_TEX_SAMPLE_LINEAR,
+                },
+            });
+
+            GLSL("vec4 color = textureLod("$", pos, 0.0); \n"
+                 "color.%s *= vec%d(1.0 / "$"); \n",
+                 tex,
+                 params->blend_params ? "rgb" : "rgba",
+                 params->blend_params ? 3 : 4,
+                 SH_FLOAT(bg_scale));
+
+            swizzle_color(sh, plane->components, plane->component_mapping,
+                          params->blend_params);
+
+            pl_dispatch_vertex(rr->dp, pl_dispatch_vertex_params(
+                .shader             = &sh,
+                .target             = plane->texture,
+                .blend_params       = params->blend_params,
+                .vertex_attribs     = rr->osd_attribs, // reuse position attrib
+                .num_vertex_attribs = 1,
+                .vertex_flipped     = plane->flipped,
+                .vertex_stride      = sizeof(float[2]),
+                .vertex_coords      = PL_COORDS_RELATIVE,
+                .vertex_type        = PL_PRIM_TRIANGLE_LIST,
+                .vertex_count       = nb_indices,
+                .vertex_data        = vertices,
+                .index_data         = indices,
+                .index_fmt          = PL_INDEX_UINT16,
+            ));
+        }
         break;
     case PL_CLEAR_SKIP: break;
     case PL_CLEAR_MODE_COUNT: pl_unreachable();
@@ -2504,10 +2729,10 @@ static bool pass_output_target(struct pass_state *pass)
             img->comps = 3;
             break;
         case PL_CLEAR_SKIP: break;
+        case PL_CLEAR_BLUR: // invalid for background
         case PL_CLEAR_MODE_COUNT: pl_unreachable();
         }
     }
-
 
     // Apply the color scale separately, after encoding is done, to make sure
     // that the intermediate FBO (if any) has the correct precision.
@@ -2547,8 +2772,30 @@ static bool pass_output_target(struct pass_state *pass)
     bool flipped_x = dst_rect.x1 < dst_rect.x0,
          flipped_y = dst_rect.y1 < dst_rect.y0;
 
-    if (pl_frame_is_cropped(target))
-        clear_target(rr, target, params);
+    if (pl_frame_is_cropped(target)) {
+        pl_tex border_tex = NULL;
+        if (params->border == PL_CLEAR_BLUR && !(rr->errors & PL_RENDER_ERR_BLUR)) {
+            pl_tex tex = img_tex(pass, img);
+            if (!tex) {
+                PL_ERR(rr, "Output requires blurred borders, but FBOs are "
+                    "unavailable. This combination is unsupported.");
+                return false;
+            }
+
+            const int ref_w = ref->texture->params.w, ref_h = ref->texture->params.h;
+            pl_rect2df rect = img->rect;
+            pl_rect2df_aspect_set(&rect, (float) ref_w / ref_h, 0.0);
+            pl_rect2df_rotate(&rect, pass->rotation);
+
+            border_tex = pass_blur(pass, tex, img->comps, &rect, params->blur_radius);
+            if (!border_tex) {
+                PL_ERR(rr, "Failed to generate blurred borders.");
+                return false;
+            }
+        }
+
+        clear_target(rr, target, border_tex, scale, params);
+    }
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -3142,7 +3389,7 @@ static bool draw_empty_overlays(pl_renderer rr,
     if (!pass_init(&pass, false))
         return false;
 
-    clear_target(rr, ptarget, params);
+    clear_target(rr, ptarget, NULL, 0.0f, params);
     if (!ptarget->num_overlays)
         goto done;
 

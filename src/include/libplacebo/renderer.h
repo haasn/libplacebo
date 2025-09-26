@@ -52,6 +52,7 @@ enum pl_render_error {
     PL_RENDER_ERR_ERROR_DIFFUSION   = 1 << 9,
     PL_RENDER_ERR_HOOKS             = 1 << 10,
     PL_RENDER_ERR_CONTRAST_RECOVERY = 1 << 11,
+    PL_RENDER_ERR_BLUR              = 1 << 12,
 };
 
 // Struct describing current renderer state, including internal processing errors,
@@ -101,6 +102,7 @@ enum pl_clear_mode {
     PL_CLEAR_COLOR = 0, // set texture to a solid color
     PL_CLEAR_TILES,     // set texture to a tiled pattern
     PL_CLEAR_SKIP,      // skip the clearing pass (no-op)
+    PL_CLEAR_BLUR,      // clear with a blurred copy of the image (border only)
     PL_CLEAR_MODE_COUNT,
 };
 
@@ -264,6 +266,9 @@ struct pl_render_params {
     float tile_colors[2][3];
     int tile_size;
 
+    // The blur radius (in pixels) to use for PL_CLEAR_BLUR
+    float blur_radius;
+
     // If set to a value above 0.0, the output will be rendered with rounded
     // corners, as if an alpha transparency mask had been applied. The value
     // indicates the relative fraction of the side length to round - a value
@@ -369,7 +374,8 @@ struct pl_render_params {
     .color_adjustment   = &pl_color_adjustment_neutral, \
     .tile_colors        = {{0.93, 0.93, 0.93},          \
                            {0.87, 0.87, 0.87}},         \
-    .tile_size          = 32,
+    .tile_size          = 32,                           \
+    .blur_radius        = 16.0,
 
 #define pl_render_params(...) (&(struct pl_render_params) { PL_RENDER_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_render_params pl_render_fast_params;
