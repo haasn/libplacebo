@@ -3723,6 +3723,7 @@ inter_pass_error:
         .h = out_h,
         .comps = comps,
         .color = target->color,
+        .rect = { 0, 0, out_w, out_h },
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
             .levels = PL_COLOR_LEVELS_PC,
