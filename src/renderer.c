@@ -576,7 +576,7 @@ enum sampler_dir {
 enum sampler_usage {
     SAMPLER_MAIN,
     SAMPLER_PLANE,
-    SAMPLER_CONTRAST,
+    SAMPLER_LOWPASS,
 };
 
 struct sampler_info {
@@ -620,7 +620,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
     info.dir = PL_MAX(info.dir_sep[0], info.dir_sep[1]);
     switch (info.dir) {
     case SAMPLER_DOWN:
-        if (usage == SAMPLER_CONTRAST) {
+        if (usage == SAMPLER_LOWPASS) {
             info.config = &pl_filter_bicubic;
         } else if (usage == SAMPLER_PLANE && params->plane_downscaler) {
             info.config = params->plane_downscaler;
@@ -632,7 +632,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         if (usage == SAMPLER_PLANE && params->plane_upscaler) {
             info.config = params->plane_upscaler;
         } else {
-            pl_assert(usage != SAMPLER_CONTRAST);
+            pl_assert(usage != SAMPLER_LOWPASS);
             info.config = params->upscaler;
         }
         break;
@@ -722,7 +722,7 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
     struct pl_sample_filter_params fparams = {
         .filter      = *info.config,
         .antiring    = params->antiringing_strength,
-        .no_widening = params->skip_anti_aliasing && usage != SAMPLER_CONTRAST,
+        .no_widening = params->skip_anti_aliasing && usage != SAMPLER_LOWPASS,
         .lut         = lut,
     };
 
@@ -2112,7 +2112,7 @@ static pl_tex get_feature_map(struct pass_state *pass)
     };
 
     sh = pl_dispatch_begin(rr->dp);
-    dispatch_sampler(pass, sh, &rr->sampler_contrast, SAMPLER_CONTRAST, out_tex, &src);
+    dispatch_sampler(pass, sh, &rr->sampler_contrast, SAMPLER_LOWPASS, out_tex, &src);
     ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
         .shader = &sh,
         .target = out_tex,
