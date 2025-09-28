@@ -69,7 +69,7 @@ struct pl_renderer_t {
     pl_shader_obj grain_state[4];
     pl_shader_obj lut_state[3];
     pl_shader_obj icc_state[2];
-    PL_ARRAY(pl_tex) fbos;
+    PL_ARRAY(pl_tex) fbos[PL_RENDER_STAGE_COUNT];
     struct sampler sampler_main;
     struct sampler sampler_contrast;
     struct sampler samplers_src[4];
@@ -145,8 +145,10 @@ void pl_renderer_destroy(pl_renderer *p_rr)
         return;
 
     // Free all intermediate FBOs
-    for (int i = 0; i < rr->fbos.num; i++)
-        pl_tex_destroy(rr->gpu, &rr->fbos.elem[i]);
+    for (int n = 0; n < PL_ARRAY_SIZE(rr->fbos); n++) {
+        for (int i = 0; i < rr->fbos[n].num; i++)
+            pl_tex_destroy(rr->gpu, &rr->fbos[n].elem[i]);
+    }
     for (int i = 0; i < rr->frames.num; i++)
         pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
     for (int i = 0; i < rr->frame_fbos.num; i++)
@@ -444,6 +446,7 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
                       int comps, pl_debug_tag debug_tag)
 {
     pl_renderer rr = pass->rr;
+    const int n = pass->info.stage;
     comps = PL_DEF(comps, 4);
     fmt = PL_DEF(fmt, pass->fbofmt[comps]);
     if (!fmt)
@@ -464,14 +467,14 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
     int best_diff = 0;
 
     // Find the best-fitting texture out of rr->fbos
-    for (int i = 0; i < rr->fbos.num; i++) {
+    for (int i = 0; i < rr->fbos[n].num; i++) {
         if (pass->fbos_used[i])
             continue;
 
         // Orthogonal distance, with penalty for format mismatches
-        int diff = abs(rr->fbos.elem[i]->params.w - w) +
-                   abs(rr->fbos.elem[i]->params.h - h) +
-                   ((rr->fbos.elem[i]->params.format != fmt) ? 1000 : 0);
+        int diff = abs(rr->fbos[n].elem[i]->params.w - w) +
+                   abs(rr->fbos[n].elem[i]->params.h - h) +
+                   ((rr->fbos[n].elem[i]->params.format != fmt) ? 1000 : 0);
 
         if (best_idx < 0 || diff < best_diff) {
             best_idx = i;
@@ -481,17 +484,17 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
 
     // No texture found at all, add a new one
     if (best_idx < 0) {
-        best_idx = rr->fbos.num;
-        PL_ARRAY_APPEND(rr, rr->fbos, NULL);
-        pl_grow(pass->tmp, &pass->fbos_used, rr->fbos.num * sizeof(bool));
+        best_idx = rr->fbos[n].num;
+        PL_ARRAY_APPEND(rr, rr->fbos[n], NULL);
+        pl_grow(pass->tmp, &pass->fbos_used, rr->fbos[n].num * sizeof(bool));
         pass->fbos_used[best_idx] = false;
     }
 
-    if (!pl_tex_recreate(rr->gpu, &rr->fbos.elem[best_idx], &params))
+    if (!pl_tex_recreate(rr->gpu, &rr->fbos[n].elem[best_idx], &params))
         return NULL;
 
     pass->fbos_used[best_idx] = true;
-    return rr->fbos.elem[best_idx];
+    return rr->fbos[n].elem[best_idx];
 }
 
 // Forcibly convert an img to `tex`, dispatching where necessary
@@ -3118,7 +3121,7 @@ static void pass_begin_frame(struct pass_state *pass)
             params->hooks[i]->reset(params->hooks[i]->priv);
     }
 
-    size_t size = rr->fbos.num * sizeof(bool);
+    size_t size = rr->fbos[pass->info.stage].num * sizeof(bool);
     pass->fbos_used = pl_realloc(pass->tmp, pass->fbos_used, size);
     memset(pass->fbos_used, 0, size);
 }
