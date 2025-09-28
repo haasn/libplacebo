@@ -632,19 +632,18 @@ static void generate_shaders(pl_dispatch dp,
                 if (params->out_off)
                     ADD(vert_body, "va_pos += "$"; \n", params->out_off);
                 ADD(vert_body, "gl_Position = vec4(va_pos, 0.0, 1.0); \n");
-            } else {
-                // Everything else is just blindly passed through
-                if (has_loc) {
-                    ADD(vert_head, "layout(location=%d) out %s "$";\n",
-                        va->location, type, id);
-                    ADD(glsl, "layout(location=%d) in %s "$";\n",
-                        va->location, type, id);
-                } else {
-                    ADD(vert_head, "out %s "$";\n", type, id);
-                    ADD(glsl, "in %s "$";\n", type, id);
-                }
-                ADD(vert_body, $" = "$";\n", id, sh_ident_unpack(va->name));
             }
+            // Everything else is just blindly passed through
+            if (has_loc) {
+                ADD(vert_head, "layout(location=%d) out %s "$";\n",
+                    va->location, type, id);
+                ADD(glsl, "layout(location=%d) in %s "$";\n",
+                    va->location, type, id);
+            } else {
+                ADD(vert_head, "out %s "$";\n", type, id);
+                ADD(glsl, "in %s "$";\n", type, id);
+            }
+            ADD(vert_body, $" = "$";\n", id, sh_ident_unpack(va->name));
         }
 
         ADD(vert_body, "}");
