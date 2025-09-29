@@ -683,6 +683,9 @@ PL_LIBAV_API void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
 {
     frame->colorspace = pl_system_to_av(repr.sys);
     frame->color_range = pl_levels_to_av(repr.levels);
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(60, 11, 100)
+    frame->alpha_mode = pl_alpha_to_av(repr.alpha);
+#endif
 
     // No real way to map repr.bits, the image format already has to match
 }
