@@ -50,6 +50,10 @@
 #define VK_VENDOR_ID_NVIDIA 0x10DE
 #endif
 
+#ifndef VK_VENDOR_ID_APPLE
+#define VK_VENDOR_ID_APPLE 0x106B
+#endif
+
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     pl_mutex lock;
