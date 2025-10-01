@@ -948,7 +948,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("hue", "Hue shift", color_adjustment.hue),
     OPT_FLOAT("gamma", "Gamma adjustment", color_adjustment.gamma, .max = 100.0),
     OPT_FLOAT("temperature", "Color temperature shift", color_adjustment.temperature,
-              .min = (2500  - 6500) / 3500.0, // see `pl_white_from_temp`
+              .min = (1667  - 6500) / 3500.0, // see `pl_white_from_temp`
               .max = (25000 - 6500) / 3500.0),
 
     // Peak detection

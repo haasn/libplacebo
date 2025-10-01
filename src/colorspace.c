@@ -988,9 +988,9 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
     }
 }
 
-struct pl_cie_xy pl_white_from_temp(float temp)
+struct pl_cie_xy pl_daylight_from_temp(float temp)
 {
-    temp = PL_CLAMP(temp, 2500, 25000);
+    temp = PL_CLAMP(temp, 1000, 25000);
 
     double ti = 1000.0 / temp, ti2 = ti * ti, ti3 = ti2 * ti, x;
     if (temp <= 7000) {
@@ -1002,6 +1002,42 @@ struct pl_cie_xy pl_white_from_temp(float temp)
     return (struct pl_cie_xy) {
         .x = x,
         .y = -3 * (x*x) + 2.87 * x - 0.275,
+    };
+}
+
+struct pl_cie_xy pl_blackbody_from_temp(float temp)
+{
+    temp = PL_CLAMP(temp, 1667, 25000);
+
+    double ti = 1000.0 / temp, ti2 = ti * ti, ti3 = ti2 * ti, x, y;
+    if (temp <= 4000) {
+        x = -0.2661239 * ti3 - 0.2343580 * ti2 + 0.8776956 * ti + 0.179910;
+    } else {
+        x = -3.0258469 * ti3 + 2.1070379 * ti2 + 0.2226347 * ti + 0.240390;
+    }
+
+    double x2 = x * x, x3 = x2 * x;
+    if (temp <= 2222) {
+        y = -1.1063814 * x3 - 1.34811020 * x2 + 2.18555832 * x - 0.20219683;
+    } else if (temp <= 4000) {
+        y = -0.9549476 * x3 - 1.37418593 * x2 + 2.09137015 * x - 0.16748867;
+    } else {
+        y =  3.0817580 * x3 - 5.87338670 * x2 + 3.75112997 * x - 0.37001483;
+    }
+
+    return (struct pl_cie_xy) {x, y};
+}
+
+struct pl_cie_xy pl_white_from_temp(float temp)
+{
+    const struct pl_cie_xy a = pl_blackbody_from_temp(temp);
+    const struct pl_cie_xy b = pl_daylight_from_temp(temp);
+    float f = (temp - 2500) / (4000 - 2500);
+    f = PL_CLAMP(f, 0.0f, 1.0f);
+
+    return (struct pl_cie_xy) {
+        .x = PL_MIX(a.x, b.x, f),
+        .y = PL_MIX(a.y, b.y, f),
     };
 }
 

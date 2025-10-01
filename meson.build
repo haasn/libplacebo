@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '357': 'add pl_daylight_from_temp, pl_blackbody_from_temp, and generalize pl_white_from_temp',
       '356': 'pl_avframe_set_repr now sets frame.alpha_mode',
       '355': 'add PL_CLEAR_BLUR and pl_render_params.blur_radius',
       '354': 'pl_shader_{encode,decode}_color no longer linearizes/delinearizes XYZ',

@@ -547,7 +547,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
 
             // Convert to human-friendly temperature values for display
             int temp = (int) roundf(adj->temperature * 3500) + 6500;
-            nk_property_int(nk, "Temperature (K)", 3000, &temp, 10000, 10, 5);
+            nk_property_int(nk, "Temperature (K)", 1700, &temp, 10000, 10, 5);
             adj->temperature = (temp - 6500) / 3500.0;
 
             struct pl_cone_params *cpar = &opts->cone_params;
