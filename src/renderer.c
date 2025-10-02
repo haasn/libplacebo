@@ -2508,11 +2508,20 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
         const float x0 = target->crop.x0 / w, x1 = target->crop.x1 / w;
         const float y0 = target->crop.y0 / h, y1 = target->crop.y1 / h;
 
-        float vertices[12][2] = {
-            {  0,  0 }, { x0,  0 }, { x1,  0 }, {  1,  0 },
-            {  0,  1 }, { x0,  1 }, { x1,  1 }, {  1,  1 },
-            { x0, y0 }, { x1, y0 }, { x0, y1 }, { x1, y1 },
+        struct { float pos[2]; float coord[2]; } vertices[12] = {
+            { .coord = {  0,  0 } }, { .coord = { x0,  0 } },
+            { .coord = { x1,  0 } }, { .coord = {  1,  0 } },
+            { .coord = {  0,  1 } }, { .coord = { x0,  1 } },
+            { .coord = { x1,  1 } }, { .coord = {  1,  1 } },
+            { .coord = { x0, y0 } }, { .coord = { x1, y0 } },
+            { .coord = { x0, y1 } }, { .coord = { x1, y1 } },
         };
+
+
+        for (int i = 0; i < PL_ARRAY_SIZE(vertices); i++) {
+            vertices[i].pos[0] = 2.0f * vertices[i].coord[0] - 1.0f;
+            vertices[i].pos[1] = 2.0f * vertices[i].coord[1] - 1.0f;
+        }
 
         uint16_t indices[4 * 6];
         int nb_indices = 0;
@@ -2554,7 +2563,7 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
                 },
             });
 
-            GLSL("vec4 color = textureLod("$", pos, 0.0); \n"
+            GLSL("vec4 color = textureLod("$", coord, 0.0); \n"
                  "color.%s *= vec%d(1.0 / "$"); \n",
                  tex,
                  params->blend_params ? "rgb" : "rgba",
@@ -2568,11 +2577,11 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
                 .shader             = &sh,
                 .target             = plane->texture,
                 .blend_params       = params->blend_params,
-                .vertex_attribs     = rr->osd_attribs, // reuse position attrib
-                .num_vertex_attribs = 1,
+                .vertex_attribs     = rr->osd_attribs, // reuse OSD attribs
+                .num_vertex_attribs = 2,
                 .vertex_flipped     = plane->flipped,
-                .vertex_stride      = sizeof(float[2]),
-                .vertex_coords      = PL_COORDS_RELATIVE,
+                .vertex_stride      = sizeof(vertices[0]),
+                .vertex_coords      = PL_COORDS_NORMALIZED,
                 .vertex_type        = PL_PRIM_TRIANGLE_LIST,
                 .vertex_count       = nb_indices,
                 .vertex_data        = vertices,
