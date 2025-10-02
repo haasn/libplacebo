@@ -452,6 +452,7 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
     if (!fmt)
         return NULL;
 
+    pl_assert(w && h);
     struct pl_tex_params params = {
         .w          = w,
         .h          = h,
@@ -2341,8 +2342,8 @@ static pl_tex pass_blur(struct pass_state *pass, pl_tex src_tex, int comps,
     if (offset > a_max)
         offset = radius / sqrtf(powf(4, ++passes) - 1.0f);
 
-    int w = rect ? fabsf(pl_rect_w(*rect)) : src_tex->params.w;
-    int h = rect ? fabsf(pl_rect_h(*rect)) : src_tex->params.h;
+    int w = rect ? ceilf(fabsf(pl_rect_w(*rect))) : src_tex->params.w;
+    int h = rect ? ceilf(fabsf(pl_rect_h(*rect))) : src_tex->params.h;
     for (int i = 0; i < passes + 1; i++) {
         tmp[i] = get_fbo(pass, w, h, NULL, comps, PL_DEBUG_TAG);
         if (!tmp[i])
