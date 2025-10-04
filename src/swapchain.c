@@ -60,7 +60,7 @@ void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
     if (!impl->colorspace_hint)
         return;
 
-    struct pl_swapchain_colors fix = {0};
+    struct pl_swapchain_colors fix = pl_color_space_srgb;
     if (csp) {
         fix = *csp;
         // Ensure we have valid values set for all the fields
