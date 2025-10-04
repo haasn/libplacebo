@@ -412,6 +412,7 @@ struct pl_hdr_metadata {
     // --- PL_HDR_METADATA_CIE_Y
     float max_pq_y;                 // maximum PQ luminance (in PQ, 0-1)
     float avg_pq_y;                 // averaged PQ luminance (in PQ, 0-1)
+    float min_pq_y;
 };
 
 PL_API extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
