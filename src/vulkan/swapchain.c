@@ -244,9 +244,9 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
             case PL_FMT_UNKNOWN: break;
             case PL_FMT_UINT: break;
             case PL_FMT_SINT: break;
-            case PL_FMT_UNORM: score += 500; break;
-            case PL_FMT_SNORM: score += 400; break;
-            case PL_FMT_FLOAT: score += 300; break;
+            case PL_FMT_UNORM: score += 3; break;
+            case PL_FMT_SNORM: score += 2; break;
+            case PL_FMT_FLOAT: score += 1; break;
             case PL_FMT_TYPE_COUNT: pl_unreachable();
             };
 
