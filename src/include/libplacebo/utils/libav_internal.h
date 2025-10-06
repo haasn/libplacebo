@@ -69,7 +69,7 @@ PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
     // requires inferring from other sources, but libplacebo makes explicit.
     // Default to PQ as it's the more common scenario.
     case AVCOL_SPC_ICTCP:               return PL_COLOR_SYSTEM_BT_2100_PQ;
-    case AVCOL_SPC_NB:                  return PL_COLOR_SYSTEM_COUNT;
+    case AVCOL_SPC_NB:                  return PL_COLOR_SYSTEM_UNKNOWN;
     }
 
     return PL_COLOR_SYSTEM_UNKNOWN;
@@ -90,7 +90,7 @@ PL_LIBAV_API enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_YCGCO:         return AVCOL_SPC_YCGCO;
     case PL_COLOR_SYSTEM_RGB:           return AVCOL_SPC_RGB;
     case PL_COLOR_SYSTEM_XYZ:           return AVCOL_SPC_UNSPECIFIED; // handled differently
-    case PL_COLOR_SYSTEM_COUNT:         return AVCOL_SPC_NB;
+    case PL_COLOR_SYSTEM_COUNT:         return AVCOL_SPC_UNSPECIFIED;
     }
 
     return AVCOL_SPC_UNSPECIFIED;
@@ -102,7 +102,7 @@ PL_LIBAV_API enum pl_color_levels pl_levels_from_av(enum AVColorRange range)
     case AVCOL_RANGE_UNSPECIFIED:       return PL_COLOR_LEVELS_UNKNOWN;
     case AVCOL_RANGE_MPEG:              return PL_COLOR_LEVELS_LIMITED;
     case AVCOL_RANGE_JPEG:              return PL_COLOR_LEVELS_FULL;
-    case AVCOL_RANGE_NB:                return PL_COLOR_LEVELS_COUNT;
+    case AVCOL_RANGE_NB:                return PL_COLOR_LEVELS_UNKNOWN;
     }
 
     return PL_COLOR_LEVELS_UNKNOWN;
@@ -114,7 +114,7 @@ PL_LIBAV_API enum AVColorRange pl_levels_to_av(enum pl_color_levels levels)
     case PL_COLOR_LEVELS_UNKNOWN:       return AVCOL_RANGE_UNSPECIFIED;
     case PL_COLOR_LEVELS_LIMITED:       return AVCOL_RANGE_MPEG;
     case PL_COLOR_LEVELS_FULL:          return AVCOL_RANGE_JPEG;
-    case PL_COLOR_LEVELS_COUNT:         return AVCOL_RANGE_NB;
+    case PL_COLOR_LEVELS_COUNT:         return AVCOL_RANGE_UNSPECIFIED;
     }
 
     return AVCOL_RANGE_UNSPECIFIED;
@@ -137,7 +137,7 @@ PL_LIBAV_API enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries 
     case AVCOL_PRI_SMPTE431:        return PL_COLOR_PRIM_DCI_P3;
     case AVCOL_PRI_SMPTE432:        return PL_COLOR_PRIM_DISPLAY_P3;
     case AVCOL_PRI_JEDEC_P22:       return PL_COLOR_PRIM_EBU_3213;
-    case AVCOL_PRI_NB:              return PL_COLOR_PRIM_COUNT;
+    case AVCOL_PRI_NB:              return PL_COLOR_PRIM_UNKNOWN;
     }
 
     return PL_COLOR_PRIM_UNKNOWN;
@@ -164,7 +164,7 @@ PL_LIBAV_API enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries pr
     case PL_COLOR_PRIM_FILM_C:      return AVCOL_PRI_FILM;
     case PL_COLOR_PRIM_ACES_AP0:    return AVCOL_PRI_UNSPECIFIED; // missing
     case PL_COLOR_PRIM_ACES_AP1:    return AVCOL_PRI_UNSPECIFIED; // missing
-    case PL_COLOR_PRIM_COUNT:       return AVCOL_PRI_NB;
+    case PL_COLOR_PRIM_COUNT:       return AVCOL_PRI_UNSPECIFIED;
     }
 
     return AVCOL_PRI_UNSPECIFIED;
@@ -192,7 +192,7 @@ PL_LIBAV_API enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferChar
     case AVCOL_TRC_SMPTE2084:       return PL_COLOR_TRC_PQ;
     case AVCOL_TRC_SMPTE428:        return PL_COLOR_TRC_ST428;
     case AVCOL_TRC_ARIB_STD_B67:    return PL_COLOR_TRC_HLG;
-    case AVCOL_TRC_NB:              return PL_COLOR_TRC_COUNT;
+    case AVCOL_TRC_NB:              return PL_COLOR_TRC_UNKNOWN;
     }
 
     return PL_COLOR_TRC_UNKNOWN;
@@ -218,7 +218,7 @@ PL_LIBAV_API enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_
     case PL_COLOR_TRC_V_LOG:        return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_S_LOG1:       return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_S_LOG2:       return AVCOL_TRC_UNSPECIFIED; // missing
-    case PL_COLOR_TRC_COUNT:        return AVCOL_TRC_NB;
+    case PL_COLOR_TRC_COUNT:        return AVCOL_TRC_UNSPECIFIED;
     }
 
     return AVCOL_TRC_UNSPECIFIED;
@@ -234,7 +234,7 @@ PL_LIBAV_API enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc
     case AVCHROMA_LOC_TOP:          return PL_CHROMA_TOP_CENTER;
     case AVCHROMA_LOC_BOTTOMLEFT:   return PL_CHROMA_BOTTOM_LEFT;
     case AVCHROMA_LOC_BOTTOM:       return PL_CHROMA_BOTTOM_CENTER;
-    case AVCHROMA_LOC_NB:           return PL_CHROMA_COUNT;
+    case AVCHROMA_LOC_NB:           return PL_CHROMA_UNKNOWN;
     }
 
     return PL_CHROMA_UNKNOWN;
@@ -250,7 +250,7 @@ PL_LIBAV_API enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc)
     case PL_CHROMA_TOP_CENTER:      return AVCHROMA_LOC_TOP;
     case PL_CHROMA_BOTTOM_LEFT:     return AVCHROMA_LOC_BOTTOMLEFT;
     case PL_CHROMA_BOTTOM_CENTER:   return AVCHROMA_LOC_BOTTOM;
-    case PL_CHROMA_COUNT:           return AVCHROMA_LOC_NB;
+    case PL_CHROMA_COUNT:           return AVCHROMA_LOC_UNSPECIFIED;
     }
 
     return AVCHROMA_LOC_UNSPECIFIED;
@@ -263,7 +263,7 @@ PL_LIBAV_API enum pl_alpha_mode pl_alpha_from_av(enum AVAlphaMode mode)
     case AVALPHA_MODE_UNSPECIFIED:   return PL_ALPHA_UNKNOWN;
     case AVALPHA_MODE_STRAIGHT:      return PL_ALPHA_INDEPENDENT;
     case AVALPHA_MODE_PREMULTIPLIED: return PL_ALPHA_PREMULTIPLIED;
-    case AVALPHA_MODE_NB:            return PL_ALPHA_MODE_COUNT;
+    case AVALPHA_MODE_NB:            return PL_ALPHA_UNKNOWN;
     }
 
     return PL_ALPHA_UNKNOWN;
@@ -276,7 +276,7 @@ PL_LIBAV_API enum AVAlphaMode pl_alpha_to_av(enum pl_alpha_mode mode)
     case PL_ALPHA_UNKNOWN:          return AVALPHA_MODE_UNSPECIFIED;
     case PL_ALPHA_INDEPENDENT:      return AVALPHA_MODE_STRAIGHT;
     case PL_ALPHA_PREMULTIPLIED:    return AVALPHA_MODE_PREMULTIPLIED;
-    case PL_ALPHA_MODE_COUNT:       return AVALPHA_MODE_NB;
+    case PL_ALPHA_MODE_COUNT:       return AVALPHA_MODE_UNSPECIFIED;
     }
 
     return AVALPHA_MODE_UNSPECIFIED;
