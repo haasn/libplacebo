@@ -2596,6 +2596,23 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
     }
 }
 
+static void translate_srgb_color(float out_color[3], const float in_color[3],
+                                 const struct pl_color_space *csp)
+{
+    struct pl_color_space srgb = pl_color_space_srgb;
+    srgb.hdr.min_luma = csp->hdr.min_luma; // use the same contrast
+
+    const struct pl_raw_primaries *src_prim = pl_raw_primaries_get(srgb.primaries);
+    const struct pl_raw_primaries *dst_prim = pl_raw_primaries_get(csp->primaries);
+
+    memcpy(out_color, in_color, sizeof(float[3]));
+    pl_color_linearize(&srgb, out_color);
+    pl_matrix3x3 tr = pl_get_color_mapping_matrix(src_prim, dst_prim,
+                                                  PL_INTENT_RELATIVE_COLORIMETRIC);
+    pl_matrix3x3_apply(&tr, out_color);
+    pl_color_delinearize(csp, out_color);
+}
+
 static bool pass_output_target(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
@@ -2710,11 +2727,13 @@ static bool pass_output_target(struct pass_state *pass)
     if (img->comps == 4 && need_blend) {
         pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
         switch (background) {
-        case PL_CLEAR_COLOR:
+        case PL_CLEAR_COLOR:;
+            float bg_color[3];
+            translate_srgb_color(bg_color, params->background_color, &target->color);
             GLSL("color += (1.0 - color.a) * vec4("$", "$", "$", "$"); \n",
-                 SH_FLOAT(params->background_color[0]),
-                 SH_FLOAT(params->background_color[1]),
-                 SH_FLOAT(params->background_color[2]),
+                 SH_FLOAT(bg_color[0]),
+                 SH_FLOAT(bg_color[1]),
+                 SH_FLOAT(bg_color[2]),
                  SH_FLOAT(1.0 - params->background_transparency));
             if (!params->background_transparency || !has_alpha) {
                 img->repr.alpha = PL_ALPHA_NONE;
@@ -2723,9 +2742,15 @@ static bool pass_output_target(struct pass_state *pass)
             break;
         case PL_CLEAR_TILES:;
             static const float zero[2][3] = {0};
-            const float (*color)[3] = params->tile_colors;
-            if (memcmp(color, zero, sizeof(zero)) == 0)
-                color = pl_render_default_params.tile_colors;
+            float color[2][3];
+            if (memcmp(params->tile_colors, zero, sizeof(zero)) == 0) {
+                translate_srgb_color(color[0], pl_render_default_params.tile_colors[0], &target->color);
+                translate_srgb_color(color[1], pl_render_default_params.tile_colors[1], &target->color);
+            } else {
+                translate_srgb_color(color[0], params->tile_colors[0], &target->color);
+                translate_srgb_color(color[1], params->tile_colors[1], &target->color);
+            }
+
             GLSL("vec2 outcoord = gl_FragCoord.xy * "$";                    \n"
                  "bvec2 tile = lessThan(fract(outcoord), vec2(0.5));        \n"
                  "vec3 tile_color = tile.x == tile.y ? vec3("$", "$", "$")  \n"
@@ -4107,9 +4132,10 @@ void pl_frame_clear_tiles(pl_gpu gpu, const struct pl_frame *frame,
     pl_transform3x3_invert(&tr);
 
     float encoded[2][3];
-    memcpy(encoded, tile_colors, sizeof(encoded));
-    pl_transform3x3_apply(&tr, encoded[0]);
-    pl_transform3x3_apply(&tr, encoded[1]);
+    for (int i = 0; i < PL_ARRAY_SIZE(encoded); i++) {
+        translate_srgb_color(encoded[i], tile_colors[i], &frame->color);
+        pl_transform3x3_apply(&tr, encoded[i]);
+    }
 
     pl_tex ref = frame->planes[frame_ref(frame)].texture;
 
@@ -4158,7 +4184,8 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
     pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
     pl_transform3x3_invert(&tr);
 
-    float encoded[3] = { rgba[0], rgba[1], rgba[2] };
+    float encoded[3];
+    translate_srgb_color(encoded, rgba, &frame->color);
     pl_transform3x3_apply(&tr, encoded);
 
     float mult = frame->repr.alpha == PL_ALPHA_PREMULTIPLIED ? rgba[3] : 1.0;
