@@ -850,8 +850,14 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
         break;
     }
 
-    // Keep adding new frames until we've covered the range we care about
     pl_assert(p->queue.num);
+
+    // Don't show first frame until it's visible under ZOH semantics
+    double first_pts = p->queue.elem[0]->pts;
+    if (first_pts > params->pts)
+        return nearest(p, mix, params);
+
+    // Keep adding new frames until we've covered the range we care about
     while (p->queue.elem[p->queue.num - 1]->pts < max_pts) {
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_ERR:
