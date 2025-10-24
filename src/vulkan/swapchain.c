@@ -170,45 +170,6 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
         bool disable10 = !pl_color_transfer_is_hdr(space.transfer) &&
                          p->params.disable_10bit_sdr;
 
-        switch (p->formats.elem[i].format) {
-        // Only accept floating point formats for linear curves
-        case VK_FORMAT_R16G16B16_SFLOAT:
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-        case VK_FORMAT_R32G32B32_SFLOAT:
-        case VK_FORMAT_R32G32B32A32_SFLOAT:
-        case VK_FORMAT_R64G64B64_SFLOAT:
-        case VK_FORMAT_R64G64B64A64_SFLOAT:
-            if (space.transfer == PL_COLOR_TRC_LINEAR)
-                break; // accept
-            continue;
-
-        // Only accept 8 bit for non-HDR curves
-        case VK_FORMAT_R8G8B8_UNORM:
-        case VK_FORMAT_B8G8R8_UNORM:
-        case VK_FORMAT_R8G8B8A8_UNORM:
-        case VK_FORMAT_B8G8R8A8_UNORM:
-        case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-            if (!pl_color_transfer_is_hdr(space.transfer))
-                break; // accept
-            continue;
-
-        // Only accept 10 bit formats for non-linear curves
-        case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            if (space.transfer != PL_COLOR_TRC_LINEAR && !disable10)
-                break; // accept
-            continue;
-
-        // Accept 16-bit formats for everything
-        case VK_FORMAT_R16G16B16_UNORM:
-        case VK_FORMAT_R16G16B16A16_UNORM:
-            if (!disable10)
-                break; // accept
-            continue;
-
-        default: continue;
-        }
-
         // Make sure we can wrap this format to a meaningful, valid pl_fmt
         for (int n = 0; n < gpu->num_formats; n++) {
             pl_fmt plfmt = gpu->formats[n];
@@ -224,8 +185,40 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
 
             // format valid, use it if it has a higher score
             int score = 0;
-            for (int c = 0; c < 3; c++)
-                score += plfmt->component_depth[c];
+            switch (plfmt->component_depth[0]) {
+                case 8:
+                    if (pl_color_transfer_is_hdr(space.transfer))
+                        score += 10;
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        continue; // avoid 8-bit linear formats
+                    else if (disable10)
+                        score += 30;
+                    else
+                        score += 20;
+                    break;
+                case 10:
+                    if (pl_color_transfer_is_hdr(space.transfer))
+                        score += 30;
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        continue; // avoid 10-bit linear formats
+                    else if (disable10)
+                        score += 20;
+                    else
+                        score += 30;
+                    break;
+                case 16:
+                    if (pl_color_transfer_is_hdr(space.transfer))
+                        score += 20;
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        score += 30;
+                    else if (disable10)
+                        score += 10;
+                    else
+                        score += 10;
+                    break;
+                default: // skip any other format
+                    continue;
+            }
             if (pl_color_primaries_is_wide_gamut(space.primaries) == wide_gamut)
                 score += 1000;
             if (space.transfer == PL_COLOR_TRC_LINEAR)
