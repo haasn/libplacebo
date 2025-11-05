@@ -2615,10 +2615,24 @@ static void translate_srgb_color(float out_color[3], const float in_color[3],
                                  const struct pl_color_space *csp)
 {
     struct pl_color_space srgb = pl_color_space_srgb;
-    srgb.hdr.min_luma = csp->hdr.min_luma; // use the same contrast
 
     const struct pl_raw_primaries *src_prim = pl_raw_primaries_get(srgb.primaries);
     const struct pl_raw_primaries *dst_prim = pl_raw_primaries_get(csp->primaries);
+
+    switch (csp->transfer) {
+    case PL_COLOR_TRC_BT_1886:
+    case PL_COLOR_TRC_SRGB:
+    case PL_COLOR_TRC_GAMMA22:
+        // Re-use input transfer curve to avoid small adaptations
+        srgb.transfer = csp->transfer;
+        srgb.hdr.min_luma = csp->hdr.min_luma;
+        break;
+    default:
+        // In all other cases, use infinite contrast sRGB, to avoid unwanted
+        // black level changes
+        srgb.hdr.min_luma = PL_COLOR_HDR_BLACK;
+        break;
+    }
 
     memcpy(out_color, in_color, sizeof(float[3]));
     pl_color_linearize(&srgb, out_color);
