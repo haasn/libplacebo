@@ -438,6 +438,9 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
     // Texture format emulation requires at least support for texel buffers
     bool has_emu = gpu->glsl.compute && gpu->limits.max_buffer_texels;
 
+    const VkPhysicalDeviceVulkan14Features *features_vk14 =
+        vk_find_struct(&vk->features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES);
+
     for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->tfmt; pvk_fmt++) {
         const struct vk_format *vk_fmt = pvk_fmt;
 
@@ -605,7 +608,8 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
         // Internal capabilities
         if (vk->props.vendorID != VK_VENDOR_ID_NVIDIA &&
             vk->props.vendorID != VK_VENDOR_ID_APPLE) { // FIXME: remove when upstream works
-            if (texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)
+            if ((texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT) &&
+                features_vk14 && features_vk14->hostImageCopy)
                 fmtp->can_host_copy = true;
         }
 
