@@ -118,8 +118,9 @@ PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
 // values from the `AVDOVIMetadata`.
 //
 // Note: The `pl_dovi_metadata` must be allocated externally.
-// Also, currently the metadata is only used if the `AVDOVIRpuDataHeader`
-// `disable_residual_flag` field is not zero and can be checked before allocating.
+// This function will only attempt to map the metadata if it is fully supported
+// (see `pl_map_avdovi_metadata()` and `pl_avdovi_metadata_supported()`).
+// This can be checked before allocating.
 PL_DEPRECATED_IN(v7.343) PL_LIBAV_API void pl_frame_map_avdovi_metadata(
                                                struct pl_frame *out_frame,
                                                struct pl_dovi_metadata *dovi,
@@ -131,9 +132,11 @@ PL_DEPRECATED_IN(v7.343) PL_LIBAV_API void pl_frame_map_avdovi_metadata(
 // values from the `AVDOVIMetadata`.
 //
 // Note: The `pl_dovi_metadata` must be allocated externally.
-// Currently, the metadata can only be mapped if FEL (full enhancement layer)
-// is not used and this can be checked before allocating
-// (see pl_can_map_avdovi_metadata()).
+// This function will always attempt to map the metadata, even if this mapping
+// would be incomplete due to unsupported features. The caller is advised
+// to use pl_dovi_metadata_supported() to check whether this is the case.
+// Currently, the mapping will only be complete if FEL (full enhancement layer)
+// is not used.
 PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
                                          struct pl_color_repr *repr,
                                          struct pl_dovi_metadata *dovi,
