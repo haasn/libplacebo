@@ -989,26 +989,24 @@ PL_LIBAV_API void pl_map_avdovi_metadata(struct pl_color_space *color,
     if (!color || !repr || !dovi)
         return;
 
-    if (pl_avdovi_metadata_supported(metadata)) {
-        dovi_color = av_dovi_get_color(metadata);
-        pl_map_dovi_metadata(dovi, metadata);
+    dovi_color = av_dovi_get_color(metadata);
+    pl_map_dovi_metadata(dovi, metadata);
 
-        repr->dovi = dovi;
-        repr->sys = PL_COLOR_SYSTEM_DOLBYVISION;
-        color->primaries = PL_COLOR_PRIM_BT_2020;
-        color->transfer = PL_COLOR_TRC_PQ;
-        color->hdr.min_luma =
-            pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, dovi_color->source_min_pq / 4095.0f);
-        color->hdr.max_luma =
-            pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, dovi_color->source_max_pq / 4095.0f);
+    repr->dovi = dovi;
+    repr->sys = PL_COLOR_SYSTEM_DOLBYVISION;
+    color->primaries = PL_COLOR_PRIM_BT_2020;
+    color->transfer = PL_COLOR_TRC_PQ;
+    color->hdr.min_luma =
+        pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, dovi_color->source_min_pq / 4095.0f);
+    color->hdr.max_luma =
+        pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, dovi_color->source_max_pq / 4095.0f);
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 12, 100)
-        if ((dovi_ext = av_dovi_find_level(metadata, 1))) {
-            color->hdr.max_pq_y = dovi_ext->l1.max_pq / 4095.0f;
-            color->hdr.avg_pq_y = dovi_ext->l1.avg_pq / 4095.0f;
-        }
-#endif
+    if ((dovi_ext = av_dovi_find_level(metadata, 1))) {
+        color->hdr.max_pq_y = dovi_ext->l1.max_pq / 4095.0f;
+        color->hdr.avg_pq_y = dovi_ext->l1.avg_pq / 4095.0f;
     }
+#endif
 }
 
 PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
@@ -1017,7 +1015,8 @@ PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
 {
     if (!out_frame)
         return;
-    pl_map_avdovi_metadata(&out_frame->color, &out_frame->repr, dovi, metadata);
+    if (pl_avdovi_metadata_supported(metadata))
+        pl_map_avdovi_metadata(&out_frame->color, &out_frame->repr, dovi, metadata);
 }
 #endif // PL_HAVE_LAV_DOLBY_VISION
 
