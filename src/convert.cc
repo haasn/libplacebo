@@ -41,6 +41,13 @@ struct has_std_to_chars_impl {
 template <typename T>
 constexpr bool has_std_to_chars = has_std_to_chars_impl<T>::value;
 
+#if defined(HAS_STD_TO_CHARS_FP) && HAS_STD_TO_CHARS_FP == 0
+template <>
+constexpr bool has_std_to_chars<float>  = false;
+template <>
+constexpr bool has_std_to_chars<double> = false;
+#endif
+
 template <typename T, typename... Args>
 static inline int to_chars(char *buf, size_t len, T n, Args ...args)
 {
