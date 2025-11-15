@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '363': 'add pl_avdovi_metadata_supported, lift checks out of pl_map_avdovi_metadata, extend pl_avframe_params',
       '362': 'add PL_COLOR_TRC_SCRGB',
       '361': 'pl_swapchain_colorspace_hint can map VK_COLOR_SPACE_PASS_THROUGH_EXT',
       '360': 'add pl_d3d11_swapchain_params.{alpha,color}_bits',
