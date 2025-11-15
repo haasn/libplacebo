@@ -1328,7 +1328,7 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
         if (sd) {
             const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
             // Only automatically map DoVi RPUs that don't require a (full) EL
-            if (pl_avdovi_metadata_supported(metadata))
+            if (params->map_dovi_force || pl_avdovi_metadata_supported(metadata))
                 pl_map_avdovi_metadata(&out->color, &out->repr, &priv->dovi, metadata);
         }
 

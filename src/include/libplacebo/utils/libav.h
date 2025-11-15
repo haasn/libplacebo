@@ -184,6 +184,10 @@ struct pl_avframe_params {
     // Also map Dolby Vision metadata (if supported). Note that this also
     // overrides the colorimetry metadata (forces BT.2020+PQ).
     bool map_dovi;
+
+    // Ignore the checks and always map Dolby Vision metadata (even if this
+    // mapping will be incomplete). Does not imply ->map_dovi.
+    bool map_dovi_force;
 };
 
 #define PL_AVFRAME_DEFAULTS \
