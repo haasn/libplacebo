@@ -39,6 +39,8 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_BT_2100_HLG, // ITU-R Rec. BT.2100 ICtCp HLG variant
     PL_COLOR_SYSTEM_DOLBYVISION, // Dolby Vision (see pl_dovi_metadata)
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
+    PL_COLOR_SYSTEM_YCGCO_RE,    // YCgCo-R, even addition of bits
+    PL_COLOR_SYSTEM_YCGCO_RO,    // YCgCo-R, odd addition of bits
     // Other color systems:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
     PL_COLOR_SYSTEM_XYZ,         // Digital Cinema Distribution Master (XYZ)

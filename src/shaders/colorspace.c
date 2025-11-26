@@ -433,6 +433,8 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     case PL_COLOR_SYSTEM_SMPTE_240M:
     case PL_COLOR_SYSTEM_BT_2020_NC:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         break; // no special post-processing needed
 
     case PL_COLOR_SYSTEM_COUNT:
@@ -533,6 +535,8 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
     case PL_COLOR_SYSTEM_SMPTE_240M:
     case PL_COLOR_SYSTEM_BT_2020_NC:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         break; // no special pre-processing needed
 
     case PL_COLOR_SYSTEM_COUNT:

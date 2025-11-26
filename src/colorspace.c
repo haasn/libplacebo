@@ -40,6 +40,8 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2100_HLG:
     case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return true;
     case PL_COLOR_SYSTEM_COUNT: break;
     };
@@ -57,6 +59,8 @@ bool pl_color_system_is_linear(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_SMPTE_240M:
     case PL_COLOR_SYSTEM_BT_2020_NC:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return true;
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_BT_2100_PQ:
@@ -81,6 +85,8 @@ const char *const pl_color_system_names[PL_COLOR_SYSTEM_COUNT] = {
     [PL_COLOR_SYSTEM_BT_2100_HLG]   = "ITU-R Rec. BT.2100 ICtCp HLG variant",
     [PL_COLOR_SYSTEM_DOLBYVISION]   = "Dolby Vision (invalid for output)",
     [PL_COLOR_SYSTEM_YCGCO]         = "YCgCo (derived from RGB)",
+    [PL_COLOR_SYSTEM_YCGCO_RE]      = "YCgCo-R, even addition of bits",
+    [PL_COLOR_SYSTEM_YCGCO_RO]      = "YCgCo-R, odd addition of bits",
     [PL_COLOR_SYSTEM_RGB]           = "Red, Green and Blue",
     [PL_COLOR_SYSTEM_XYZ]           = "Digital Cinema Distribution Master (XYZ)",
 };
@@ -1745,6 +1751,14 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
             {1,  -1, -1},
         }};
         break;
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
+        m = (pl_matrix3x3) {{
+            {1, -0.5,  0.5},
+            {1,  0.5,  0  },
+            {1, -0.5, -0.5},
+        }};
+        break;
     case PL_COLOR_SYSTEM_UNKNOWN: // fall through
     case PL_COLOR_SYSTEM_RGB:
         m = pl_matrix3x3_identity;
@@ -1812,6 +1826,15 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     double ymul = 1.0 / (ymax - ymin);
     double cmul = 0.5 / (cmax - cmid);
+
+    if (repr->sys == PL_COLOR_SYSTEM_YCGCO_RE || repr->sys == PL_COLOR_SYSTEM_YCGCO_RO) {
+        int additional_bits = repr->sys == PL_COLOR_SYSTEM_YCGCO_RE ? 2 : 1;
+        double max_y = (1LL << (bit_depth - additional_bits)) - 1;
+        double max_c = (1LL << (bit_depth)) - 1;
+        ymul = cmul = max_c / max_y;
+        ymin = 0;
+        cmid = (1 << (bit_depth - 1)) / max_c;
+    }
 
     double mul[3]   = { ymul, ymul, ymul };
     double black[3] = { ymin, ymin, ymin };

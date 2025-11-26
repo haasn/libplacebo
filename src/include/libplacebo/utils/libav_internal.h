@@ -60,6 +60,10 @@ PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
     case AVCOL_SPC_SMPTE170M:           return PL_COLOR_SYSTEM_BT_601;
     case AVCOL_SPC_SMPTE240M:           return PL_COLOR_SYSTEM_SMPTE_240M;
     case AVCOL_SPC_YCGCO:               return PL_COLOR_SYSTEM_YCGCO;
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 13, 100)
+    case AVCOL_SPC_YCGCO_RE:            return PL_COLOR_SYSTEM_YCGCO_RE;
+    case AVCOL_SPC_YCGCO_RO:            return PL_COLOR_SYSTEM_YCGCO_RO;
+#endif
     case AVCOL_SPC_BT2020_NCL:          return PL_COLOR_SYSTEM_BT_2020_NC;
     case AVCOL_SPC_BT2020_CL:           return PL_COLOR_SYSTEM_BT_2020_C;
     case AVCOL_SPC_SMPTE2085:           return PL_COLOR_SYSTEM_UNKNOWN; // missing
@@ -88,6 +92,13 @@ PL_LIBAV_API enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2100_HLG:   return AVCOL_SPC_ICTCP;
     case PL_COLOR_SYSTEM_DOLBYVISION:   return AVCOL_SPC_UNSPECIFIED; // missing
     case PL_COLOR_SYSTEM_YCGCO:         return AVCOL_SPC_YCGCO;
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 13, 100)
+    case PL_COLOR_SYSTEM_YCGCO_RE:      return AVCOL_SPC_YCGCO_RE;
+    case PL_COLOR_SYSTEM_YCGCO_RO:      return AVCOL_SPC_YCGCO_RO;
+#else
+    case PL_COLOR_SYSTEM_YCGCO_RE:      return AVCOL_SPC_UNSPECIFIED;
+    case PL_COLOR_SYSTEM_YCGCO_RO:      return AVCOL_SPC_UNSPECIFIED;
+#endif
     case PL_COLOR_SYSTEM_RGB:           return AVCOL_SPC_RGB;
     case PL_COLOR_SYSTEM_XYZ:           return AVCOL_SPC_UNSPECIFIED; // handled differently
     case PL_COLOR_SYSTEM_COUNT:         return AVCOL_SPC_UNSPECIFIED;

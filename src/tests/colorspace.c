@@ -1,9 +1,48 @@
 #include "utils.h"
 
+#define PL_CLAMP(x, l, h) ((x) < (l) ? (l) : (x) > (h) ? (h) : (x))
+#define INT(x, s) lroundf(PL_CLAMP(x, 0, 1) * s)
+
+static void rgb_to_ycgco_r(float r, float g, float b, float *y, float *cg,
+                           float *co, int bit_depth, bool odd)
+{
+    int bit_depth_rgb = bit_depth - (odd ? 1 : 2);
+    int max_rgb = (1 << bit_depth_rgb) - 1;
+    int max_c   = (1 << bit_depth) - 1;
+    int half_c  =  1 << (bit_depth - 1);
+
+    int coi = INT(r, max_rgb) - INT(b, max_rgb) + half_c;
+    int t   = INT(b, max_rgb) + ((coi - half_c) >> 1);
+    int cgi = INT(g, max_rgb) - t + half_c;
+    int yi  = t               + ((cgi - half_c) >> 1);
+
+    *y  = (float)yi / max_c;
+    *cg = (float)cgi / max_c;
+    *co = (float)coi / max_c;
+}
+
+static void ycgco_r_to_rgb(float y, float cg, float co, float *r, float *g,
+                           float *b, int bit_depth, bool odd)
+{
+    int bit_depth_rgb = bit_depth - (odd ? 1 : 2);
+    int max_rgb = (1 << bit_depth_rgb) - 1;
+    int max_c   = (1 << bit_depth) - 1;
+    int half_c  =  1 << (bit_depth - 1);
+
+    int t = INT(y, max_c) - ((INT(cg, max_c) - half_c) >> 1);
+    int G = PL_CLAMP(t    +  (INT(cg, max_c) - half_c)      , 0, max_rgb);
+    int B = PL_CLAMP(t    - ((INT(co, max_c) - half_c) >> 1), 0, max_rgb);
+    int R = PL_CLAMP(B    +  (INT(co, max_c) - half_c)      , 0, max_rgb);
+
+    *r = (float)R / max_rgb;
+    *g = (float)G / max_rgb;
+    *b = (float)B / max_rgb;
+}
+
 int main()
 {
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
-        bool ycbcr = sys >= PL_COLOR_SYSTEM_BT_601 && sys <= PL_COLOR_SYSTEM_YCGCO;
+        bool ycbcr = sys >= PL_COLOR_SYSTEM_BT_601 && sys <= PL_COLOR_SYSTEM_YCGCO_RO;
         REQUIRE_CMP(ycbcr, ==, pl_color_system_is_ycbcr_like(sys), "d");
     }
 
@@ -178,11 +217,13 @@ int main()
 
         printf("Testing color system: %s\n", pl_color_system_name(sys));
         struct pl_color_repr repr = {
-            .levels = PL_COLOR_LEVELS_LIMITED,
+            .levels = sys == PL_COLOR_SYSTEM_YCGCO_RE || sys == PL_COLOR_SYSTEM_YCGCO_RO
+                        ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED,
             .sys = sys,
             .bits = {
                 // synthetic test
-                .color_depth = 8,
+                .color_depth = sys == PL_COLOR_SYSTEM_YCGCO_RE || sys == PL_COLOR_SYSTEM_YCGCO_RO
+                                ? 10 : 8,
                 .sample_depth = 10,
             },
         };
@@ -196,14 +237,24 @@ int main()
         static const float white_other[3] = { 235/1023., 235/1023., 235/1023. };
         static const float black_other[3] = {  16/1023.,  16/1023.,  16/1023. };
 
-        float white[3], black[3];
-        for (int i = 0; i < 3; i++) {
-            if (pl_color_system_is_ycbcr_like(sys)) {
-                white[i] = white_ycbcr[i];
-                black[i] = black_ycbcr[i];
-            } else {
-                white[i] = white_other[i];
-                black[i] = black_other[i];
+        float white[3], gray[3], black[3];
+        if (sys == PL_COLOR_SYSTEM_YCGCO_RE || sys == PL_COLOR_SYSTEM_YCGCO_RO) {
+            bool odd = sys == PL_COLOR_SYSTEM_YCGCO_RO;
+            rgb_to_ycgco_r(1.0f, 1.0f, 1.0f, &white[0], &white[1], &white[2],
+                           repr.bits.color_depth, odd);
+            rgb_to_ycgco_r(0.5f, 0.5f, 0.5f, &gray[0], &gray[1], &gray[2],
+                           repr.bits.color_depth, odd);
+            rgb_to_ycgco_r(0.0f, 0.0f, 0.0f, &black[0], &black[1], &black[2],
+                           repr.bits.color_depth, odd);
+        } else {
+            for (int i = 0; i < 3; i++) {
+                if (pl_color_system_is_ycbcr_like(sys)) {
+                    white[i] = white_ycbcr[i];
+                    black[i] = black_ycbcr[i];
+                } else {
+                    white[i] = white_other[i];
+                    black[i] = black_other[i];
+                }
             }
         }
 
@@ -211,6 +262,18 @@ int main()
         REQUIRE_FEQ(white[0], 1.0, 1e-6);
         REQUIRE_FEQ(white[1], 1.0, 1e-6);
         REQUIRE_FEQ(white[2], 1.0, 1e-6);
+
+        if (sys == PL_COLOR_SYSTEM_YCGCO_RE || sys == PL_COLOR_SYSTEM_YCGCO_RO) {
+            bool odd = sys == PL_COLOR_SYSTEM_YCGCO_RO;
+            float gray_ref[3];
+            ycgco_r_to_rgb(gray[0], gray[1], gray[2],
+                           &gray_ref[0], &gray_ref[1], &gray_ref[2],
+                           repr.bits.color_depth, odd);
+            pl_transform3x3_apply(&yuv2rgb, gray);
+            REQUIRE_FEQ(gray[0], gray_ref[0], 1e-6);
+            REQUIRE_FEQ(gray[1], gray_ref[1], 1e-6);
+            REQUIRE_FEQ(gray[2], gray_ref[2], 1e-6);
+        }
 
         pl_transform3x3_apply(&yuv2rgb, black);
         REQUIRE_FEQ(black[0], 0.0, 1e-6);
