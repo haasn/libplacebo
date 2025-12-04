@@ -799,7 +799,7 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         // OOTF^-1
         GLSL("color.rgb *= 1.0 / "$";                                       \n"
-             "color.rgb *= 12.0 * max(1e-6, pow(dot("$", color.rgb), "$")); \n",
+             "color.rgb *= 12.0 * pow(max(1e-6, dot("$", color.rgb)), "$"); \n",
              SH_FLOAT(csp_max), sh_luma_coeffs(sh, csp), SH_FLOAT((1 - y) / y));
         // OETF
         GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                      \n"
