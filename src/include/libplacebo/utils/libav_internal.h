@@ -1030,7 +1030,7 @@ static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
     const AVDRMFrameDescriptor *drm = (AVDRMFrameDescriptor *) frame->data[0];
     assert(frame->format == AV_PIX_FMT_DRM_PRIME);
-    if (!(gpu->import_caps.tex & PL_HANDLE_DMA_BUF))
+    if (!(gpu->import_caps.tex & PL_HANDLE_DMA_BUF) || !out->num_planes)
         return false;
 
     assert(drm->nb_layers >= out->num_planes);
