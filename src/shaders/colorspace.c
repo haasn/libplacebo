@@ -82,7 +82,7 @@ static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
 
         if (max_order == 3) {
             if (min_order < 3)
-                GLSL("if (order >= 3 { \n");
+                GLSL("if (order >= 3) { \n");
 
             GLSL("s += dot("$"[mmr_idx + 4].xyz, sig2 * sig);   \n"
                  "s += dot("$"[mmr_idx + 5], sigX2 * sigX);     \n",
