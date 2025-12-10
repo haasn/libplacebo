@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '359': 'add pl_vulkan_swapchain_params.{alpha,color}_bits',
       '358': 'add PL_COLOR_SYSTEM_YCGCO_{RE,RO}',
       '357': 'add pl_daylight_from_temp, pl_blackbody_from_temp, and generalize pl_white_from_temp',
       '356': 'pl_avframe_set_repr now sets frame.alpha_mode',
