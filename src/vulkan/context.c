@@ -242,6 +242,7 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
 static const VkPhysicalDeviceVulkan14Features recommended_vk14 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
     .hostImageCopy = true,
+    .pushDescriptor = true,
 };
 
 static const VkPhysicalDeviceVulkan13Features recommended_vk13 = {
