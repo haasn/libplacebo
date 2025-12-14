@@ -219,6 +219,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 default: // skip any other format
                     continue;
             }
+            if (pl_fmt_is_ordered(plfmt))
+                score += 500;
             if (pl_color_primaries_is_wide_gamut(space.primaries) == wide_gamut)
                 score += 1000;
             if (space.transfer == PL_COLOR_TRC_LINEAR)
