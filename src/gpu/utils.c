@@ -342,7 +342,7 @@ static const struct glsl_fmt pl_glsl_fmts[] = {
 
 const char *pl_fmt_glsl_format(pl_fmt fmt, int components)
 {
-    if (fmt->opaque)
+    if (!pl_fmt_is_ordered(fmt))
         return NULL;
 
     for (int n = 0; n < PL_ARRAY_SIZE(pl_glsl_fmts); n++) {
