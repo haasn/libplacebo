@@ -357,6 +357,9 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
     if (!handle_type)
         return true;
 
+    if (handle_type == PL_HANDLE_HOST_PTR && !vk->GetMemoryHostPointerPropertiesEXT)
+        return false;
+
     VkPhysicalDeviceExternalBufferInfo info = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR,
         .usage = usage,
