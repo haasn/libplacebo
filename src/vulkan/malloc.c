@@ -34,7 +34,7 @@
 // starting with the minimum until the maximum is reached.
 //
 // Note: The maximum must never exceed the size of `vk_slab.spacemap`.
-#define MINIMUM_PAGE_COUNT 4
+#define MINIMUM_PAGE_COUNT 1
 #define MAXIMUM_PAGE_COUNT (sizeof(uint64_t) * 8)
 
 // Controls the maximum page size. Any allocations above this threshold
