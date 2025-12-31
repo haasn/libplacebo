@@ -5,6 +5,7 @@
 #endif
 
 #include <SDL.h>
+#include <string.h>
 
 #include "common.h"
 #include "window.h"
