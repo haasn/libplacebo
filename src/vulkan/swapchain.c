@@ -29,6 +29,7 @@ struct vk_swapchain {
     PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
     PL_ARRAY(VkSemaphore) sems_in;  // pool of semaphores used to acquire images
     PL_ARRAY(VkSemaphore) sems_out; // pool of semaphores used to present images
+    PL_ARRAY(VkFence) fences_out;   // pool of fences for presented images
     int idx_sems_in;                // index of next free semaphore to acquire
     int last_imgidx;                // the image index last acquired (for submit)
 };
@@ -51,12 +52,14 @@ struct priv {
     pl_rc_t frames_in_flight;       // number of frames currently queued
     bool suboptimal;                // true once VK_SUBOPTIMAL_KHR is returned
     bool needs_recreate;            // swapchain needs to be recreated
+    bool has_swapchain_maintenance1;
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
     struct pl_hdr_metadata hdr_metadata;
 };
 
 static const struct pl_sw_fns vulkan_swapchain;
+
 
 static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
 {
@@ -334,6 +337,9 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     sw->log = vk->log;
     sw->gpu = gpu;
 
+    const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR *sw_maint_features =
+    vk_find_struct(vk->features.pNext, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR);
+
     struct priv *p = PL_PRIV(sw);
     pl_mutex_init(&p->lock);
     p->impl = vulkan_swapchain;
@@ -341,6 +347,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     p->vk = vk;
     p->surf = params->surface;
     p->swapchain_depth = PL_DEF(params->swapchain_depth, 3);
+    p->has_swapchain_maintenance1 = sw_maint_features && sw_maint_features->swapchainMaintenance1;
     pl_assert(p->swapchain_depth > 0);
     atomic_init(&p->frames_in_flight, 0);
     p->current.last_imgidx = -1;
@@ -424,14 +431,19 @@ static void vk_sw_destroy(pl_swapchain sw)
     pl_gpu_flush(gpu);
     vk_wait_idle(vk);
 
-    // Vulkan offers no way to know when a queue presentation command is done,
-    // leading to spec-mandated undefined behavior when destroying resources
-    // tied to the swapchain. Use an extra `vkQueueWaitIdle` on all of the
-    // queues we may have oustanding presentation calls on, to hopefully inform
-    // the driver that we want to wait until the device is truly idle.
-    for (int i = 0; i < vk->pool_graphics->num_queues; i++)
-        vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
-
+    if (!current->fences_out.num) {
+        // Vulkan offers no way to know when a queue presentation command is done,
+        // leading to spec-mandated undefined behavior when destroying resources
+        // tied to the swapchain. Use an extra `vkQueueWaitIdle` on all of the
+        // queues we may have oustanding presentation calls on, to hopefully inform
+        // the driver that we want to wait until the device is truly idle.
+        for (int i = 0; i < vk->pool_graphics->num_queues; i++)
+            vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
+    } else {
+        vk->WaitForFences(vk->dev, current->fences_out.num, current->fences_out.elem, VK_TRUE, UINT64_MAX);
+        for (int i = 0; i < current->fences_out.num; i++)
+            vk->DestroyFence(vk->dev, current->fences_out.elem[i], PL_VK_ALLOC);
+    }
     for (int i = 0; i < current->images.num; i++)
         pl_tex_destroy(gpu, &current->images.elem[i]);
     for (int i = 0; i < current->sems_in.num; i++)
@@ -644,6 +656,11 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
 
+    static const VkFenceCreateInfo fenceinfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+
     // If needed, allocate some more semaphores
     while (current->sems_in.num < num_images + 1) { // +1 in case all images are queued
         VkSemaphore sem = VK_NULL_HANDLE;
@@ -659,6 +676,16 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
         snprintf(name, sizeof(name), "swapchain out #%d", current->sems_out.num);
         PL_VK_NAME(SEMAPHORE, sem, name);
         PL_ARRAY_APPEND(sw, current->sems_out,  sem);
+    }
+
+    if (p->has_swapchain_maintenance1) {
+        while (current->fences_out.num < num_images) {
+            VkFence fence = VK_NULL_HANDLE;
+            VK(vk->CreateFence(vk->dev, &fenceinfo, PL_VK_ALLOC, &fence));
+            snprintf(name, sizeof(name), "present fence #%d", current->fences_out.num);
+            PL_VK_NAME(FENCE, fence, name);
+            PL_ARRAY_APPEND(sw, current->fences_out, fence);
+        }
     }
 
     // Recreate the pl_tex wrappers
@@ -755,6 +782,11 @@ static bool vk_sw_start_frame(pl_swapchain sw,
             // fall through
         case VK_SUCCESS:
             current->last_imgidx = imgidx;
+            if (current->fences_out.num > 0) {
+                VkFence *pfence = &current->fences_out.elem[current->last_imgidx];
+                vk->WaitForFences(vk->dev, 1, pfence, VK_TRUE, UINT64_MAX);
+                vk->ResetFences(vk->dev, 1, pfence);
+            }
             pl_vulkan_release_ex(sw->gpu, pl_vulkan_release_params(
                 .tex        = current->images.elem[imgidx],
                 .layout     = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -844,6 +876,11 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     vk_rotate_queues(p->vk);
     vk_malloc_garbage_collect(vk->ma);
 
+    VkSwapchainPresentFenceInfoKHR fenceInfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR,
+        .swapchainCount = 1,
+    };
+
     VkPresentInfoKHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
@@ -852,6 +889,12 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
         .pSwapchains = &current->swapchain,
         .pImageIndices = &idx,
     };
+
+    if (current->fences_out.num > 0) {
+        VkFence *pfence = &current->fences_out.elem[idx];
+        fenceInfo.pFences = pfence;
+        pinfo.pNext = &fenceInfo;
+    }
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on 0x%"PRIx64, (uint64_t) sem_out);
     vk->lock_queue(vk->queue_ctx, pool->qf, qidx);
