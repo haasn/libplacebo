@@ -55,6 +55,8 @@ static const char *vk_instance_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
+    VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
 };
 
 // List of mandatory instance-level function pointers, including functions
@@ -198,6 +200,10 @@ static const struct vk_ext vk_device_extensions[] = {
             PL_VK_DEV_FUN(TransitionImageLayoutEXT),
             {0}
         },
+    }, {
+        .name = VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+    }, {
+        .name = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
     },
 };
 
@@ -227,6 +233,8 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
     VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
     VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,
+    VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+    VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -239,8 +247,14 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "vk_device_extensions?");
 
 // Recommended features; keep in sync with libavutil vulkan hwcontext
+static const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+    .swapchainMaintenance1 = true,
+};
+
 static const VkPhysicalDeviceVulkan14Features recommended_vk14 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+    .pNext = (void *) &swapchain_maintenance1,
     .hostImageCopy = true,
     .pushDescriptor = true,
 };
@@ -369,6 +383,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CreateDescriptorPool),
     PL_VK_DEV_FUN(CreateDescriptorSetLayout),
     PL_VK_DEV_FUN(CreateFramebuffer),
+    PL_VK_DEV_FUN(CreateFence),
     PL_VK_DEV_FUN(CreateGraphicsPipelines),
     PL_VK_DEV_FUN(CreateImage),
     PL_VK_DEV_FUN(CreateImageView),
@@ -386,6 +401,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroyDescriptorSetLayout),
     PL_VK_DEV_FUN(DestroyDevice),
     PL_VK_DEV_FUN(DestroyFramebuffer),
+    PL_VK_DEV_FUN(DestroyFence),
     PL_VK_DEV_FUN(DestroyImage),
     PL_VK_DEV_FUN(DestroyImageView),
     PL_VK_DEV_FUN(DestroyPipeline),
@@ -412,9 +428,11 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(QueueSubmit),
     PL_VK_DEV_FUN(QueueWaitIdle),
     PL_VK_DEV_FUN(ResetQueryPool),
+    PL_VK_DEV_FUN(ResetFences),
     PL_VK_DEV_FUN(SetDebugUtilsObjectNameEXT),
     PL_VK_DEV_FUN(UpdateDescriptorSets),
     PL_VK_DEV_FUN(WaitSemaphores),
+    PL_VK_DEV_FUN(WaitForFences),
 };
 
 static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
