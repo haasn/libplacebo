@@ -435,6 +435,9 @@ static bool swapchain_destroy(pl_swapchain sw, struct vk_swapchain *vk_sw,
             return false;
         for (int i = 0; i < vk_sw->fences_out.num; i++)
             vk->DestroyFence(vk->dev, vk_sw->fences_out.elem[i], PL_VK_ALLOC);
+    } else {
+        for (int i = 0; i < vk->pool_graphics->num_queues; i++)
+            vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
     }
     for (int i = 0; i < vk_sw->images.num; i++)
         pl_tex_destroy(sw->gpu, &vk_sw->images.elem[i]);
@@ -652,13 +655,6 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
              sinfo.imageExtent.width,
              sinfo.imageExtent.height);
-
-#ifdef PL_HAVE_UNIX
-    if (vk->props.vendorID == VK_VENDOR_ID_NVIDIA) {
-        vk->DeviceWaitIdle(vk->dev);
-        vk_wait_idle(vk);
-    }
-#endif
 
     // Calling `vkCreateSwapchainKHR` puts sinfo.oldSwapchain into a retired
     // state whether the call succeeds or not, so we always need to garbage
