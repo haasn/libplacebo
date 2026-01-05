@@ -23,6 +23,16 @@
 #include "swapchain.h"
 #include "pl_thread.h"
 
+struct vk_swapchain {
+    VkSwapchainKHR swapchain;
+    // state of the images:
+    PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
+    PL_ARRAY(VkSemaphore) sems_in;  // pool of semaphores used to acquire images
+    PL_ARRAY(VkSemaphore) sems_out; // pool of semaphores used to present images
+    int idx_sems_in;                // index of next free semaphore to acquire
+    int last_imgidx;                // the image index last acquired (for submit)
+};
+
 struct priv {
     struct pl_sw_fns impl;
 
@@ -34,7 +44,7 @@ struct priv {
     // current swapchain and metadata:
     struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
-    VkSwapchainKHR swapchain;
+    struct vk_swapchain current;
     uint32_t queue_families[3];
     int cur_width, cur_height;
     int swapchain_depth;
@@ -44,13 +54,6 @@ struct priv {
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
     struct pl_hdr_metadata hdr_metadata;
-
-    // state of the images:
-    PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
-    PL_ARRAY(VkSemaphore) sems_in;  // pool of semaphores used to acquire images
-    PL_ARRAY(VkSemaphore) sems_out; // pool of semaphores used to present images
-    int idx_sems_in;                // index of next free semaphore to acquire
-    int last_imgidx;                // the image index last acquired (for submit)
 };
 
 static const struct pl_sw_fns vulkan_swapchain;
@@ -297,10 +300,10 @@ static void set_hdr_metadata(struct priv *p, const struct pl_hdr_metadata *metad
     if (!pl_color_transfer_is_hdr(p->color_space.transfer))
         return;
 
-    if (!p->swapchain)
+    if (!p->current.swapchain)
         return;
 
-    vk->SetHdrMetadataEXT(vk->dev, 1, &p->swapchain, &(VkHdrMetadataEXT) {
+    vk->SetHdrMetadataEXT(vk->dev, 1, &p->current.swapchain, &(VkHdrMetadataEXT) {
         .sType = VK_STRUCTURE_TYPE_HDR_METADATA_EXT,
         .displayPrimaryRed   = { fix.prim.red.x,   fix.prim.red.y },
         .displayPrimaryGreen = { fix.prim.green.x, fix.prim.green.y },
@@ -340,7 +343,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     p->swapchain_depth = PL_DEF(params->swapchain_depth, 3);
     pl_assert(p->swapchain_depth > 0);
     atomic_init(&p->frames_in_flight, 0);
-    p->last_imgidx = -1;
+    p->current.last_imgidx = -1;
     p->protoInfo = (VkSwapchainCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = p->surf,
@@ -416,6 +419,7 @@ static void vk_sw_destroy(pl_swapchain sw)
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
+    struct vk_swapchain *current = &p->current;
 
     pl_gpu_flush(gpu);
     vk_wait_idle(vk);
@@ -428,14 +432,14 @@ static void vk_sw_destroy(pl_swapchain sw)
     for (int i = 0; i < vk->pool_graphics->num_queues; i++)
         vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
 
-    for (int i = 0; i < p->images.num; i++)
-        pl_tex_destroy(gpu, &p->images.elem[i]);
-    for (int i = 0; i < p->sems_in.num; i++)
-        vk->DestroySemaphore(vk->dev, p->sems_in.elem[i], PL_VK_ALLOC);
-    for (int i = 0; i < p->sems_out.num; i++)
-        vk->DestroySemaphore(vk->dev, p->sems_out.elem[i], PL_VK_ALLOC);
+    for (int i = 0; i < current->images.num; i++)
+        pl_tex_destroy(gpu, &current->images.elem[i]);
+    for (int i = 0; i < current->sems_in.num; i++)
+        vk->DestroySemaphore(vk->dev, current->sems_in.elem[i], PL_VK_ALLOC);
+    for (int i = 0; i < current->sems_out.num; i++)
+        vk->DestroySemaphore(vk->dev, current->sems_out.elem[i], PL_VK_ALLOC);
 
-    vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
+    vk->DestroySwapchainKHR(vk->dev, current->swapchain, PL_VK_ALLOC);
     pl_mutex_destroy(&p->lock);
     pl_free((void *) sw);
 }
@@ -586,6 +590,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
+    struct vk_swapchain *current = &p->current;
 
     VkImage *vkimages = NULL;
     uint32_t num_images = 0;
@@ -624,42 +629,42 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     // Calling `vkCreateSwapchainKHR` puts sinfo.oldSwapchain into a retired
     // state whether the call succeeds or not, so we always need to garbage
     // collect it afterwards - asynchronously as it may still be in use
-    sinfo.oldSwapchain = p->swapchain;
-    p->swapchain = VK_NULL_HANDLE;
-    VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain);
+    sinfo.oldSwapchain = current->swapchain;
+    current->swapchain = VK_NULL_HANDLE;
+    VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &current->swapchain);
     vk_dev_callback(vk, VK_CB_FUNC(destroy_swapchain), vk, vk_wrap_handle(sinfo.oldSwapchain));
     PL_VK_ASSERT(res, "vk->CreateSwapchainKHR(...)");
 
     // Get the new swapchain images
-    VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, NULL));
+    VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, NULL));
     vkimages = pl_calloc_ptr(NULL, num_images, vkimages);
-    VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
+    VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, vkimages));
 
     static const VkSemaphoreCreateInfo seminfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
 
     // If needed, allocate some more semaphores
-    while (p->sems_in.num < num_images + 1) { // +1 in case all images are queued
+    while (current->sems_in.num < num_images + 1) { // +1 in case all images are queued
         VkSemaphore sem = VK_NULL_HANDLE;
         VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem));
-        snprintf(name, sizeof(name), "swapchain in #%d", p->sems_in.num);
+        snprintf(name, sizeof(name), "swapchain in #%d", current->sems_in.num);
         PL_VK_NAME(SEMAPHORE, sem, name);
-        PL_ARRAY_APPEND(sw, p->sems_in,  sem);
+        PL_ARRAY_APPEND(sw, current->sems_in,  sem);
     }
 
-    while (p->sems_out.num < num_images) {
+    while (current->sems_out.num < num_images) {
         VkSemaphore sem = VK_NULL_HANDLE;
         VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem));
-        snprintf(name, sizeof(name), "swapchain out #%d", p->sems_out.num);
+        snprintf(name, sizeof(name), "swapchain out #%d", current->sems_out.num);
         PL_VK_NAME(SEMAPHORE, sem, name);
-        PL_ARRAY_APPEND(sw, p->sems_out,  sem);
+        PL_ARRAY_APPEND(sw, current->sems_out,  sem);
     }
 
     // Recreate the pl_tex wrappers
-    for (int i = 0; i < p->images.num; i++)
-        pl_tex_destroy(gpu, &p->images.elem[i]);
-    p->images.num = 0;
+    for (int i = 0; i < current->images.num; i++)
+        pl_tex_destroy(gpu, &current->images.elem[i]);
+    current->images.num = 0;
 
     for (int i = 0; i < num_images; i++) {
         const VkExtent2D *ext = &sinfo.imageExtent;
@@ -674,7 +679,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
         ));
         if (!tex)
             goto error;
-        PL_ARRAY_APPEND(sw, p->images, tex);
+        PL_ARRAY_APPEND(sw, current->images, tex);
     }
 
     pl_assert(num_images > 0);
@@ -684,7 +689,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     // the actual color information (consider e.g. a2bgr10). Slight downside
     // in that it results in rounding r/b for e.g. rgb565, but we don't pick
     // surfaces with fewer than 8 bits anyway, so let's not care for now.
-    pl_fmt fmt = p->images.elem[0]->params.format;
+    pl_fmt fmt = current->images.elem[0]->params.format;
     for (int i = 0; i < fmt->num_components; i++)
         bits = PL_MAX(bits, fmt->component_depth[i]);
 
@@ -712,8 +717,8 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
     pl_free(vkimages);
-    vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
-    p->swapchain = VK_NULL_HANDLE;
+    vk->DestroySwapchainKHR(vk->dev, current->swapchain, PL_VK_ALLOC);
+    current->swapchain = VK_NULL_HANDLE;
     p->cur_width = p->cur_height = 0;
     return false;
 }
@@ -723,9 +728,10 @@ static bool vk_sw_start_frame(pl_swapchain sw,
 {
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
+    struct vk_swapchain *current = &p->current;
     pl_mutex_lock(&p->lock);
 
-    bool recreate = !p->swapchain || p->needs_recreate;
+    bool recreate = !current->swapchain || p->needs_recreate;
     if (p->suboptimal && !p->params.allow_suboptimal)
         recreate = true;
 
@@ -734,13 +740,13 @@ static bool vk_sw_start_frame(pl_swapchain sw,
         return false;
     }
 
-    VkSemaphore sem_in = p->sems_in.elem[p->idx_sems_in];
-    p->idx_sems_in = (p->idx_sems_in + 1) % p->sems_in.num;
+    VkSemaphore sem_in = current->sems_in.elem[current->idx_sems_in];
+    current->idx_sems_in = (current->idx_sems_in + 1) % current->sems_in.num;
     PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
-        VkResult res = vk->AcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
+        VkResult res = vk->AcquireNextImageKHR(vk->dev, current->swapchain, UINT64_MAX,
                                                sem_in, VK_NULL_HANDLE, &imgidx);
 
         switch (res) {
@@ -748,15 +754,15 @@ static bool vk_sw_start_frame(pl_swapchain sw,
             p->suboptimal = true;
             // fall through
         case VK_SUCCESS:
-            p->last_imgidx = imgidx;
+            current->last_imgidx = imgidx;
             pl_vulkan_release_ex(sw->gpu, pl_vulkan_release_params(
-                .tex        = p->images.elem[imgidx],
+                .tex        = current->images.elem[imgidx],
                 .layout     = VK_IMAGE_LAYOUT_UNDEFINED,
                 .qf         = VK_QUEUE_FAMILY_IGNORED,
                 .semaphore  = { sem_in },
             ));
             *out_frame = (struct pl_swapchain_frame) {
-                .fbo = p->images.elem[imgidx],
+                .fbo = current->images.elem[imgidx],
                 .flipped = false,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
@@ -798,14 +804,15 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    pl_assert(p->last_imgidx >= 0);
-    pl_assert(p->swapchain);
-    uint32_t idx = p->last_imgidx;
-    VkSemaphore sem_out = p->sems_out.elem[idx];
-    p->last_imgidx = -1;
+    struct vk_swapchain *current = &p->current;
+    pl_assert(current->last_imgidx >= 0);
+    pl_assert(current->swapchain);
+    uint32_t idx = current->last_imgidx;
+    VkSemaphore sem_out = current->sems_out.elem[idx];
+    current->last_imgidx = -1;
 
     bool held = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
-        .tex        = p->images.elem[idx],
+        .tex        = current->images.elem[idx],
         .layout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .qf         = VK_QUEUE_FAMILY_IGNORED,
         .semaphore  = { sem_out },
@@ -842,7 +849,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &sem_out,
         .swapchainCount = 1,
-        .pSwapchains = &p->swapchain,
+        .pSwapchains = &current->swapchain,
         .pImageIndices = &idx,
     };
 
