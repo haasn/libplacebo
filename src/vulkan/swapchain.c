@@ -46,6 +46,7 @@ struct priv {
     struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
     struct vk_swapchain current;
+    PL_ARRAY(struct vk_swapchain) retired;
     uint32_t queue_families[3];
     int cur_width, cur_height;
     int swapchain_depth;
@@ -421,6 +422,42 @@ error:
     return NULL;
 }
 
+static bool swapchain_destroy(pl_swapchain sw, struct vk_swapchain *vk_sw,
+                                uint64_t timeout)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct vk_ctx *vk = p->vk;
+
+    if (vk_sw->fences_out.num > 0) {
+        VkResult res = vk->WaitForFences(vk->dev, vk_sw->fences_out.num,
+                                         vk_sw->fences_out.elem, VK_TRUE, timeout);
+        if (res == VK_NOT_READY || res == VK_TIMEOUT)
+            return false;
+        for (int i = 0; i < vk_sw->fences_out.num; i++)
+            vk->DestroyFence(vk->dev, vk_sw->fences_out.elem[i], PL_VK_ALLOC);
+    }
+    for (int i = 0; i < vk_sw->images.num; i++)
+        pl_tex_destroy(sw->gpu, &vk_sw->images.elem[i]);
+    for (int i = 0; i < vk_sw->sems_in.num; i++)
+        vk->DestroySemaphore(vk->dev, vk_sw->sems_in.elem[i], PL_VK_ALLOC);
+    for (int i = 0; i < vk_sw->sems_out.num; i++)
+        vk->DestroySemaphore(vk->dev, vk_sw->sems_out.elem[i], PL_VK_ALLOC);
+
+    vk->DestroySwapchainKHR(vk->dev, vk_sw->swapchain, PL_VK_ALLOC);
+    return true;
+}
+
+static void cleanup_retired_swapchains(pl_swapchain sw, uint64_t timeout)
+{
+    struct priv *p = PL_PRIV(sw);
+    for (int i = 0; i < p->retired.num; i++) {
+        if (swapchain_destroy(sw, &p->retired.elem[i], timeout)) {
+            PL_ARRAY_REMOVE_AT(p->retired, i);
+            i--;
+        }
+    }
+}
+
 static void vk_sw_destroy(pl_swapchain sw)
 {
     pl_gpu gpu = sw->gpu;
@@ -439,19 +476,11 @@ static void vk_sw_destroy(pl_swapchain sw)
         // the driver that we want to wait until the device is truly idle.
         for (int i = 0; i < vk->pool_graphics->num_queues; i++)
             vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
-    } else {
-        vk->WaitForFences(vk->dev, current->fences_out.num, current->fences_out.elem, VK_TRUE, UINT64_MAX);
-        for (int i = 0; i < current->fences_out.num; i++)
-            vk->DestroyFence(vk->dev, current->fences_out.elem[i], PL_VK_ALLOC);
     }
-    for (int i = 0; i < current->images.num; i++)
-        pl_tex_destroy(gpu, &current->images.elem[i]);
-    for (int i = 0; i < current->sems_in.num; i++)
-        vk->DestroySemaphore(vk->dev, current->sems_in.elem[i], PL_VK_ALLOC);
-    for (int i = 0; i < current->sems_out.num; i++)
-        vk->DestroySemaphore(vk->dev, current->sems_out.elem[i], PL_VK_ALLOC);
 
-    vk->DestroySwapchainKHR(vk->dev, current->swapchain, PL_VK_ALLOC);
+    swapchain_destroy(sw, &p->current, UINT64_MAX);
+    cleanup_retired_swapchains(sw, UINT64_MAX);
+
     pl_mutex_destroy(&p->lock);
     pl_free((void *) sw);
 }
@@ -590,13 +619,6 @@ error:
     return false;
 }
 
-static void destroy_swapchain(struct vk_ctx *vk, void *swapchain)
-{
-    vk->DestroySwapchainKHR(vk->dev, vk_unwrap_handle(swapchain), PL_VK_ALLOC);
-}
-
-VK_CB_FUNC_DEF(destroy_swapchain);
-
 static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 {
     pl_gpu gpu = sw->gpu;
@@ -641,10 +663,10 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     // Calling `vkCreateSwapchainKHR` puts sinfo.oldSwapchain into a retired
     // state whether the call succeeds or not, so we always need to garbage
     // collect it afterwards - asynchronously as it may still be in use
+    PL_ARRAY_APPEND(sw, p->retired, *current);
     sinfo.oldSwapchain = current->swapchain;
-    current->swapchain = VK_NULL_HANDLE;
+    p->current = (struct vk_swapchain) {0};
     VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &current->swapchain);
-    vk_dev_callback(vk, VK_CB_FUNC(destroy_swapchain), vk, vk_wrap_handle(sinfo.oldSwapchain));
     PL_VK_ASSERT(res, "vk->CreateSwapchainKHR(...)");
 
     // Get the new swapchain images
@@ -687,11 +709,6 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
             PL_ARRAY_APPEND(sw, current->fences_out, fence);
         }
     }
-
-    // Recreate the pl_tex wrappers
-    for (int i = 0; i < current->images.num; i++)
-        pl_tex_destroy(gpu, &current->images.elem[i]);
-    current->images.num = 0;
 
     for (int i = 0; i < num_images; i++) {
         const VkExtent2D *ext = &sinfo.imageExtent;
@@ -783,7 +800,7 @@ static bool vk_sw_start_frame(pl_swapchain sw,
         case VK_SUCCESS:
             current->last_imgidx = imgidx;
             if (current->fences_out.num > 0) {
-                VkFence *pfence = &current->fences_out.elem[current->last_imgidx];
+                VkFence *pfence = &current->fences_out.elem[imgidx];
                 vk->WaitForFences(vk->dev, 1, pfence, VK_TRUE, UINT64_MAX);
                 vk->ResetFences(vk->dev, 1, pfence);
             }
@@ -875,6 +892,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
 
     vk_rotate_queues(p->vk);
     vk_malloc_garbage_collect(vk->ma);
+    cleanup_retired_swapchains(sw, 0);
 
     VkSwapchainPresentFenceInfoKHR fenceInfo = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR,
