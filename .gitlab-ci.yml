@@ -97,6 +97,9 @@ macos:
         - amd64
         - monterey
     script:
+        - python3 -m venv venv
+        - source venv/bin/activate
+        - pip install meson
         - meson build --buildtype release
                       -Ddefault_library=both
                       -Dtests=true
