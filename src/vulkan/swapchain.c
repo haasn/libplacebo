@@ -26,6 +26,7 @@
 struct vk_swapchain {
     VkSwapchainKHR swapchain;
     // state of the images:
+    PL_ARRAY(VkImage) vkimages;     // VkImages waiting to be wrapped
     PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
     PL_ARRAY(VkSemaphore) sems_in;  // pool of semaphores used to acquire images
     PL_ARRAY(VkSemaphore) sems_out; // pool of semaphores used to present images
@@ -616,14 +617,58 @@ error:
     return false;
 }
 
-static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
+static bool vk_sw_image_init(pl_swapchain sw, int idx)
 {
     pl_gpu gpu = sw->gpu;
+    struct priv *p = PL_PRIV(sw);
+    struct vk_swapchain *current = p->current;
+
+    if (current->images.elem[idx])
+        return true;
+
+    pl_assert(current->vkimages.elem[idx] != VK_NULL_HANDLE);
+
+    char name[32];
+    snprintf(name, sizeof(name), "swapchain #%d", idx);
+    pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+        .image = current->vkimages.elem[idx],
+        .width = p->protoInfo.imageExtent.width,
+        .height = p->protoInfo.imageExtent.height,
+        .format = p->protoInfo.imageFormat,
+        .usage = p->protoInfo.imageUsage,
+        .debug_tag = name,
+    ));
+
+    if (!tex)
+        goto error;
+
+    current->images.elem[idx] = tex;
+    current->vkimages.elem[idx] = VK_NULL_HANDLE;
+
+    int bits = 0;
+    // The channel with the most bits is probably the most authoritative about
+    // the actual color information (consider e.g. a2bgr10). Slight downside
+    // in that it results in rounding r/b for e.g. rgb565, but we don't pick
+    // surfaces with fewer than 8 bits anyway, so let's not care for now.
+    pl_fmt fmt = current->images.elem[idx]->params.format;
+    for (int i = 0; i < fmt->num_components; i++)
+        bits = PL_MAX(bits, fmt->component_depth[i]);
+    p->color_repr.bits.sample_depth = bits;
+    p->color_repr.bits.color_depth = bits;
+
+    return true;
+
+error:
+    PL_ERR(sw, "Failed wrapping swapchain image!");
+    return false;
+}
+
+static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
+{
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
     struct vk_swapchain *current = p->current;
 
-    VkImage *vkimages = NULL;
     uint32_t num_images = 0;
     char name[32];
 
@@ -655,6 +700,9 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->cur_width = sinfo.imageExtent.width;
     p->cur_height = sinfo.imageExtent.height;
 
+    if (p->has_swapchain_maintenance1)
+        sinfo.flags |= VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_KHR;
+
     PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
              sinfo.imageExtent.width,
              sinfo.imageExtent.height);
@@ -675,8 +723,8 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 
     // Get the new swapchain images
     VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, NULL));
-    vkimages = pl_calloc_ptr(NULL, num_images, vkimages);
-    VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, vkimages));
+    PL_ARRAY_RESIZE(current, current->vkimages, num_images);
+    VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, current->vkimages.elem));
 
     static const VkSemaphoreCreateInfo seminfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -690,19 +738,6 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     pl_assert(num_images > 0);
 
     PL_ARRAY_CLEAR(current, current->images, num_images);
-    for (int i = 0; i < current->images.num; i++) {
-        snprintf(name, sizeof(name), "swapchain #%d", i);
-        current->images.elem[i] = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
-            .image = vkimages[i],
-            .width = sinfo.imageExtent.width,
-            .height = sinfo.imageExtent.height,
-            .format = sinfo.imageFormat,
-            .usage = sinfo.imageUsage,
-            .debug_tag = name,
-        ));
-        if (!current->images.elem[i])
-            goto error;
-    }
 
     // Without swapchain_maintenance1, we cannot use a fence to know when an
     // acquisition semaphore is safe to reuse. We allocate an extra "spare"
@@ -730,19 +765,6 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
         PL_ARRAY_APPEND(current, current->fences_out, fence);
     }
 
-    int bits = 0;
-
-    // The channel with the most bits is probably the most authoritative about
-    // the actual color information (consider e.g. a2bgr10). Slight downside
-    // in that it results in rounding r/b for e.g. rgb565, but we don't pick
-    // surfaces with fewer than 8 bits anyway, so let's not care for now.
-    pl_fmt fmt = current->images.elem[0]->params.format;
-    for (int i = 0; i < fmt->num_components; i++)
-        bits = PL_MAX(bits, fmt->component_depth[i]);
-
-    p->color_repr.bits.sample_depth = bits;
-    p->color_repr.bits.color_depth = bits;
-
     // Note: `p->color_space.hdr` is (re-)applied by `set_hdr_metadata`
     map_color_space(sinfo.imageColorSpace, &p->color_space);
 
@@ -758,12 +780,10 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->hdr_metadata = pl_hdr_metadata_empty;
     set_hdr_metadata(p, &metadata);
 
-    pl_free(vkimages);
     return true;
 
 error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
-    pl_free(vkimages);
     swapchain_destroy(sw, &p->current, UINT64_MAX);
     p->cur_width = p->cur_height = 0;
     return false;
@@ -805,6 +825,8 @@ static bool vk_sw_start_frame(pl_swapchain sw,
                 vk->WaitForFences(vk->dev, 1, pfence, VK_TRUE, UINT64_MAX);
                 vk->ResetFences(vk->dev, 1, pfence);
             }
+            if (!vk_sw_image_init(sw, imgidx))
+                goto error;
             pl_vulkan_release_ex(sw->gpu, pl_vulkan_release_params(
                 .tex        = p->current->images.elem[imgidx],
                 .layout     = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -831,11 +853,11 @@ static bool vk_sw_start_frame(pl_swapchain sw,
 
         default:
             PL_ERR(vk, "Failed acquiring swapchain image: %s", vk_res_str(res));
-            pl_mutex_unlock(&p->lock);
-            return false;
+            goto error;
         }
     }
 
+error:
     // If we've exhausted the number of attempts to recreate the swapchain,
     // just give up silently and let the user retry some time later.
     pl_mutex_unlock(&p->lock);
