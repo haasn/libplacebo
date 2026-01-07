@@ -434,9 +434,15 @@ static bool swapchain_destroy(pl_swapchain sw, struct vk_swapchain *vk_sw,
         for (int i = 0; i < vk_sw->fences_out.num; i++)
             vk->DestroyFence(vk->dev, vk_sw->fences_out.elem[i], PL_VK_ALLOC);
     } else {
+        // Vulkan without VK_KHR_swapchain_maintenance1 offers no way to know
+        // when a queue presentation command is done using these resources,
+        // leading to undefined behavior when destroying resources tied to the
+        // swapchain. Use an extra `vkQueueWaitIdle` on all of the queues we may
+        // have oustanding presentation calls on, to mitigate this risk.
         for (int i = 0; i < vk->pool_graphics->num_queues; i++)
             vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
     }
+
     for (int i = 0; i < vk_sw->images.num; i++)
         pl_tex_destroy(sw->gpu, &vk_sw->images.elem[i]);
     for (int i = 0; i < vk_sw->sems_in.num; i++)
@@ -464,20 +470,9 @@ static void vk_sw_destroy(pl_swapchain sw)
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    struct vk_swapchain *current = &p->current;
 
     pl_gpu_flush(gpu);
     vk_wait_idle(vk);
-
-    if (!current->fences_out.num) {
-        // Vulkan offers no way to know when a queue presentation command is done,
-        // leading to spec-mandated undefined behavior when destroying resources
-        // tied to the swapchain. Use an extra `vkQueueWaitIdle` on all of the
-        // queues we may have oustanding presentation calls on, to hopefully inform
-        // the driver that we want to wait until the device is truly idle.
-        for (int i = 0; i < vk->pool_graphics->num_queues; i++)
-            vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
-    }
 
     swapchain_destroy(sw, &p->current, UINT64_MAX);
     cleanup_retired_swapchains(sw, UINT64_MAX);
