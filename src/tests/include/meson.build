@@ -26,10 +26,15 @@ foreach h : headers
 
 endforeach
 
+test_opts = ['-Wall', '-Wextra', '-Wpedantic']
+if cc.has_argument('-Wc23-extensions')
+  test_opts += ['-Wno-c23-extensions']
+endif
+
 static_library('test_include', test_include_sources,
     dependencies: [tdep_static, lavu, lavc, lavf],
     include_directories: [inc],
     implicit_include_directories: false,
-    c_args: ['-Wall', '-Wextra', '-Wpedantic'],
-    cpp_args: ['-Wall', '-Wextra', '-Wpedantic'],
+    c_args: test_opts,
+    cpp_args: test_opts,
 )
