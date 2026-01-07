@@ -687,28 +687,12 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
 
-    for (int i = 0; i < num_images; i++) {
-        VkSemaphore in = VK_NULL_HANDLE, out = VK_NULL_HANDLE;
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &in));
-        snprintf(name, sizeof(name), "swapchain in #%d", i);
-        PL_VK_NAME(SEMAPHORE, in, name);
-        PL_ARRAY_APPEND(current, current->sems_in, in);
+    pl_assert(num_images > 0);
 
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &out));
-        snprintf(name, sizeof(name), "swapchain out #%d", i);
-        PL_VK_NAME(SEMAPHORE, out, name);
-        PL_ARRAY_APPEND(current, current->sems_out, out);
-
-        if (p->has_swapchain_maintenance1) {
-            VkFence fence = VK_NULL_HANDLE;
-            VK(vk->CreateFence(vk->dev, &fenceinfo, PL_VK_ALLOC, &fence));
-            snprintf(name, sizeof(name), "present fence #%d", i);
-            PL_VK_NAME(FENCE, fence, name);
-            PL_ARRAY_APPEND(current, current->fences_out, fence);
-        }
-
+    PL_ARRAY_CLEAR(current, current->images, num_images);
+    for (int i = 0; i < current->images.num; i++) {
         snprintf(name, sizeof(name), "swapchain #%d", i);
-        pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+        current->images.elem[i] = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
             .image = vkimages[i],
             .width = sinfo.imageExtent.width,
             .height = sinfo.imageExtent.height,
@@ -716,24 +700,36 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
             .usage = sinfo.imageUsage,
             .debug_tag = name,
         ));
-        if (!tex)
+        if (!current->images.elem[i])
             goto error;
-        PL_ARRAY_APPEND(current, current->images, tex);
     }
 
     // Without swapchain_maintenance1, we cannot use a fence to know when an
     // acquisition semaphore is safe to reuse. We allocate an extra "spare"
     // to ensure we always have one available for vkAcquireNextImageKHR while
     // the others are potentially still in flight.
-    if (!p->has_swapchain_maintenance1) {
-        VkSemaphore in = VK_NULL_HANDLE;
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &in));
-        snprintf(name, sizeof(name), "swapchain in #%d", num_images + 1);
-        PL_VK_NAME(SEMAPHORE, in, name);
-        PL_ARRAY_APPEND(current, current->sems_in, in);
+    PL_ARRAY_CLEAR(current, current->sems_in, num_images + !p->has_swapchain_maintenance1);
+    for (int i = 0; i < current->sems_in.num; i++) {
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &current->sems_in.elem[i]));
+        snprintf(name, sizeof(name), "swapchain in #%d", i);
+        PL_VK_NAME(SEMAPHORE, current->sems_in.elem[i], name);
     }
 
-    pl_assert(num_images > 0);
+    PL_ARRAY_CLEAR(current, current->sems_out, num_images);
+    for (int i = 0; i < current->sems_out.num; i++) {
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &current->sems_out.elem[i]));
+        snprintf(name, sizeof(name), "swapchain out #%d", i);
+        PL_VK_NAME(SEMAPHORE, current->sems_out.elem[i], name);
+    }
+
+    for (int i = 0; i < num_images && p->has_swapchain_maintenance1; i++) {
+        VkFence fence;
+        VK(vk->CreateFence(vk->dev, &fenceinfo, PL_VK_ALLOC, &fence));
+        snprintf(name, sizeof(name), "present fence #%d", i);
+        PL_VK_NAME(FENCE, fence, name);
+        PL_ARRAY_APPEND(current, current->fences_out, fence);
+    }
+
     int bits = 0;
 
     // The channel with the most bits is probably the most authoritative about
