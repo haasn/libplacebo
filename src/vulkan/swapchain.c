@@ -773,10 +773,9 @@ static bool vk_sw_start_frame(pl_swapchain sw,
 {
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    struct vk_swapchain *current = &p->current;
     pl_mutex_lock(&p->lock);
 
-    bool recreate = !current->swapchain || p->needs_recreate;
+    bool recreate = !p->current.swapchain || p->needs_recreate;
     if (p->suboptimal && !p->params.allow_suboptimal)
         recreate = true;
 
@@ -785,13 +784,13 @@ static bool vk_sw_start_frame(pl_swapchain sw,
         return false;
     }
 
-    VkSemaphore sem_in = current->sems_in.elem[current->idx_sems_in];
-    current->idx_sems_in = (current->idx_sems_in + 1) % current->sems_in.num;
+    VkSemaphore sem_in = p->current.sems_in.elem[p->current.idx_sems_in];
+    p->current.idx_sems_in = (p->current.idx_sems_in + 1) % p->current.sems_in.num;
     PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
-        VkResult res = vk->AcquireNextImageKHR(vk->dev, current->swapchain, UINT64_MAX,
+        VkResult res = vk->AcquireNextImageKHR(vk->dev, p->current.swapchain, UINT64_MAX,
                                                sem_in, VK_NULL_HANDLE, &imgidx);
 
         switch (res) {
@@ -799,20 +798,20 @@ static bool vk_sw_start_frame(pl_swapchain sw,
             p->suboptimal = true;
             // fall through
         case VK_SUCCESS:
-            current->last_imgidx = imgidx;
-            if (current->fences_out.num > 0) {
-                VkFence *pfence = &current->fences_out.elem[imgidx];
+            p->current.last_imgidx = imgidx;
+            if (p->current.fences_out.num > 0) {
+                VkFence *pfence = &p->current.fences_out.elem[imgidx];
                 vk->WaitForFences(vk->dev, 1, pfence, VK_TRUE, UINT64_MAX);
                 vk->ResetFences(vk->dev, 1, pfence);
             }
             pl_vulkan_release_ex(sw->gpu, pl_vulkan_release_params(
-                .tex        = current->images.elem[imgidx],
+                .tex        = p->current.images.elem[imgidx],
                 .layout     = VK_IMAGE_LAYOUT_UNDEFINED,
                 .qf         = VK_QUEUE_FAMILY_IGNORED,
                 .semaphore  = { sem_in },
             ));
             *out_frame = (struct pl_swapchain_frame) {
-                .fbo = current->images.elem[imgidx],
+                .fbo = p->current.images.elem[imgidx],
                 .flipped = false,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
