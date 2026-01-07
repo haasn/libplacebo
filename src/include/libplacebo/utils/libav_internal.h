@@ -61,6 +61,7 @@ PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
     case AVCOL_SPC_SMPTE240M:           return PL_COLOR_SYSTEM_SMPTE_240M;
     case AVCOL_SPC_YCGCO:               return PL_COLOR_SYSTEM_YCGCO;
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 13, 100)
+    case AVCOL_SPC_IPT_C2:              return PL_COLOR_SYSTEM_UNKNOWN; // missing
     case AVCOL_SPC_YCGCO_RE:            return PL_COLOR_SYSTEM_YCGCO_RE;
     case AVCOL_SPC_YCGCO_RO:            return PL_COLOR_SYSTEM_YCGCO_RO;
 #endif
