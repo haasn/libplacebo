@@ -227,8 +227,26 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 default: // skip any other format
                     continue;
             }
+#ifdef __APPLE__
+            // On Apple hardware, only these formats allow direct-to-display
+            // rendering, so give them a slight score boost to tie-break against
+            // other formats
+            switch (p->formats.elem[i].format) {
+                case VK_FORMAT_B8G8R8A8_UNORM:
+                case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+                case VK_FORMAT_R16G16B16A16_SFLOAT:
+                    score += 5;
+                    break;
+                default:
+                    break;
+            }
+#else
+            // On other platforms, it doesn't matter in theory but some drivers
+            // or hardware may have limited support for BGR formats, so prefer
+            // RGB instead.
             if (pl_fmt_is_ordered(plfmt))
-                score += 500;
+                score += 5;
+#endif
             if (pl_color_primaries_is_wide_gamut(space.primaries) == wide_gamut)
                 score += 1000;
             if (space.primaries == hint->primaries)
