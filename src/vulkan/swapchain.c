@@ -650,10 +650,6 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->cur_width = sinfo.imageExtent.width;
     p->cur_height = sinfo.imageExtent.height;
 
-    // Only allow deferred allocation if we are recreating an existing swapchain
-    if (current->swapchain == VK_NULL_HANDLE && p->has_swapchain_maintenance1)
-        sinfo.flags |= VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_KHR;
-
     PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
              sinfo.imageExtent.width,
              sinfo.imageExtent.height);
