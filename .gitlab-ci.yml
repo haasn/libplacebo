@@ -11,8 +11,8 @@ stages:
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    IMAGE_UBUNTU_NOBLE: registry.videolan.org/libplacebo-ubuntu-noble:20250312114616
-    IMAGE_UBUNTU_JAMMY_AARCH: registry.videolan.org/libplacebo-ubuntu-jammy-aarch64:20230203024122
+    IMAGE_UBUNTU_NOBLE: registry.videolan.org/libplacebo-ubuntu-noble:20260108182833
+    IMAGE_UBUNTU_NOBLE_AARCH: registry.videolan.org/libplacebo-ubuntu-noble-aarch64:20260110170627
 
 linux:
     image: $IMAGE_UBUNTU_NOBLE
@@ -26,6 +26,7 @@ linux:
                       -Dtests=true
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build
 
 static:
@@ -40,6 +41,7 @@ static:
                       --werror
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build
 
 win32:
@@ -54,6 +56,8 @@ win32:
                       -Dtests=true
                       -Ddebug-abort=true
                       -Dd3d11=enabled
+                      -Dshaderc=disabled
+                      -Dvk-proc-addr=disabled
                       --cross-file i686-w64-mingw32.meson
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
@@ -70,12 +74,14 @@ win64:
                       -Dtests=true
                       -Ddebug-abort=true
                       -Dd3d11=enabled
+                      -Dshaderc=disabled
+                      -Dvk-proc-addr=disabled
                       --cross-file x86_64-w64-mingw32.meson
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
 aarch64:
-    image: $IMAGE_UBUNTU_JAMMY_AARCH
+    image: $IMAGE_UBUNTU_NOBLE_AARCH
     stage: compile
     tags:
         - docker
@@ -114,6 +120,7 @@ scan:
                         -Dbench=true
                         -Dshaderc=enabled
                         -Dglslang=enabled
+                        -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build scan-build
 
 llvmpipe:
@@ -130,6 +137,7 @@ llvmpipe:
                       -Dc_args='-DCI_ALLOW_SW -DCI_MAXGL'
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build
         - cd build && meson test -t 20 -v --num-processes=1
 
@@ -148,6 +156,7 @@ gpu:
                       -Ddebug-abort=true
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
                       -Db_coverage=true
         - ninja -C build
         - vulkaninfo
