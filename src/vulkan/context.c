@@ -82,6 +82,7 @@ static const struct vk_fun vk_inst_funs[] = {
     // behind various VkSurfaceKHR values already being provided by the API
     // user (implying this extension is loaded).
     PL_VK_INST_FUN(GetPhysicalDeviceSurfaceCapabilitiesKHR),
+    PL_VK_INST_FUN(GetPhysicalDeviceSurfaceCapabilities2KHR),
     PL_VK_INST_FUN(GetPhysicalDeviceSurfaceFormatsKHR),
     PL_VK_INST_FUN(GetPhysicalDeviceSurfacePresentModesKHR),
     PL_VK_INST_FUN(GetPhysicalDeviceSurfaceSupportKHR),

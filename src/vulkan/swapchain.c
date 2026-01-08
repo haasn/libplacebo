@@ -547,8 +547,37 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
 
     // Query the supported capabilities and update this struct as needed
     VkSurfaceCapabilitiesKHR caps = {0};
-    VK(vk->GetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physd, p->surf, &caps));
+    if (!vk->GetPhysicalDeviceSurfaceCapabilities2KHR) {
+        VK(vk->GetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physd, p->surf, &caps));
+        goto caps_ready;
+    }
 
+    VkSurfacePresentModeKHR present_mode = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR,
+        .presentMode = p->protoInfo.presentMode,
+    };
+    VkPhysicalDeviceSurfaceInfo2KHR surface_info = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+        .pNext = &present_mode,
+        .surface = p->surf,
+    };
+#ifdef VK_EXT_full_screen_exclusive
+    // Explicitly disallow full screen exclusive mode if possible
+    static const VkSurfaceFullScreenExclusiveInfoEXT fsinfo = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT,
+        .fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT,
+    };
+    if (vk->AcquireFullScreenExclusiveModeEXT)
+        vk_link_struct(&surface_info, &fsinfo);
+#endif
+
+    VkSurfaceCapabilities2KHR surface_caps = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
+    };
+    VK(vk->GetPhysicalDeviceSurfaceCapabilities2KHR(vk->physd, &surface_info, &surface_caps));
+    caps = surface_caps.surfaceCapabilities;
+
+caps_ready:
     // Check for hidden/invisible window
     if (!caps.currentExtent.width || !caps.currentExtent.height) {
         PL_DEBUG(vk, "maxImageExtent reported as 0x0, hidden window? skipping");

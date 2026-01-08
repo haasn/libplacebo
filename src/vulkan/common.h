@@ -122,6 +122,7 @@ struct vk_ctx {
     PL_VK_FUN(GetPhysicalDeviceProperties2);
     PL_VK_FUN(GetPhysicalDeviceQueueFamilyProperties);
     PL_VK_FUN(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+    PL_VK_FUN(GetPhysicalDeviceSurfaceCapabilities2KHR);
     PL_VK_FUN(GetPhysicalDeviceSurfaceFormatsKHR);
     PL_VK_FUN(GetPhysicalDeviceSurfacePresentModesKHR);
     PL_VK_FUN(GetPhysicalDeviceSurfaceSupportKHR);
