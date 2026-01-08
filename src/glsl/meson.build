@@ -38,13 +38,18 @@ elif not glslang_req.disabled()
   # TODO: Use the following once it's fixed
   # glslang = dependency('glslang', method: 'cmake', modules: ['glslang::SPIRV'])
 
+  vulkan_sdk = get_option('vulkan-sdk')
+  vulkan_lib_dirs = []
+  if vulkan_sdk != ''
+    vulkan_lib_dirs += [vulkan_sdk / 'lib']
+  endif
   prefer_static = get_option('prefer_static')
   found_lib = false
   foreach arg : [[prefer_static, false], [not prefer_static, glslang_req]]
     static   = arg[0]
     required = arg[1]
 
-    spirv = cxx.find_library('SPIRV', required: required, static: static)
+    spirv = cxx.find_library('SPIRV', required: required, static: static, dirs: vulkan_lib_dirs)
 
     if not spirv.found()
       continue
@@ -59,13 +64,13 @@ elif not glslang_req.disabled()
     if static
       glslang_deps += [
         # Always required for static linking
-        cxx.find_library('MachineIndependent', required: false, static: true),
-        cxx.find_library('OSDependent',        required: false, static: true),
-        cxx.find_library('OGLCompiler',        required: false, static: true),
-        cxx.find_library('GenericCodeGen',     required: false, static: true),
+        cxx.find_library('MachineIndependent', required: false, static: true, dirs: vulkan_lib_dirs),
+        cxx.find_library('OSDependent',        required: false, static: true, dirs: vulkan_lib_dirs),
+        cxx.find_library('OGLCompiler',        required: false, static: true, dirs: vulkan_lib_dirs),
+        cxx.find_library('GenericCodeGen',     required: false, static: true, dirs: vulkan_lib_dirs),
         # SPIRV-Tools are required only if optimizer is enabled in glslang build
-        cxx.find_library('SPIRV-Tools',        required: false, static: true),
-        cxx.find_library('SPIRV-Tools-opt',    required: false, static: true),
+        cxx.find_library('SPIRV-Tools',        required: false, static: true, dirs: vulkan_lib_dirs),
+        cxx.find_library('SPIRV-Tools-opt',    required: false, static: true, dirs: vulkan_lib_dirs),
       ]
     endif
 
