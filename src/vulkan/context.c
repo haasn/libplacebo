@@ -504,6 +504,10 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     case 0xa662049a: // VUID-VkHostImageLayoutTransitionInfo-newLayout-09057
         // Work around https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/10241
         return false;
+
+    case 0x76cf26e9: // VUID-VkSwapchainPresentModesCreateInfoEXT-pPresentModes-07763
+        // Work around https://gitlab.freedesktop.org/mesa/mesa/-/issues/14622
+        return false;
     }
 
     enum pl_log_level lev;

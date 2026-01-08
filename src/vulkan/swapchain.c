@@ -630,6 +630,15 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
         return false;
 
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
+
+    VkSwapchainPresentModesCreateInfoKHR pminfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR,
+        .presentModeCount = 1,
+        .pPresentModes = &p->protoInfo.presentMode,
+    };
+    if (p->has_swapchain_maintenance1)
+        vk_link_struct(&sinfo, &pminfo);
+
 #ifdef VK_EXT_full_screen_exclusive
     // Explicitly disallow full screen exclusive mode if possible
     static const VkSurfaceFullScreenExclusiveInfoEXT fsinfo = {
