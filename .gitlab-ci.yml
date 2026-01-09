@@ -123,7 +123,7 @@ llvmpipe:
         - docker
         - amd64
     script:
-        - meson build --buildtype release
+        - meson build --buildtype debugoptimized
                       --werror
                       -Dtests=true
                       -Ddebug-abort=true
@@ -141,7 +141,7 @@ gpu:
     script:
         - git clone --depth 1 -b v1.16 https://github.com/linux-test-project/lcov.git
         - export PATH="`realpath lcov/bin`:$PATH"
-        - meson build --buildtype release
+        - meson build --buildtype debugoptimized
                       --werror
                       -Dtests=true
                       -Ddemos=false
