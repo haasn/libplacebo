@@ -109,7 +109,7 @@ static bool setup_src(pl_shader sh, const struct pl_sample_src *src,
         *scale = PL_DEF(src->scale, 1.0);
 
     // Support only formats with all components with the same depth
-    if (src->tex && src->tex->params.format->type == PL_FMT_UINT)
+    if (scale && src->tex && src->tex->params.format->type == PL_FMT_UINT)
         *scale *= 1.0 / ((1ull << (src->tex->params.format->component_depth[0])) - 1);
 
     if (comp_mask) {
