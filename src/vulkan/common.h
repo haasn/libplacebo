@@ -54,6 +54,10 @@
 #define VK_VENDOR_ID_APPLE 0x106B
 #endif
 
+#ifndef VK_VENDOR_ID_INTEL
+#define VK_VENDOR_ID_INTEL 0x8086
+#endif
+
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     pl_mutex lock;
