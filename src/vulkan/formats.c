@@ -607,8 +607,7 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
         // Internal capabilities
         if (vk->props.vendorID != VK_VENDOR_ID_NVIDIA &&
-            vk->props.vendorID != VK_VENDOR_ID_APPLE &&
-            vk->props.vendorID != VK_VENDOR_ID_INTEL) { // FIXME: remove when upstream works
+            vk->props.vendorID != VK_VENDOR_ID_APPLE) { // FIXME: remove when upstream works
             if ((texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT) &&
                 features_vk14 && features_vk14->hostImageCopy)
                 fmtp->can_host_copy = true;
