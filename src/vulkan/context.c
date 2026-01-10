@@ -505,6 +505,7 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         // Work around https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/10241
         return false;
 
+    case 0x2d90c7c0: // VUID-VkSwapchainPresentModesCreateInfoKHR-pPresentModes-07763
     case 0x76cf26e9: // VUID-VkSwapchainPresentModesCreateInfoEXT-pPresentModes-07763
         // Work around https://gitlab.freedesktop.org/mesa/mesa/-/issues/14622
         return false;
