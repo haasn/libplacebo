@@ -742,6 +742,7 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
 
         slab->spacemap ^= 0x1LLU << page_idx;
         *offset = page_idx * slab->pagesize;
+        slab->age = ma->age;
         return slab;
     }
 
@@ -1060,7 +1061,6 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         // consumers are always aligned properly.
         size = PL_ALIGN(size, align);
         slab->used += size;
-        slab->age = ma->age;
         if (params->debug_tag)
             slab->debug_tag = params->debug_tag;
         pl_mutex_unlock(&slab->lock);
