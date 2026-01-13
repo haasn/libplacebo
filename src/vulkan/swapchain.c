@@ -445,6 +445,9 @@ static bool swapchain_destroy(pl_swapchain sw, struct vk_swapchain **ptr,
     struct vk_ctx *vk = p->vk;
     struct vk_swapchain *vk_sw = *ptr;
 
+    if (!vk_sw)
+        return true;
+
     if (vk_sw->fences_out.num > 0) {
         VkResult res = vk->WaitForFences(vk->dev, vk_sw->fences_out.num,
                                          vk_sw->fences_out.elem, VK_TRUE, timeout);
