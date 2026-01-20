@@ -10,7 +10,7 @@ VAR_PATTERN = re.compile(flags=re.VERBOSE, pattern=r'''
           | (?:(?:const|dynamic)\s+)?   # optional const/dynamic modifiers
                 (?:float|u?int)         # base type
           | swizzle                     # swizzle mask
-          | (?:i|u)?vecType             # vector type (for mask)
+          | (?:b|i|u)?vecType           # vector type (for mask)
         )):)?
         (?P<expr>[^{}]+)
       }
@@ -59,8 +59,9 @@ VAR_TYPES = {
 
     # component mask types
     'swizzle':          FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_swizzle')),
-    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
-    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
+    'bvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_bool_type')),
+    'ivecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_int_type')),
+    'uvecType':         FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_uint_type')),
     'vecType':          FmtSpec(ctype='uint8_t', fmtstr='%s', fmt_expr=FmtSpec.wrap_fn('sh_float_type')),
 }
 

@@ -39,6 +39,8 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_BT_2100_HLG, // ITU-R Rec. BT.2100 ICtCp HLG variant
     PL_COLOR_SYSTEM_DOLBYVISION, // Dolby Vision (see pl_dovi_metadata)
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
+    PL_COLOR_SYSTEM_YCGCO_RE,    // YCgCo-R, even addition of bits
+    PL_COLOR_SYSTEM_YCGCO_RO,    // YCgCo-R, odd addition of bits
     // Other color systems:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
     PL_COLOR_SYSTEM_XYZ,         // Digital Cinema Distribution Master (XYZ)
@@ -334,6 +336,19 @@ static inline bool pl_cie_xy_equal(const struct pl_cie_xy *a,
 // with the given correlated color temperature.
 //
 // `temperature` must be between 2500 K and 25000 K, inclusive.
+PL_API struct pl_cie_xy pl_daylight_from_temp(float temperature);
+
+// Computes the CIE xy chromaticity coordinates of a blackbody radiator. This
+// will always return points roughly on the Planckian locus.
+//
+// `temperature` must be between 1667 K and 25000 K, inclusive.
+PL_API struct pl_cie_xy pl_blackbody_from_temp(float temperature);
+
+// Computes a blend of the daylight and blackbody temperatures, to allow
+// supporting a larger value range. This returns the daylight illuminant
+// above 4000K, but transitions to a blackbody below that.
+//
+// `temperature` must be between 1667 K and 25000 K, inclusive.
 PL_API struct pl_cie_xy pl_white_from_temp(float temperature);
 
 // Represents the raw physical primaries corresponding to a color space.

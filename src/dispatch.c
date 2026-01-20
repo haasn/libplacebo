@@ -1063,6 +1063,19 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
     }
 }
 
+static const char *map_blend_mode(enum pl_blend_mode mode)
+{
+    switch (mode) {
+    case PL_BLEND_ZERO:                return "0.0";
+    case PL_BLEND_ONE:                 return "1.0";
+    case PL_BLEND_SRC_ALPHA:           return "color.a";
+    case PL_BLEND_ONE_MINUS_SRC_ALPHA: return "(1.0 - color.a)";
+    case PL_BLEND_MODE_COUNT: break;
+    }
+
+    pl_unreachable();
+}
+
 static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
                                      const pl_rect2d *rc,
                                      const struct pl_dispatch_params *params)
@@ -1087,7 +1100,19 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     });
 
     ident_t base = sh_var(sh, (struct pl_shader_var) {
-        .data    = &(int[2]){ rc->x0, rc->y0 },
+        .data    = &(int[2]){
+            // When dealing with flipped coordinates, we need to subtract one
+            // from the effective sample position; this is because instead of
+            // IDs normally spanning from [0, size - 1], the inverted math
+            // would end up with [size, 1] instead.
+            //
+            // Put another way, because we are dealing with integer coordinates,
+            // the calculated position is rounded towards zero - but when the
+            // coordinate system is flipped, that ends up rounding up instead
+            // of down.
+            rc->x0 - (rc->x0 > rc->x1),
+            rc->y0 - (rc->y0 > rc->y1),
+        },
         .dynamic = true,
         .var     = {
             .name  = "base",
@@ -1106,20 +1131,12 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     GLSL("if (fpos.x < 1.0 && fpos.y < 1.0) {\n");
     if (params->blend_params) {
         GLSL("vec4 orig = imageLoad("$", pos);\n", fbo);
-
-        static const char *modes[] = {
-            [PL_BLEND_ZERO] = "0.0",
-            [PL_BLEND_ONE]  = "1.0",
-            [PL_BLEND_SRC_ALPHA] = "color.a",
-            [PL_BLEND_ONE_MINUS_SRC_ALPHA] = "(1.0 - color.a)",
-        };
-
         GLSL("color = vec4(color.rgb * vec3(%s), color.a * %s) \n"
              "      + vec4(orig.rgb  * vec3(%s), orig.a  * %s);\n",
-             modes[params->blend_params->src_rgb],
-             modes[params->blend_params->src_alpha],
-             modes[params->blend_params->dst_rgb],
-             modes[params->blend_params->dst_alpha]);
+             map_blend_mode(params->blend_params->src_rgb),
+             map_blend_mode(params->blend_params->src_alpha),
+             map_blend_mode(params->blend_params->dst_rgb),
+             map_blend_mode(params->blend_params->dst_alpha));
     }
     GLSL("imageStore("$", pos, color);\n", fbo);
     GLSL("}\n");

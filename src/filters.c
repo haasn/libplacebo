@@ -65,10 +65,14 @@ bool pl_filter_config_eq(const struct pl_filter_config *a,
               a->polar    == b->polar  &&
               a->antiring == b->antiring;
 
-    for (int i = 0; i < PL_FILTER_MAX_PARAMS; i++) {
+    for (int i = 0; i < PL_FILTER_MAX_PARAMS && eq; i++) {
+        eq &= a->kernel->tunable[i] == b->kernel->tunable[i];
         if (a->kernel->tunable[i])
             eq &= a->params[i] == b->params[i];
-        if (a->window && a->window->tunable[i])
+        if (!a->window)
+            continue;
+        eq &= a->window->tunable[i] == b->window->tunable[i];
+        if (a->window->tunable[i])
             eq &= a->wparams[i] == b->wparams[i];
     }
 

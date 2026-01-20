@@ -84,7 +84,7 @@ class Macro(object):
 
             if macro:
                 if leading_spaces:
-                    line = re.sub(f'^\s{{1,{leading_spaces}}}', '', line)
+                    line = re.sub(rf'^\s{{1,{leading_spaces}}}', '', line)
                 if more_lines := line.endswith('\\'):
                     line = line[:-1]
                 if statement := Statement.parse(line, strip=strip, linenr=linenr):

@@ -948,7 +948,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("hue", "Hue shift", color_adjustment.hue),
     OPT_FLOAT("gamma", "Gamma adjustment", color_adjustment.gamma, .max = 100.0),
     OPT_FLOAT("temperature", "Color temperature shift", color_adjustment.temperature,
-              .min = (2500  - 6500) / 3500.0, // see `pl_white_from_temp`
+              .min = (1667  - 6500) / 3500.0, // see `pl_white_from_temp`
               .max = (25000 - 6500) / 3500.0),
 
     // Peak detection
@@ -1088,7 +1088,8 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_ENUM("deinterlace_algo", "Deinterlacing algorithm", deinterlace_params.algo, LIST(
              {"weave", PL_DEINTERLACE_WEAVE},
              {"bob",   PL_DEINTERLACE_BOB},
-             {"yadif", PL_DEINTERLACE_YADIF})),
+             {"yadif", PL_DEINTERLACE_YADIF},
+             {"bwdif", PL_DEINTERLACE_BWDIF})),
     OPT_BOOL("deinterlace_skip_spatial", "Skip spatial interlacing check", deinterlace_params.skip_spatial_check),
 
     // Distortion
@@ -1129,7 +1130,8 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_ENUM("border", "Border clearing mode", params.border, LIST(
              {"color",      PL_CLEAR_COLOR},
              {"tiles",      PL_CLEAR_TILES},
-             {"skip",       PL_CLEAR_SKIP})),
+             {"skip",       PL_CLEAR_SKIP},
+             {"blur",       PL_CLEAR_BLUR})),
     OPT_FLOAT("background_r", "Background color R", params.background_color[0], .max = 1.0),
     OPT_FLOAT("background_g", "Background color G", params.background_color[1], .max = 1.0),
     OPT_FLOAT("background_b", "Background color B", params.background_color[2], .max = 1.0),
@@ -1143,6 +1145,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("tile_color_lo_r", "Dark tile R", params.tile_colors[1][0], .max = 1.0),
     OPT_FLOAT("tile_color_lo_g", "Dark tile G", params.tile_colors[1][1], .max = 1.0),
     OPT_FLOAT("tile_color_lo_b", "Dark tile B", params.tile_colors[1][2], .max = 1.0),
+    OPT_FLOAT("blur_radius", "Background blur radius (in pixels)", params.blur_radius),
     OPT_INT("tile_size", "Tile size", params.tile_size, .min = 2, .max = 256),
 
     // Performance / quality trade-offs and debugging options

@@ -69,6 +69,10 @@ static pl_spirv glslang_create(pl_log log, struct pl_spirv_version spirv_ver)
 
     // Clamp to supported version by glslang
     if (GLSLANG_SPV_MAX < spirv->version.spv_version) {
+        PL_WARN(spirv, "SPIR-V %u.%u is not supported by the current"
+                       " version of glslang. Falling back to %u.%u!",
+                spirv->version.spv_version >> 16, (spirv->version.spv_version >> 8) & 0xff,
+                GLSLANG_SPV_MAX >> 16, (GLSLANG_SPV_MAX >> 8) & 0xff);
         spirv->version.spv_version = GLSLANG_SPV_MAX;
         spirv->version.env_version = pl_spirv_version_to_vulkan(GLSLANG_SPV_MAX);
     }

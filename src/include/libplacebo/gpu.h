@@ -105,6 +105,7 @@ struct pl_gpu_limits {
     size_t max_mapped_size;     // maximum size of a `host_mapped` buffer
     uint64_t max_buffer_texels; // maximum number of texels in a texel buffer
     bool host_cached;           // if true, PL_BUF_MEM_HOST buffers are cached
+    bool host_ptr_slow;         // if true, PL_HANDLE_HOST_PTR import is slow
     size_t max_mapped_vram;     // maximum (known) size of a `host_mapped`
                                 // PL_BUF_MEM_DEVICE buffer, or 0 if this
                                 // combination is not supported
@@ -881,10 +882,10 @@ struct pl_tex_transfer_params {
     // field, so it's more useful for `ptr` transfers. (Though it can still be
     // helpful to avoid having to manually poll buffers all the time)
     //
-    // When this is *not* specified, uploads from `ptr` are still asynchronous
-    // but require a host memcpy, while downloads from `ptr` are blocking. As
-    // such, it's recommended to always try using asynchronous texture
-    // transfers wherever possible.
+    // When this is *not* specified, uploads from `ptr` are either synchronous,
+    // or internally asynchronous but with an extra host memcpy, while
+    // downloads from `ptr` are blocking. As such, it's recommended to always
+    // try using asynchronous texture transfers wherever possible.
     //
     // Note: Requires `pl_gpu_limits.callbacks`
     //

@@ -46,7 +46,6 @@ if glfw.found()
       dependencies: [libplacebo, libm, glfw, vulkan_headers],
       sources: 'window_glfw.c',
       c_args: ['-DUSE_VK'],
-      include_directories: vulkan_headers_inc,
     )
   endif
 
@@ -76,7 +75,6 @@ if sdl.found()
       dependencies: [libplacebo, sdl, vulkan_headers],
       sources: 'window_sdl.c',
       c_args: ['-DUSE_VK'],
-      include_directories: vulkan_headers_inc,
     )
   endif
 
@@ -109,7 +107,6 @@ else
   dep = declare_dependency(
     dependencies: [ libplacebo, build_deps ] + additional_dep,
     sources: ['window.c', 'utils.c'],
-    include_directories: vulkan_headers_inc,
     link_with: apis,
   )
 
@@ -155,14 +152,14 @@ endif
 # Headless vulkan demos
 if components.get('vk-proc-addr')
   executable('video-filtering', 'video-filtering.c',
-    dependencies: [ libplacebo, pl_clock, pl_thread, vulkan_loader ],
+    dependencies: [ libplacebo, pl_clock, pl_thread, vulkan_loader, vulkan_headers ],
     c_args: '-O2',
     link_args: link_args,
     link_depends: link_depends,
   )
 
   executable('multigpu-bench', 'multigpu-bench.c',
-    dependencies: [ libplacebo, pl_clock, vulkan_loader ],
+    dependencies: [ libplacebo, pl_clock, vulkan_loader, vulkan_headers ],
     c_args: '-O2',
     link_args: link_args,
     link_depends: link_depends,

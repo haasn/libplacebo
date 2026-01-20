@@ -52,6 +52,7 @@ enum pl_render_error {
     PL_RENDER_ERR_ERROR_DIFFUSION   = 1 << 9,
     PL_RENDER_ERR_HOOKS             = 1 << 10,
     PL_RENDER_ERR_CONTRAST_RECOVERY = 1 << 11,
+    PL_RENDER_ERR_BLUR              = 1 << 12,
 };
 
 // Struct describing current renderer state, including internal processing errors,
@@ -101,6 +102,7 @@ enum pl_clear_mode {
     PL_CLEAR_COLOR = 0, // set texture to a solid color
     PL_CLEAR_TILES,     // set texture to a tiled pattern
     PL_CLEAR_SKIP,      // skip the clearing pass (no-op)
+    PL_CLEAR_BLUR,      // clear with a blurred copy of the image (border only)
     PL_CLEAR_MODE_COUNT,
 };
 
@@ -247,15 +249,11 @@ struct pl_render_params {
     const struct pl_custom_lut *lut;
     enum pl_lut_type lut_type;
 
-    // Controls the image background. The default (PL_CLEAR_AUTO) is equivalent
-    // to PL_CLEAR_NONE, which passes through the alpha channel unmodified. (In
-    // the case of no alpha channel, this implicitly blends against black)
+    // Controls how the image background is drawn for transparent images.
     enum pl_clear_mode background;
 
     // Controls how the remaining empty space in the target is filled up, when
-    // the image does not span the entire framebuffer. The default is equivalent
-    // to PL_CLEAR_COLOR, in which case empty space is automatically colored
-    // according to `background_color`.
+    // the image does not span the entire framebuffer.
     enum pl_clear_mode border;
 
     // The color to use for PL_CLEAR_COLOR.
@@ -267,6 +265,9 @@ struct pl_render_params {
     // The color and size to use for PL_CLEAR_TILES
     float tile_colors[2][3];
     int tile_size;
+
+    // The blur radius (in pixels) to use for PL_CLEAR_BLUR
+    float blur_radius;
 
     // If set to a value above 0.0, the output will be rendered with rounded
     // corners, as if an alpha transparency mask had been applied. The value
@@ -373,7 +374,8 @@ struct pl_render_params {
     .color_adjustment   = &pl_color_adjustment_neutral, \
     .tile_colors        = {{0.93, 0.93, 0.93},          \
                            {0.87, 0.87, 0.87}},         \
-    .tile_size          = 32,
+    .tile_size          = 32,                           \
+    .blur_radius        = 16.0,
 
 #define pl_render_params(...) (&(struct pl_render_params) { PL_RENDER_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_render_params pl_render_fast_params;

@@ -34,7 +34,7 @@
 // starting with the minimum until the maximum is reached.
 //
 // Note: The maximum must never exceed the size of `vk_slab.spacemap`.
-#define MINIMUM_PAGE_COUNT 4
+#define MINIMUM_PAGE_COUNT 1
 #define MAXIMUM_PAGE_COUNT (sizeof(uint64_t) * 8)
 
 // Controls the maximum page size. Any allocations above this threshold
@@ -50,6 +50,11 @@
 // How long to wait before garbage collecting empty slabs. Slabs older than
 // this many invocations of `vk_malloc_garbage_collect` will be released.
 #define MAXIMUM_SLAB_AGE 32
+
+// The threshold for which allocations to serve from host-mapped VRAM, as
+// opposed to host memory. Will not allocate more than this fraction of VRAM in
+// one go. (For a 256 MB non-resizable BAR, this is equivalent to 4 MB)
+#define MAPPED_VRAM_THRESHOLD 256
 
 // A single slab represents a contiguous region of allocated memory. Actual
 // allocations are served as pages of this. Slabs are organized into pools,
@@ -97,6 +102,7 @@ struct vk_malloc {
     pl_mutex lock;
     VkPhysicalDeviceMemoryProperties props;
     size_t maximum_page_size;
+    size_t max_mapped_vram; // maximum allocation size from host-visible VRAM
     PL_ARRAY(struct vk_pool) pools;
     uint64_t age;
 };
@@ -298,6 +304,18 @@ static bool find_best_memtype(const struct vk_malloc *ma, uint32_t type_mask,
     // That being said, we still want to prioritize memory types that have
     // better optional flags.
 
+    VkMemoryPropertyFlags optimal = params->optimal;
+    if (ma->max_mapped_vram && params->reqs.size > ma->max_mapped_vram) {
+        // Do not try allocating from host-visible RAM if we can avoid it
+        if (params->required & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            optimal &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        } else {
+            optimal &= ~(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                         VK_MEMORY_PROPERTY_HOST_CACHED_BIT |
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        }
+    }
+
     type_mask &= params->reqs.memoryTypeBits;
     for (int i = 0; i < ma->props.memoryTypeCount; i++) {
         const VkMemoryType *mtype = &ma->props.memoryTypes[i];
@@ -316,7 +334,7 @@ static bool find_best_memtype(const struct vk_malloc *ma, uint32_t type_mask,
             continue;
 
         // Calculate the score as the number of optimal property flags matched
-        int score = __builtin_popcountl(mtype->propertyFlags & params->optimal);
+        int score = __builtin_popcountl(mtype->propertyFlags & optimal);
         if (score > best) {
             *out_index = i;
             best = score;
@@ -338,6 +356,9 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
 {
     if (!handle_type)
         return true;
+
+    if (handle_type == PL_HANDLE_HOST_PTR && !vk->GetMemoryHostPointerPropertiesEXT)
+        return false;
 
     VkPhysicalDeviceExternalBufferInfo info = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR,
@@ -475,6 +496,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
 
     default:
         PL_VK_ASSERT(res, "vkAllocateMemory");
+        vk_malloc_print_stats(ma, PL_LOG_TRACE);
     }
 
     slab->mtype = *mtype;
@@ -552,6 +574,13 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
             ma->maximum_page_size = PL_MAX(ma->maximum_page_size, size_max);
         }
     }
+
+    const size_t max_unmapped = vk_malloc_avail(ma, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    const size_t max_mapped   = vk_malloc_avail(ma, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT |
+                                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+    if (max_mapped < max_unmapped) // no resizable BAR
+        ma->max_mapped_vram = max_mapped / MAPPED_VRAM_THRESHOLD;
 
     vk_malloc_print_stats(ma, PL_LOG_INFO);
     return ma;
@@ -713,6 +742,7 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
 
         slab->spacemap ^= 0x1LLU << page_idx;
         *offset = page_idx * slab->pagesize;
+        slab->age = ma->age;
         return slab;
     }
 
@@ -928,7 +958,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     case PL_HANDLE_HOST_PTR:
         PL_TRACE(vk, "Imported %s bytes from ptr: %p%s",
                  PRINT_SIZE(slab->size), shmem->handle.ptr,
-                 params->ded_image ? " (dedicated" : "");
+                 params->ded_image ? " (dedicated)" : "");
         slab->handle.ptr = ptrinfo.pHostPointer;
         break;
     case PL_HANDLE_WIN32:
@@ -1031,7 +1061,6 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         // consumers are always aligned properly.
         size = PL_ALIGN(size, align);
         slab->used += size;
-        slab->age = ma->age;
         if (params->debug_tag)
             slab->debug_tag = params->debug_tag;
         pl_mutex_unlock(&slab->lock);

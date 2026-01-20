@@ -196,14 +196,6 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         goto error;
     }
 
-    static const int gl_ver_req = 3;
-    if (pl_gl->major < gl_ver_req) {
-        PL_FATAL(p, "OpenGL version too old (%d < %d), please use a newer "
-                 "OpenGL implementation or downgrade libplacebo!",
-                 pl_gl->major, gl_ver_req);
-        goto error;
-    }
-
     PL_INFO(p, "Detected OpenGL version strings:");
     PL_INFO(p, "    GL_VERSION:  %s", version);
     PL_INFO(p, "    GL_VENDOR:   %s", (char *) gl->GetString(GL_VENDOR));
@@ -223,6 +215,14 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         PL_DEBUG(p, "    GL_EXTENSIONS:");
         for (int i = 0; i < exts.num; i++)
             PL_DEBUG(p, "        %s", exts.elem[i]);
+    }
+
+    static const int gl_ver_req = 3;
+    if (pl_gl->major < gl_ver_req) {
+        PL_FATAL(p, "OpenGL version too old (%d < %d), please use a newer "
+                 "OpenGL implementation or downgrade libplacebo!",
+                 pl_gl->major, gl_ver_req);
+        goto error;
     }
 
     if (params->egl_display) {

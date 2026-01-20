@@ -202,7 +202,8 @@ if __name__ == '__main__':
     if not xmlfile or xmlfile == '':
         xmlfile = find_registry_xml(datadir)
 
-    registry = VkXML(ET.parse(xmlfile))
+    tree = ET.parse(xmlfile)
+    registry = VkXML(tree.getroot())
     with open(outfile, 'w') as f:
         f.write(TEMPLATE.render(
             vkresults = get_vkenum(registry, 'VkResult'),
@@ -211,6 +212,7 @@ if __name__ == '__main__':
             vkhandles = get_vkenum(registry, 'VkExternalMemoryHandleTypeFlagBits'),
             vkalphas  = get_vkenum(registry, 'VkCompositeAlphaFlagBitsKHR'),
             vktransforms = get_vkenum(registry, 'VkSurfaceTransformFlagBitsKHR'),
+            vkdrivers = get_vkenum(registry, 'VkDriverId'),
             vkobjects = get_vkobjects(registry),
             vkstructs = get_vkstructs(registry),
             vkaccess = get_vkaccess(registry),

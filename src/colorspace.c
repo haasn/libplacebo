@@ -40,6 +40,8 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2100_HLG:
     case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return true;
     case PL_COLOR_SYSTEM_COUNT: break;
     };
@@ -57,6 +59,8 @@ bool pl_color_system_is_linear(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_SMPTE_240M:
     case PL_COLOR_SYSTEM_BT_2020_NC:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return true;
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_BT_2100_PQ:
@@ -81,6 +85,8 @@ const char *const pl_color_system_names[PL_COLOR_SYSTEM_COUNT] = {
     [PL_COLOR_SYSTEM_BT_2100_HLG]   = "ITU-R Rec. BT.2100 ICtCp HLG variant",
     [PL_COLOR_SYSTEM_DOLBYVISION]   = "Dolby Vision (invalid for output)",
     [PL_COLOR_SYSTEM_YCGCO]         = "YCgCo (derived from RGB)",
+    [PL_COLOR_SYSTEM_YCGCO_RE]      = "YCgCo-R, even addition of bits",
+    [PL_COLOR_SYSTEM_YCGCO_RO]      = "YCgCo-R, odd addition of bits",
     [PL_COLOR_SYSTEM_RGB]           = "Red, Green and Blue",
     [PL_COLOR_SYSTEM_XYZ]           = "Digital Cinema Distribution Master (XYZ)",
 };
@@ -598,7 +604,7 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         MAP3(10000 / PL_COLOR_SDR_WHITE * powf(X, 1 / PQ_M1));
         goto scale_out;
     case PL_COLOR_TRC_HLG: {
-        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         const pl_matrix3x3 rgb2xyz =
             pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
@@ -686,7 +692,7 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
         MAP3(powf((PQ_C1 + PQ_C2 * X) / (1 + PQ_C3 * X), PQ_M2));
         return;
     case PL_COLOR_TRC_HLG: {
-        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         const pl_matrix3x3 rgb2xyz =
             pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
@@ -988,9 +994,9 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
     }
 }
 
-struct pl_cie_xy pl_white_from_temp(float temp)
+struct pl_cie_xy pl_daylight_from_temp(float temp)
 {
-    temp = PL_CLAMP(temp, 2500, 25000);
+    temp = PL_CLAMP(temp, 1000, 25000);
 
     double ti = 1000.0 / temp, ti2 = ti * ti, ti3 = ti2 * ti, x;
     if (temp <= 7000) {
@@ -1002,6 +1008,42 @@ struct pl_cie_xy pl_white_from_temp(float temp)
     return (struct pl_cie_xy) {
         .x = x,
         .y = -3 * (x*x) + 2.87 * x - 0.275,
+    };
+}
+
+struct pl_cie_xy pl_blackbody_from_temp(float temp)
+{
+    temp = PL_CLAMP(temp, 1667, 25000);
+
+    double ti = 1000.0 / temp, ti2 = ti * ti, ti3 = ti2 * ti, x, y;
+    if (temp <= 4000) {
+        x = -0.2661239 * ti3 - 0.2343580 * ti2 + 0.8776956 * ti + 0.179910;
+    } else {
+        x = -3.0258469 * ti3 + 2.1070379 * ti2 + 0.2226347 * ti + 0.240390;
+    }
+
+    double x2 = x * x, x3 = x2 * x;
+    if (temp <= 2222) {
+        y = -1.1063814 * x3 - 1.34811020 * x2 + 2.18555832 * x - 0.20219683;
+    } else if (temp <= 4000) {
+        y = -0.9549476 * x3 - 1.37418593 * x2 + 2.09137015 * x - 0.16748867;
+    } else {
+        y =  3.0817580 * x3 - 5.87338670 * x2 + 3.75112997 * x - 0.37001483;
+    }
+
+    return (struct pl_cie_xy) {x, y};
+}
+
+struct pl_cie_xy pl_white_from_temp(float temp)
+{
+    const struct pl_cie_xy a = pl_blackbody_from_temp(temp);
+    const struct pl_cie_xy b = pl_daylight_from_temp(temp);
+    float f = (temp - 2500) / (4000 - 2500);
+    f = PL_CLAMP(f, 0.0f, 1.0f);
+
+    return (struct pl_cie_xy) {
+        .x = PL_MIX(a.x, b.x, f),
+        .y = PL_MIX(a.y, b.y, f),
     };
 }
 
@@ -1559,10 +1601,14 @@ static inline float xy_dist2(struct pl_cie_xy a, struct pl_cie_xy b)
 bool pl_primaries_compatible(const struct pl_raw_primaries *a,
                              const struct pl_raw_primaries *b)
 {
-    float RR = xy_dist2(a->red, b->red),    RG = xy_dist2(a->red, b->green),
-          RB = xy_dist2(a->red, b->blue),   GG = xy_dist2(a->green, b->green),
-          GB = xy_dist2(a->green, b->blue), BB = xy_dist2(a->blue, b->blue);
-    return RR < RG && RR < RB && GG < RG && GG < GB && BB < RB && BB < GB;
+    float RR = xy_dist2(a->red, b->red),   RG = xy_dist2(a->red, b->green),
+          RB = xy_dist2(a->red, b->blue);
+    float GR = xy_dist2(a->green, b->red), GG = xy_dist2(a->green, b->green),
+          GB = xy_dist2(a->green, b->blue);
+    float BR = xy_dist2(a->blue, b->red),  BG = xy_dist2(a->blue, b->green),
+          BB = xy_dist2(a->blue, b->blue);
+
+    return RR < RG && RR < RB && GG < GR && GG < GB && BB < BR && BB < BG;
 }
 
 // returns the intersection of the two lines defined by ab and cd
@@ -1705,6 +1751,14 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
             {1,  -1, -1},
         }};
         break;
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
+        m = (pl_matrix3x3) {{
+            {1, -0.5,  0.5},
+            {1,  0.5,  0  },
+            {1, -0.5, -0.5},
+        }};
+        break;
     case PL_COLOR_SYSTEM_UNKNOWN: // fall through
     case PL_COLOR_SYSTEM_RGB:
         m = pl_matrix3x3_identity;
@@ -1772,6 +1826,15 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     double ymul = 1.0 / (ymax - ymin);
     double cmul = 0.5 / (cmax - cmid);
+
+    if (repr->sys == PL_COLOR_SYSTEM_YCGCO_RE || repr->sys == PL_COLOR_SYSTEM_YCGCO_RO) {
+        int additional_bits = repr->sys == PL_COLOR_SYSTEM_YCGCO_RE ? 2 : 1;
+        double max_y = (1LL << (bit_depth - additional_bits)) - 1;
+        double max_c = (1LL << (bit_depth)) - 1;
+        ymul = cmul = max_c / max_y;
+        ymin = 0;
+        cmid = (1 << (bit_depth - 1)) / max_c;
+    }
 
     double mul[3]   = { ymul, ymul, ymul };
     double black[3] = { ymin, ymin, ymin };

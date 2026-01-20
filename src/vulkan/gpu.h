@@ -42,6 +42,7 @@ void pl_vk_print_heap(pl_gpu, enum pl_log_level);
 struct pl_fmt_vk {
     const struct vk_format *vk_fmt;
     bool blit_emulated;
+    bool can_host_copy;
 };
 
 enum queue_type {
@@ -59,6 +60,7 @@ struct pl_vk {
     // Some additional cached device limits and features checks
     uint32_t max_push_descriptors;
     size_t min_texel_alignment;
+    bool rebar_enabled;
 
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
@@ -71,6 +73,10 @@ struct pl_vk {
 
     // To avoid spamming warnings
     bool warned_modless;
+
+    // Array of image layouts compatible with VK_EXT_host_image_copy
+    PL_ARRAY(VkImageLayout) host_ul_layouts;
+    PL_ARRAY(VkImageLayout) host_dl_layouts;
 };
 
 struct vk_cmd *_begin_cmd(pl_gpu, enum queue_type, const char *label, pl_timer);

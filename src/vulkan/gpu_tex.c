@@ -66,6 +66,14 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         barr.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
+    if (tex_vk->ext_deps.num) {
+        // We need to guarantee that all external dependencies are satisfied
+        // before the barrier begins executing. The easiest way to ensure this
+        // is to add the stage mask at which we wait for the external dependency
+        // to the source stage mask of the image barrier.
+        barr.srcStageMask |= stage;
+    }
+
     if (last.access || is_trans || is_xfer) {
         vk_cmd_barrier(cmd, &(VkDependencyInfo) {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -151,8 +159,19 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
             [VK_IMAGE_TYPE_3D] = VK_IMAGE_VIEW_TYPE_3D,
         };
 
+        static const VkFlags view_whitelist =
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
+
+        const VkImageViewUsageCreateInfo usage_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+            .usage = tex_vk->usage_flags & view_whitelist,
+        };
+
         const VkImageViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = &usage_info,
             .image = tex_vk->img,
             .viewType = viewType[tex_vk->type],
             .format = tex_vk->img_fmt,
@@ -281,6 +300,8 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if ((params->blit_src || params->blit_dst) && tex_vk->num_planes)
         tex->params.storable = true;
 
+    const bool host_writable = params->host_writable || params->initial_data;
+
     VkImageUsageFlags usage = 0;
     VkImageCreateFlags flags = 0;
     if (tex->params.sampleable)
@@ -291,8 +312,16 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         usage |= VK_IMAGE_USAGE_STORAGE_BIT;
     if (tex->params.host_readable || tex->params.blit_src)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    if (tex->params.host_writable || tex->params.blit_dst || params->initial_data)
+    if (host_writable || tex->params.blit_dst)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+    // Opportunistically try and use host image copies if possible
+    const VkDeviceSize size_estimate = fmt->internal_size * PL_ALIGN2(params->w, 8) *
+                                       PL_MAX(params->h, 1) * PL_MAX(params->d, 1);
+    if (((tex->params.host_readable && p->host_dl_layouts.num) ||
+         (host_writable && p->host_ul_layouts.num)) && fmtp->can_host_copy &&
+        (p->rebar_enabled || size_estimate < gpu->limits.max_mapped_vram / 1024))
+        usage |= VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
 
     if (!usage) {
         // Vulkan requires images have at least *some* image usage set, but our
@@ -450,7 +479,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     };
 
     VkResult res;
-    res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+    res = vk->GetPhysicalDeviceImageFormatProperties2(vk->physd, &pinfo, &props);
     if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
         PL_DEBUG(gpu, "Texture creation failed: not supported");
         goto error;
@@ -462,9 +491,9 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if (params->w > max.width || params->h > max.height || params->d > max.depth)
     {
         PL_ERR(gpu, "Requested image size %dx%dx%d exceeds the maximum allowed "
-               "dimensions %dx%dx%d for vulkan image format %x",
+               "dimensions %dx%dx%d for vulkan image format %s",
                params->w, params->h, params->d, max.width, max.height, max.depth,
-               (unsigned) iinfo.format);
+               vk_fmt_name(iinfo.format));
         goto error;
     }
 
@@ -843,6 +872,88 @@ static enum queue_type vk_img_copy_queue(pl_gpu gpu, pl_tex tex,
     }
 }
 
+static bool try_host_xfer(pl_gpu gpu, pl_tex tex, bool upload)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    const PL_ARRAY(VkImageLayout) *layouts = upload ? (void *) &p->host_ul_layouts
+                                                    : (void *) &p->host_dl_layouts;
+
+    if (!(tex_vk->usage_flags & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) |
+        !layouts->num || tex->params.format->emulated)
+        return false;
+
+    // It's not worth stalling the GPU to wait for in-use textures; just emit
+    // these copy commands asynchronously
+    if (vk_tex_poll(gpu, tex, 0) || tex_vk->ext_deps.num)
+        return false;
+
+    for (int i = 0; i < layouts->num; i++) {
+        if (tex_vk->layout == layouts->elem[i])
+            return true;
+    }
+
+    // Need to perform a layout transition
+    VK(vk->TransitionImageLayoutEXT(vk->dev, 1, &(VkHostImageLayoutTransitionInfoEXT) {
+        .sType = VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO_EXT,
+        .image = tex_vk->img,
+        .oldLayout = tex_vk->layout,
+        .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .subresourceRange = {
+            .aspectMask = tex_vk->aspect,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    }));
+    tex_vk->layout = VK_IMAGE_LAYOUT_GENERAL;
+    return true;
+
+error:
+    return false;
+}
+
+static bool vk_tex_upload_host(pl_gpu gpu, const struct pl_tex_transfer_params *params)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    pl_rect3d rc = params->rc;
+    pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+
+    if (!try_host_xfer(gpu, tex, true))
+        return pl_tex_upload_pbo(gpu, params);
+
+    VK(vk->CopyMemoryToImageEXT(vk->dev, &(VkCopyMemoryToImageInfo) {
+        .sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO_EXT,
+        .dstImage = tex_vk->img,
+        .dstImageLayout = tex_vk->layout,
+        .regionCount = 1,
+        .pRegions = &(VkMemoryToImageCopy) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY,
+            .pHostPointer = params->ptr,
+            .memoryRowLength = params->row_pitch / fmt->texel_size,
+            .memoryImageHeight = params->depth_pitch / params->row_pitch,
+            .imageOffset = { rc.x0, rc.y0, rc.z0 },
+            .imageExtent = { rc.x1, rc.y1, rc.z1 },
+            .imageSubresource = {
+                .aspectMask = tex_vk->aspect,
+                .layerCount = 1,
+            },
+        },
+    }));
+
+    tex_vk->may_invalidate = false;
+
+    if (params->callback)
+        params->callback(params->priv);
+    return true;
+
+error:
+    return false;
+}
+
 static void tex_xfer_cb(void *ctx, void *arg)
 {
     void (*fun)(void *priv) = ctx;
@@ -860,7 +971,7 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     int num_slices = 0;
 
     if (!params->buf)
-        return pl_tex_upload_pbo(gpu, params);
+        return vk_tex_upload_host(gpu, params);
 
     pl_buf buf = params->buf;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);

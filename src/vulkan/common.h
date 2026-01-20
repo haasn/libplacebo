@@ -50,6 +50,14 @@
 #define VK_VENDOR_ID_NVIDIA 0x10DE
 #endif
 
+#ifndef VK_VENDOR_ID_APPLE
+#define VK_VENDOR_ID_APPLE 0x106B
+#endif
+
+#ifndef VK_VENDOR_ID_INTEL
+#define VK_VENDOR_ID_INTEL 0x8086
+#endif
+
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     pl_mutex lock;
@@ -103,10 +111,10 @@ struct vk_ctx {
     PL_VK_FUN(GetInstanceProcAddr);
     PL_VK_FUN(GetPhysicalDeviceExternalBufferProperties);
     PL_VK_FUN(GetPhysicalDeviceExternalSemaphoreProperties);
-    PL_VK_FUN(GetPhysicalDeviceFeatures2KHR);
+    PL_VK_FUN(GetPhysicalDeviceFeatures2);
     PL_VK_FUN(GetPhysicalDeviceFormatProperties);
-    PL_VK_FUN(GetPhysicalDeviceFormatProperties2KHR);
-    PL_VK_FUN(GetPhysicalDeviceImageFormatProperties2KHR);
+    PL_VK_FUN(GetPhysicalDeviceFormatProperties2);
+    PL_VK_FUN(GetPhysicalDeviceImageFormatProperties2);
     PL_VK_FUN(GetPhysicalDeviceMemoryProperties);
     PL_VK_FUN(GetPhysicalDeviceProperties);
     PL_VK_FUN(GetPhysicalDeviceProperties2);
@@ -150,6 +158,8 @@ struct vk_ctx {
     PL_VK_FUN(CmdSetViewport);
     PL_VK_FUN(CmdUpdateBuffer);
     PL_VK_FUN(CmdWriteTimestamp);
+    PL_VK_FUN(CopyImageToMemoryEXT);
+    PL_VK_FUN(CopyMemoryToImageEXT);
     PL_VK_FUN(CreateBuffer);
     PL_VK_FUN(CreateBufferView);
     PL_VK_FUN(CreateCommandPool);
@@ -157,8 +167,8 @@ struct vk_ctx {
     PL_VK_FUN(CreateDebugReportCallbackEXT);
     PL_VK_FUN(CreateDescriptorPool);
     PL_VK_FUN(CreateDescriptorSetLayout);
-    PL_VK_FUN(CreateFence);
     PL_VK_FUN(CreateFramebuffer);
+    PL_VK_FUN(CreateFence);
     PL_VK_FUN(CreateGraphicsPipelines);
     PL_VK_FUN(CreateImage);
     PL_VK_FUN(CreateImageView);
@@ -177,8 +187,8 @@ struct vk_ctx {
     PL_VK_FUN(DestroyDescriptorPool);
     PL_VK_FUN(DestroyDescriptorSetLayout);
     PL_VK_FUN(DestroyDevice);
-    PL_VK_FUN(DestroyFence);
     PL_VK_FUN(DestroyFramebuffer);
+    PL_VK_FUN(DestroyFence);
     PL_VK_FUN(DestroyImage);
     PL_VK_FUN(DestroyImageView);
     PL_VK_FUN(DestroyPipeline);
@@ -213,13 +223,14 @@ struct vk_ctx {
     PL_VK_FUN(QueueSubmit);
     PL_VK_FUN(QueueSubmit2KHR);
     PL_VK_FUN(QueueWaitIdle);
-    PL_VK_FUN(ResetFences);
     PL_VK_FUN(ResetQueryPool);
+    PL_VK_FUN(ResetFences);
     PL_VK_FUN(SetDebugUtilsObjectNameEXT);
     PL_VK_FUN(SetHdrMetadataEXT);
+    PL_VK_FUN(TransitionImageLayoutEXT);
     PL_VK_FUN(UpdateDescriptorSets);
-    PL_VK_FUN(WaitForFences);
     PL_VK_FUN(WaitSemaphores);
+    PL_VK_FUN(WaitForFences);
 
 #ifdef PL_HAVE_WIN32
     PL_VK_FUN(GetMemoryWin32HandleKHR);

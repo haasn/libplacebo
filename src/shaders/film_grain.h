@@ -65,6 +65,8 @@ static inline enum pl_channel channel_map(int i, const struct pl_film_grain_para
     case PL_COLOR_SYSTEM_BT_2100_HLG:
     case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return comp;
 
     case PL_COLOR_SYSTEM_COUNT:

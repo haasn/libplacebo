@@ -194,6 +194,8 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if (params->export_handle) {
         require(params->export_handle & gpu->export_caps.tex);
         require(PL_ISPOT(params->export_handle));
+        if (params->export_handle == PL_HANDLE_DMA_BUF)
+            require(params->format->num_modifiers);
     }
     if (params->import_handle) {
         require(params->import_handle & gpu->import_caps.tex);

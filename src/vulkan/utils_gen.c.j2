@@ -1,6 +1,17 @@
 #define VK_ENABLE_BETA_EXTENSIONS
 #include "vulkan/utils.h"
 
+const char *vk_driver_id_name(VkDriverId driver)
+{
+    switch (driver) {
+{% for driver in vkdrivers %}
+    case {{ driver }}: return "{{ driver }}";
+{% endfor %}
+
+    default: return "unknown driver";
+    }
+}
+
 const char *vk_res_str(VkResult res)
 {
     switch (res) {

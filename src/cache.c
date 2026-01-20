@@ -285,7 +285,7 @@ uint64_t pl_cache_signature(pl_cache cache)
 #define PAD_ALIGN(x)  PL_ALIGN2(x, sizeof(uint32_t))
 
 struct __attribute__((__packed__)) cache_header {
-    char     magic[8];
+    char     magic[8] PL_NONSTRING;
     uint32_t version;
     uint32_t num_entries;
 };
@@ -463,4 +463,109 @@ int pl_cache_load(pl_cache cache, const uint8_t *data, size_t size)
         .data = (uint8_t *) data,
         .size = size,
     });
+}
+
+// File I/O wrappers
+
+void pl_cache_set_file(void *priv, pl_cache_obj obj)
+{
+    const char *dir = priv;
+    if (!dir || !dir[0])
+        return;
+
+    char *path = pl_asprintf(NULL, "%s%016"PRIx64, dir, obj.key);
+    if (!obj.size) {
+        remove(path);
+        pl_free(path);
+        return;
+    }
+
+    // Check if file exists
+    FILE *fp = fopen(path, "rb");
+    if (fp) {
+        pl_free(path);
+        fclose(fp);
+        return; // Ignore already existing files; will be validated on next use
+    }
+
+    fp = fopen(path, "wb");
+    pl_free(path);
+    if (!fp)
+        return;
+
+    // Generate a single entry cache file
+    const struct cache_header header = {
+        .magic       = CACHE_MAGIC,
+        .version     = CACHE_VERSION,
+        .num_entries = 1,
+    };
+
+    const struct cache_entry entry = {
+        .key  = obj.key,
+        .size = obj.size,
+        .hash = pl_mem_hash(obj.data, obj.size),
+    };
+
+    if (fwrite(&header, sizeof(header), 1, fp) != 1 ||
+        fwrite(&entry,  sizeof(entry),  1, fp) != 1)
+    {
+        fclose(fp);
+        remove(path);
+        return;
+    }
+
+    size_t written = fwrite(obj.data, 1, obj.size, fp);
+    fclose(fp);
+    if (written != obj.size)
+        remove(path);
+}
+
+pl_cache_obj pl_cache_get_file(void *priv, uint64_t key)
+{
+    const char *dir = priv;
+    if (!dir || !dir[0])
+        return (pl_cache_obj) {0};
+
+    char *path = pl_asprintf(NULL, "%s%016"PRIx64, dir, key);
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        pl_free(path);
+        return (pl_cache_obj) {0};
+    }
+
+    struct cache_header header;
+    struct cache_entry entry;
+    if (fread(&header, sizeof(header), 1, fp) != 1 ||
+        memcmp(header.magic, CACHE_MAGIC, sizeof(header.magic)) ||
+        header.version != CACHE_VERSION || header.num_entries != 1 ||
+        fread(&entry, sizeof(entry), 1, fp) != 1 ||
+        entry.key != key || !entry.size || entry.size > SIZE_MAX)
+    {
+        // Corrupt cache
+        goto error;
+    }
+
+    char *data = pl_alloc(NULL, entry.size);
+    if (fread(data, 1, entry.size, fp) != entry.size ||
+        pl_mem_hash(data, entry.size) != entry.hash)
+    {
+        pl_free(data);
+        goto error;
+    }
+
+    fclose(fp);
+    pl_free(path);
+    return (pl_cache_obj) {
+        .key  = key,
+        .size = entry.size,
+        .data = data,
+        .free = pl_free,
+    };
+
+error:
+    // Clean up corrupt/invalid cache files by silently removing them
+    fclose(fp);
+    remove(path);
+    pl_free(path);
+    return (pl_cache_obj) {0};
 }

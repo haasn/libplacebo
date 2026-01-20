@@ -23,9 +23,16 @@
 #include "swapchain.h"
 #include "pl_thread.h"
 
-struct sem_pair {
-    VkSemaphore in;
-    VkSemaphore out;
+struct vk_swapchain {
+    VkSwapchainKHR swapchain;
+    // state of the images:
+    PL_ARRAY(VkImage) vkimages;     // VkImages waiting to be wrapped
+    PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
+    PL_ARRAY(VkSemaphore) sems_in;  // pool of semaphores used to acquire images
+    PL_ARRAY(VkSemaphore) sems_out; // pool of semaphores used to present images
+    PL_ARRAY(VkFence) fences_out;   // pool of fences for presented images
+    int idx_sems_in;                // index of next free semaphore to acquire
+    int last_imgidx;                // the image index last acquired (for submit)
 };
 
 struct priv {
@@ -39,55 +46,57 @@ struct priv {
     // current swapchain and metadata:
     struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
-    VkSwapchainKHR swapchain;
+    struct vk_swapchain *current;
+    PL_ARRAY(struct vk_swapchain*) retired;
+    uint32_t queue_families[3];
     int cur_width, cur_height;
     int swapchain_depth;
     pl_rc_t frames_in_flight;       // number of frames currently queued
     bool suboptimal;                // true once VK_SUBOPTIMAL_KHR is returned
     bool needs_recreate;            // swapchain needs to be recreated
+    bool has_swapchain_maintenance1;
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
     struct pl_hdr_metadata hdr_metadata;
-
-    // state of the images:
-    PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
-    PL_ARRAY(struct sem_pair) sems; // pool of semaphores used to synchronize images
-    int idx_sems;                   // index of next free semaphore pair
-    int last_imgidx;                // the image index last acquired (for submit)
 };
 
 static const struct pl_sw_fns vulkan_swapchain;
 
+
 static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
 {
     switch (space) {
-    // Note: This is technically against the spec, but more often than not
-    // it's the correct result since `SRGB_NONLINEAR` is just a catch-all
-    // for any sort of typical SDR curve, which is better approximated by
-    // `pl_color_space_monitor`.
     case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
-        *out = pl_color_space_monitor;
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_BT_709,
+            .transfer  = PL_COLOR_TRC_SRGB,
+        };
         return true;
-
     case VK_COLOR_SPACE_BT709_NONLINEAR_EXT:
-        *out = pl_color_space_monitor;
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_BT_709,
+            .transfer  = PL_COLOR_TRC_BT_1886,
+        };
         return true;
     case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
         *out = (struct pl_color_space) {
             .primaries = PL_COLOR_PRIM_DISPLAY_P3,
-            .transfer  = PL_COLOR_TRC_BT_1886,
+            // Actually there are some controversy about Display P3's TRC curve,
+            // just like sRGB
+            .transfer  = PL_COLOR_TRC_SRGB,
         };
         return true;
-    case VK_COLOR_SPACE_DCI_P3_LINEAR_EXT:
+    case VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT:
         *out = (struct pl_color_space) {
-            .primaries = PL_COLOR_PRIM_DCI_P3,
+            .primaries = PL_COLOR_PRIM_DISPLAY_P3,
             .transfer  = PL_COLOR_TRC_LINEAR,
         };
         return true;
     case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT:
+        // This color space is using XYZ color system than RGB
         *out = (struct pl_color_space) {
             .primaries = PL_COLOR_PRIM_DCI_P3,
-            .transfer  = PL_COLOR_TRC_BT_1886,
+            .transfer  = PL_COLOR_TRC_ST428,
         };
         return true;
     case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
@@ -134,8 +143,11 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
         };
         return true;
     case VK_COLOR_SPACE_PASS_THROUGH_EXT:
-        *out = pl_color_space_unknown;
-        return true;
+        // On color-managed Wayland compositors, it behaves similar to
+        // VK_COLOR_SPACE_SRGB_NONLINEAR_KHR as they would treat un-tagged surface
+        // as sRGB, but on other OSes it's behavior is not clearly defined, so
+        // don't use it.
+        return false;
 
 #ifdef VK_AMD_display_native_hdr
     case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD:
@@ -166,45 +178,6 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
         bool disable10 = !pl_color_transfer_is_hdr(space.transfer) &&
                          p->params.disable_10bit_sdr;
 
-        switch (p->formats.elem[i].format) {
-        // Only accept floating point formats for linear curves
-        case VK_FORMAT_R16G16B16_SFLOAT:
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-        case VK_FORMAT_R32G32B32_SFLOAT:
-        case VK_FORMAT_R32G32B32A32_SFLOAT:
-        case VK_FORMAT_R64G64B64_SFLOAT:
-        case VK_FORMAT_R64G64B64A64_SFLOAT:
-            if (space.transfer == PL_COLOR_TRC_LINEAR)
-                break; // accept
-            continue;
-
-        // Only accept 8 bit for non-HDR curves
-        case VK_FORMAT_R8G8B8_UNORM:
-        case VK_FORMAT_B8G8R8_UNORM:
-        case VK_FORMAT_R8G8B8A8_UNORM:
-        case VK_FORMAT_B8G8R8A8_UNORM:
-        case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-            if (!pl_color_transfer_is_hdr(space.transfer))
-                break; // accept
-            continue;
-
-        // Only accept 10 bit formats for non-linear curves
-        case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            if (space.transfer != PL_COLOR_TRC_LINEAR && !disable10)
-                break; // accept
-            continue;
-
-        // Accept 16-bit formats for everything
-        case VK_FORMAT_R16G16B16_UNORM:
-        case VK_FORMAT_R16G16B16A16_UNORM:
-            if (!disable10)
-                break; // accept
-            continue;
-
-        default: continue;
-        }
-
         // Make sure we can wrap this format to a meaningful, valid pl_fmt
         for (int n = 0; n < gpu->num_formats; n++) {
             pl_fmt plfmt = gpu->formats[n];
@@ -220,8 +193,60 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
 
             // format valid, use it if it has a higher score
             int score = 0;
-            for (int c = 0; c < 3; c++)
-                score += plfmt->component_depth[c];
+            switch (plfmt->component_depth[0]) {
+                case 8:
+                    if (pl_color_transfer_is_hdr(space.transfer))
+                        score += 10;
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        continue; // avoid 8-bit linear formats
+                    else if (disable10)
+                        score += 30;
+                    else
+                        score += 20;
+                    break;
+                case 10:
+                    if (pl_color_transfer_is_hdr(space.transfer))
+                        score += 30;
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        continue; // avoid 10-bit linear formats
+                    else if (disable10)
+                        score += 20;
+                    else
+                        score += 30;
+                    break;
+                case 16:
+                    if (pl_color_transfer_is_hdr(space.transfer))
+                        score += 20;
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        score += 30;
+                    else if (disable10)
+                        score += 10;
+                    else
+                        score += 10;
+                    break;
+                default: // skip any other format
+                    continue;
+            }
+#ifdef __APPLE__
+            // On Apple hardware, only these formats allow direct-to-display
+            // rendering, so give them a slight score boost to tie-break against
+            // other formats
+            switch (p->formats.elem[i].format) {
+                case VK_FORMAT_B8G8R8A8_UNORM:
+                case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+                case VK_FORMAT_R16G16B16A16_SFLOAT:
+                    score += 5;
+                    break;
+                default:
+                    break;
+            }
+#else
+            // On other platforms, it doesn't matter in theory but some drivers
+            // or hardware may have limited support for BGR formats, so prefer
+            // RGB instead.
+            if (pl_fmt_is_ordered(plfmt))
+                score += 5;
+#endif
             if (pl_color_primaries_is_wide_gamut(space.primaries) == wide_gamut)
                 score += 1000;
             if (space.primaries == hint->primaries)
@@ -235,9 +260,9 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
             case PL_FMT_UNKNOWN: break;
             case PL_FMT_UINT: break;
             case PL_FMT_SINT: break;
-            case PL_FMT_UNORM: score += 500; break;
-            case PL_FMT_SNORM: score += 400; break;
-            case PL_FMT_FLOAT: score += 300; break;
+            case PL_FMT_UNORM: score += 3; break;
+            case PL_FMT_SNORM: score += 2; break;
+            case PL_FMT_FLOAT: score += 1; break;
             case PL_FMT_TYPE_COUNT: pl_unreachable();
             };
 
@@ -296,10 +321,10 @@ static void set_hdr_metadata(struct priv *p, const struct pl_hdr_metadata *metad
     if (!pl_color_transfer_is_hdr(p->color_space.transfer))
         return;
 
-    if (!p->swapchain)
+    if (!p->current)
         return;
 
-    vk->SetHdrMetadataEXT(vk->dev, 1, &p->swapchain, &(VkHdrMetadataEXT) {
+    vk->SetHdrMetadataEXT(vk->dev, 1, &p->current->swapchain, &(VkHdrMetadataEXT) {
         .sType = VK_STRUCTURE_TYPE_HDR_METADATA_EXT,
         .displayPrimaryRed   = { fix.prim.red.x,   fix.prim.red.y },
         .displayPrimaryGreen = { fix.prim.green.x, fix.prim.green.y },
@@ -330,6 +355,9 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     sw->log = vk->log;
     sw->gpu = gpu;
 
+    const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR *sw_maint_features =
+    vk_find_struct(vk->features.pNext, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR);
+
     struct priv *p = PL_PRIV(sw);
     pl_mutex_init(&p->lock);
     p->impl = vulkan_swapchain;
@@ -337,18 +365,25 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     p->vk = vk;
     p->surf = params->surface;
     p->swapchain_depth = PL_DEF(params->swapchain_depth, 3);
+    p->has_swapchain_maintenance1 = sw_maint_features && sw_maint_features->swapchainMaintenance1;
     pl_assert(p->swapchain_depth > 0);
     atomic_init(&p->frames_in_flight, 0);
-    p->last_imgidx = -1;
     p->protoInfo = (VkSwapchainCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = p->surf,
         .imageArrayLayers = 1, // non-stereoscopic
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .imageSharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
+                                              : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = vk->pools.num,
+        .pQueueFamilyIndices = p->queue_families,
         .minImageCount = p->swapchain_depth + 1, // +1 for the FB
         .presentMode = params->present_mode,
         .clipped = true,
     };
+
+    pl_assert(vk->pools.num <= PL_ARRAY_SIZE(p->queue_families));
+    for (int i = 0; i < vk->pools.num; i++)
+        p->queue_families[i] = vk->pools.elem[i]->qf;
 
     // These fields will be updated by `vk_sw_recreate`
     p->color_space = pl_color_space_unknown;
@@ -391,7 +426,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     }
 
     // Ensure there exists at least some valid renderable surface format
-    struct pl_color_space hint = {0};
+    struct pl_color_space hint = pl_color_space_srgb;
     if (!pick_surf_format(sw, &hint))
         goto error;
 
@@ -403,6 +438,56 @@ error:
     return NULL;
 }
 
+static bool swapchain_destroy(pl_swapchain sw, struct vk_swapchain **ptr,
+                                uint64_t timeout)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct vk_ctx *vk = p->vk;
+    struct vk_swapchain *vk_sw = *ptr;
+
+    if (!vk_sw)
+        return true;
+
+    if (vk_sw->fences_out.num > 0) {
+        VkResult res = vk->WaitForFences(vk->dev, vk_sw->fences_out.num,
+                                         vk_sw->fences_out.elem, VK_TRUE, timeout);
+        if (res == VK_NOT_READY || res == VK_TIMEOUT)
+            return false;
+        for (int i = 0; i < vk_sw->fences_out.num; i++)
+            vk->DestroyFence(vk->dev, vk_sw->fences_out.elem[i], PL_VK_ALLOC);
+    } else {
+        // Vulkan without VK_KHR_swapchain_maintenance1 offers no way to know
+        // when a queue presentation command is done using these resources,
+        // leading to undefined behavior when destroying resources tied to the
+        // swapchain. Use an extra `vkQueueWaitIdle` on all of the queues we may
+        // have oustanding presentation calls on, to mitigate this risk.
+        for (int i = 0; i < vk->pool_graphics->num_queues; i++)
+            vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
+    }
+
+    for (int i = 0; i < vk_sw->images.num; i++)
+        pl_tex_destroy(sw->gpu, &vk_sw->images.elem[i]);
+    for (int i = 0; i < vk_sw->sems_in.num; i++)
+        vk->DestroySemaphore(vk->dev, vk_sw->sems_in.elem[i], PL_VK_ALLOC);
+    for (int i = 0; i < vk_sw->sems_out.num; i++)
+        vk->DestroySemaphore(vk->dev, vk_sw->sems_out.elem[i], PL_VK_ALLOC);
+
+    vk->DestroySwapchainKHR(vk->dev, vk_sw->swapchain, PL_VK_ALLOC);
+    pl_free_ptr(ptr);
+    return true;
+}
+
+static void cleanup_retired_swapchains(pl_swapchain sw, uint64_t timeout)
+{
+    struct priv *p = PL_PRIV(sw);
+    for (int i = 0; i < p->retired.num; i++) {
+        if (swapchain_destroy(sw, &p->retired.elem[i], timeout)) {
+            PL_ARRAY_REMOVE_AT(p->retired, i);
+            i--;
+        }
+    }
+}
+
 static void vk_sw_destroy(pl_swapchain sw)
 {
     pl_gpu gpu = sw->gpu;
@@ -412,22 +497,9 @@ static void vk_sw_destroy(pl_swapchain sw)
     pl_gpu_flush(gpu);
     vk_wait_idle(vk);
 
-    // Vulkan offers no way to know when a queue presentation command is done,
-    // leading to spec-mandated undefined behavior when destroying resources
-    // tied to the swapchain. Use an extra `vkQueueWaitIdle` on all of the
-    // queues we may have oustanding presentation calls on, to hopefully inform
-    // the driver that we want to wait until the device is truly idle.
-    for (int i = 0; i < vk->pool_graphics->num_queues; i++)
-        vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
+    cleanup_retired_swapchains(sw, UINT64_MAX);
+    swapchain_destroy(sw, &p->current, UINT64_MAX);
 
-    for (int i = 0; i < p->images.num; i++)
-        pl_tex_destroy(gpu, &p->images.elem[i]);
-    for (int i = 0; i < p->sems.num; i++) {
-        vk->DestroySemaphore(vk->dev, p->sems.elem[i].in, PL_VK_ALLOC);
-        vk->DestroySemaphore(vk->dev, p->sems.elem[i].out, PL_VK_ALLOC);
-    }
-
-    vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
     pl_mutex_destroy(&p->lock);
     pl_free((void *) sw);
 }
@@ -566,26 +638,74 @@ error:
     return false;
 }
 
-static void destroy_swapchain(struct vk_ctx *vk, void *swapchain)
-{
-    vk->DestroySwapchainKHR(vk->dev, vk_unwrap_handle(swapchain), PL_VK_ALLOC);
-}
-
-VK_CB_FUNC_DEF(destroy_swapchain);
-
-static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
+static bool vk_sw_image_init(pl_swapchain sw, int idx)
 {
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
-    struct vk_ctx *vk = p->vk;
+    struct vk_swapchain *current = p->current;
 
-    VkImage *vkimages = NULL;
+    if (current->images.elem[idx])
+        return true;
+
+    pl_assert(current->vkimages.elem[idx] != VK_NULL_HANDLE);
+
+    char name[32];
+    snprintf(name, sizeof(name), "swapchain #%d", idx);
+    pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+        .image = current->vkimages.elem[idx],
+        .width = p->protoInfo.imageExtent.width,
+        .height = p->protoInfo.imageExtent.height,
+        .format = p->protoInfo.imageFormat,
+        .usage = p->protoInfo.imageUsage,
+        .debug_tag = name,
+    ));
+
+    if (!tex)
+        goto error;
+
+    current->images.elem[idx] = tex;
+    current->vkimages.elem[idx] = VK_NULL_HANDLE;
+
+    int bits = 0;
+    // The channel with the most bits is probably the most authoritative about
+    // the actual color information (consider e.g. a2bgr10). Slight downside
+    // in that it results in rounding r/b for e.g. rgb565, but we don't pick
+    // surfaces with fewer than 8 bits anyway, so let's not care for now.
+    pl_fmt fmt = current->images.elem[idx]->params.format;
+    for (int i = 0; i < fmt->num_components; i++)
+        bits = PL_MAX(bits, fmt->component_depth[i]);
+    p->color_repr.bits.sample_depth = bits;
+    p->color_repr.bits.color_depth = bits;
+
+    return true;
+
+error:
+    PL_ERR(sw, "Failed wrapping swapchain image!");
+    return false;
+}
+
+static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct vk_ctx *vk = p->vk;
+    struct vk_swapchain *current = p->current;
+
     uint32_t num_images = 0;
+    char name[32];
 
     if (!update_swapchain_info(p, &p->protoInfo, w, h))
         return false;
 
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
+
+    VkSwapchainPresentModesCreateInfoKHR pminfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR,
+        .presentModeCount = 1,
+        .pPresentModes = &p->protoInfo.presentMode,
+    };
+    if (p->has_swapchain_maintenance1)
+        vk_link_struct(&sinfo, &pminfo);
+
 #ifdef VK_EXT_full_screen_exclusive
     // Explicitly disallow full screen exclusive mode if possible
     static const VkSurfaceFullScreenExclusiveInfoEXT fsinfo = {
@@ -601,100 +721,91 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->cur_width = sinfo.imageExtent.width;
     p->cur_height = sinfo.imageExtent.height;
 
+    if (p->has_swapchain_maintenance1)
+        sinfo.flags |= VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_KHR;
+
     PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
              sinfo.imageExtent.width,
              sinfo.imageExtent.height);
 
-#ifdef PL_HAVE_UNIX
-    if (vk->props.vendorID == VK_VENDOR_ID_NVIDIA) {
-        vk->DeviceWaitIdle(vk->dev);
-        vk_wait_idle(vk);
-    }
-#endif
-
     // Calling `vkCreateSwapchainKHR` puts sinfo.oldSwapchain into a retired
     // state whether the call succeeds or not, so we always need to garbage
     // collect it afterwards - asynchronously as it may still be in use
-    sinfo.oldSwapchain = p->swapchain;
-    p->swapchain = VK_NULL_HANDLE;
-    VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain);
-    vk_dev_callback(vk, VK_CB_FUNC(destroy_swapchain), vk, vk_wrap_handle(sinfo.oldSwapchain));
+    if (current) {
+        PL_ARRAY_APPEND(sw, p->retired, current);
+        sinfo.oldSwapchain = current->swapchain;
+    } else {
+        sinfo.oldSwapchain = VK_NULL_HANDLE;
+    }
+    p->current = current = pl_zalloc_ptr(NULL, p->current);
+    current->last_imgidx = -1;
+    VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &current->swapchain);
     PL_VK_ASSERT(res, "vk->CreateSwapchainKHR(...)");
 
     // Get the new swapchain images
-    VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, NULL));
-    vkimages = pl_calloc_ptr(NULL, num_images, vkimages);
-    VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
+    VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, NULL));
+    PL_ARRAY_RESIZE(current, current->vkimages, num_images);
+    VK(vk->GetSwapchainImagesKHR(vk->dev, current->swapchain, &num_images, current->vkimages.elem));
 
-    for (int i = 0; i < num_images; i++)
-        PL_VK_NAME(IMAGE, vkimages[i], "swapchain");
+    static const VkSemaphoreCreateInfo seminfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
 
-    // If needed, allocate some more semaphores
-    while (num_images > p->sems.num) {
-        VkSemaphore sem_in = VK_NULL_HANDLE, sem_out = VK_NULL_HANDLE;
-        static const VkSemaphoreCreateInfo seminfo = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        };
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_in));
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_out));
-        PL_VK_NAME(SEMAPHORE, sem_in, "swapchain in");
-        PL_VK_NAME(SEMAPHORE, sem_out, "swapchain out");
-
-        PL_ARRAY_APPEND(sw, p->sems, (struct sem_pair) {
-            .in = sem_in,
-            .out = sem_out,
-        });
-    }
-
-    // Recreate the pl_tex wrappers
-    for (int i = 0; i < p->images.num; i++)
-        pl_tex_destroy(gpu, &p->images.elem[i]);
-    p->images.num = 0;
-
-    for (int i = 0; i < num_images; i++) {
-        const VkExtent2D *ext = &sinfo.imageExtent;
-        pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
-            .image = vkimages[i],
-            .width = ext->width,
-            .height = ext->height,
-            .format = sinfo.imageFormat,
-            .usage = sinfo.imageUsage,
-        ));
-        if (!tex)
-            goto error;
-        PL_ARRAY_APPEND(sw, p->images, tex);
-    }
+    static const VkFenceCreateInfo fenceinfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
 
     pl_assert(num_images > 0);
-    int bits = 0;
 
-    // The channel with the most bits is probably the most authoritative about
-    // the actual color information (consider e.g. a2bgr10). Slight downside
-    // in that it results in rounding r/b for e.g. rgb565, but we don't pick
-    // surfaces with fewer than 8 bits anyway, so let's not care for now.
-    pl_fmt fmt = p->images.elem[0]->params.format;
-    for (int i = 0; i < fmt->num_components; i++)
-        bits = PL_MAX(bits, fmt->component_depth[i]);
+    PL_ARRAY_CLEAR(current, current->images, num_images);
 
-    p->color_repr.bits.sample_depth = bits;
-    p->color_repr.bits.color_depth = bits;
+    // Without swapchain_maintenance1, we cannot use a fence to know when an
+    // acquisition semaphore is safe to reuse. We allocate an extra "spare"
+    // to ensure we always have one available for vkAcquireNextImageKHR while
+    // the others are potentially still in flight.
+    PL_ARRAY_CLEAR(current, current->sems_in, num_images + !p->has_swapchain_maintenance1);
+    for (int i = 0; i < current->sems_in.num; i++) {
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &current->sems_in.elem[i]));
+        snprintf(name, sizeof(name), "swapchain in #%d", i);
+        PL_VK_NAME(SEMAPHORE, current->sems_in.elem[i], name);
+    }
+
+    PL_ARRAY_CLEAR(current, current->sems_out, num_images);
+    for (int i = 0; i < current->sems_out.num; i++) {
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &current->sems_out.elem[i]));
+        snprintf(name, sizeof(name), "swapchain out #%d", i);
+        PL_VK_NAME(SEMAPHORE, current->sems_out.elem[i], name);
+    }
+
+    for (int i = 0; i < num_images && p->has_swapchain_maintenance1; i++) {
+        VkFence fence;
+        VK(vk->CreateFence(vk->dev, &fenceinfo, PL_VK_ALLOC, &fence));
+        snprintf(name, sizeof(name), "present fence #%d", i);
+        PL_VK_NAME(FENCE, fence, name);
+        PL_ARRAY_APPEND(current, current->fences_out, fence);
+    }
 
     // Note: `p->color_space.hdr` is (re-)applied by `set_hdr_metadata`
     map_color_space(sinfo.imageColorSpace, &p->color_space);
+
+    // To convert to XYZ color system for VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT
+    if (p->color_space.transfer == PL_COLOR_TRC_ST428) {
+        p->color_repr.sys = PL_COLOR_SYSTEM_XYZ;
+    } else {
+        p->color_repr.sys = PL_COLOR_SYSTEM_RGB;
+    }
 
     // Forcibly re-apply HDR metadata, bypassing the no-op check
     struct pl_hdr_metadata metadata = p->hdr_metadata;
     p->hdr_metadata = pl_hdr_metadata_empty;
     set_hdr_metadata(p, &metadata);
 
-    pl_free(vkimages);
     return true;
 
 error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
-    pl_free(vkimages);
-    vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
-    p->swapchain = VK_NULL_HANDLE;
+    swapchain_destroy(sw, &p->current, UINT64_MAX);
     p->cur_width = p->cur_height = 0;
     return false;
 }
@@ -706,7 +817,7 @@ static bool vk_sw_start_frame(pl_swapchain sw,
     struct vk_ctx *vk = p->vk;
     pl_mutex_lock(&p->lock);
 
-    bool recreate = !p->swapchain || p->needs_recreate;
+    bool recreate = !p->current || p->needs_recreate;
     if (p->suboptimal && !p->params.allow_suboptimal)
         recreate = true;
 
@@ -715,12 +826,13 @@ static bool vk_sw_start_frame(pl_swapchain sw,
         return false;
     }
 
-    VkSemaphore sem_in = p->sems.elem[p->idx_sems].in;
+    VkSemaphore sem_in = p->current->sems_in.elem[p->current->idx_sems_in];
+    p->current->idx_sems_in = (p->current->idx_sems_in + 1) % p->current->sems_in.num;
     PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
-        VkResult res = vk->AcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
+        VkResult res = vk->AcquireNextImageKHR(vk->dev, p->current->swapchain, UINT64_MAX,
                                                sem_in, VK_NULL_HANDLE, &imgidx);
 
         switch (res) {
@@ -728,15 +840,22 @@ static bool vk_sw_start_frame(pl_swapchain sw,
             p->suboptimal = true;
             // fall through
         case VK_SUCCESS:
-            p->last_imgidx = imgidx;
+            p->current->last_imgidx = imgidx;
+            if (p->current->fences_out.num > 0) {
+                VkFence *pfence = &p->current->fences_out.elem[imgidx];
+                vk->WaitForFences(vk->dev, 1, pfence, VK_TRUE, UINT64_MAX);
+                vk->ResetFences(vk->dev, 1, pfence);
+            }
+            if (!vk_sw_image_init(sw, imgidx))
+                goto error;
             pl_vulkan_release_ex(sw->gpu, pl_vulkan_release_params(
-                .tex        = p->images.elem[imgidx],
+                .tex        = p->current->images.elem[imgidx],
                 .layout     = VK_IMAGE_LAYOUT_UNDEFINED,
                 .qf         = VK_QUEUE_FAMILY_IGNORED,
                 .semaphore  = { sem_in },
             ));
             *out_frame = (struct pl_swapchain_frame) {
-                .fbo = p->images.elem[imgidx],
+                .fbo = p->current->images.elem[imgidx],
                 .flipped = false,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
@@ -755,11 +874,11 @@ static bool vk_sw_start_frame(pl_swapchain sw,
 
         default:
             PL_ERR(vk, "Failed acquiring swapchain image: %s", vk_res_str(res));
-            pl_mutex_unlock(&p->lock);
-            return false;
+            goto error;
         }
     }
 
+error:
     // If we've exhausted the number of attempts to recreate the swapchain,
     // just give up silently and let the user retry some time later.
     pl_mutex_unlock(&p->lock);
@@ -778,15 +897,15 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    pl_assert(p->last_imgidx >= 0);
-    pl_assert(p->swapchain);
-    uint32_t idx = p->last_imgidx;
-    VkSemaphore sem_out = p->sems.elem[p->idx_sems++].out;
-    p->idx_sems %= p->sems.num;
-    p->last_imgidx = -1;
+    struct vk_swapchain *current = p->current;
+    pl_assert(current);
+    pl_assert(current->last_imgidx >= 0);
+    uint32_t idx = current->last_imgidx;
+    VkSemaphore sem_out = current->sems_out.elem[idx];
+    current->last_imgidx = -1;
 
     bool held = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
-        .tex        = p->images.elem[idx],
+        .tex        = current->images.elem[idx],
         .layout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .qf         = VK_QUEUE_FAMILY_IGNORED,
         .semaphore  = { sem_out },
@@ -817,15 +936,27 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
 
     vk_rotate_queues(p->vk);
     vk_malloc_garbage_collect(vk->ma);
+    cleanup_retired_swapchains(sw, 0);
+
+    VkSwapchainPresentFenceInfoKHR fenceInfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR,
+        .swapchainCount = 1,
+    };
 
     VkPresentInfoKHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &sem_out,
         .swapchainCount = 1,
-        .pSwapchains = &p->swapchain,
+        .pSwapchains = &current->swapchain,
         .pImageIndices = &idx,
     };
+
+    if (current->fences_out.num > 0) {
+        VkFence *pfence = &current->fences_out.elem[idx];
+        fenceInfo.pFences = pfence;
+        pinfo.pNext = &fenceInfo;
+    }
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on 0x%"PRIx64, (uint64_t) sem_out);
     vk->lock_queue(vk->queue_ctx, pool->qf, qidx);

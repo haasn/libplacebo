@@ -12,6 +12,14 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '358': 'add PL_COLOR_SYSTEM_YCGCO_{RE,RO}',
+      '357': 'add pl_daylight_from_temp, pl_blackbody_from_temp, and generalize pl_white_from_temp',
+      '356': 'pl_avframe_set_repr now sets frame.alpha_mode',
+      '355': 'add PL_CLEAR_BLUR and pl_render_params.blur_radius',
+      '354': 'pl_shader_{encode,decode}_color no longer linearizes/delinearizes XYZ',
+      '353': 'add PL_DEINTERLACE_BWDIF',
+      '352': 'add pl_gpu_limits.host_ptr_slow',
+      '351': 'add pl_cache_{set,get}_dir()',
       '350': 'add pl_{opengl,vulkan,d3d11}_params.no_compute',
       '349': 'add pl_color_{primaries,system,transfer}_name(s)',
       '348': 'add pl_color_linearize and pl_color_delinearize',
@@ -391,7 +399,7 @@ conf_internal.set('PL_DEBUG_ABORT', get_option('debug-abort'))
 build_opts = [
   # Warnings
   '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
-  '-fno-math-errno',
+  '-fno-math-errno', '-fno-signed-zeros', '-fno-trapping-math',
 ]
 
 link_args = []
@@ -413,6 +421,10 @@ c_opts = [
 
 if cc.has_argument('-Wincompatible-pointer-types')
   c_opts += ['-Werror=incompatible-pointer-types']
+endif
+
+if cc.has_argument('-Wc23-extensions')
+  c_opts += ['-Wno-c23-extensions']
 endif
 
 # clang's version of -Wmissing-braces rejects the common {0} initializers

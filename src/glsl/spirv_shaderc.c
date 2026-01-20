@@ -22,6 +22,17 @@
 #include "spirv.h"
 #include "utils.h"
 
+#define VK_API_VERSION_MAJOR(version) (((uint32_t)(version) >> 22U) & 0x7FU)
+#define VK_API_VERSION_MINOR(version) (((uint32_t)(version) >> 12U) & 0x3FFU)
+
+#if defined(PL_HAVE_SHADERC_VK_1_4)
+# define SHADERC_VULKAN_MAX shaderc_env_version_vulkan_1_4
+#elif defined(PL_HAVE_SHADERC_VK_1_3)
+# define SHADERC_VULKAN_MAX shaderc_env_version_vulkan_1_3
+#else
+# define SHADERC_VULKAN_MAX shaderc_env_version_vulkan_1_2
+#endif
+
 const struct spirv_compiler pl_spirv_shaderc;
 
 struct priv {
@@ -57,8 +68,25 @@ static pl_spirv shaderc_create(pl_log log, struct pl_spirv_version spirv_ver)
 
     // Clamp to supported version by shaderc
     if (ver < spirv->version.spv_version) {
+        PL_WARN(spirv, "SPIR-V %u.%u is not supported by the current"
+                       " version of shaderc. Falling back to %u.%u!",
+                spirv->version.spv_version >> 16, (spirv->version.spv_version >> 8) & 0xff,
+                ver >> 16, (ver >> 8) & 0xff);
         spirv->version.spv_version = ver;
         spirv->version.env_version = pl_spirv_version_to_vulkan(ver);
+    }
+
+    if (SHADERC_VULKAN_MAX < spirv->version.env_version) {
+        PL_WARN(spirv, "Vulkan %u.%u is not supported by the current"
+                       " version of shaderc. Falling back to %u.%u!",
+                       VK_API_VERSION_MAJOR(spirv->version.env_version),
+                       VK_API_VERSION_MINOR(spirv->version.env_version),
+                       VK_API_VERSION_MAJOR(SHADERC_VULKAN_MAX),
+                       VK_API_VERSION_MINOR(SHADERC_VULKAN_MAX));
+        // The SPIR-V version has already been clamped above.
+        // In practice, this only occurs for Vulkan 1.3 and 1.4,
+        // where the SPIR-V version is the same (1.6).
+        spirv->version.env_version = SHADERC_VULKAN_MAX;
     }
 
     pl_hash_merge(&spirv->signature, (uint64_t) spirv->version.spv_version << 32 |

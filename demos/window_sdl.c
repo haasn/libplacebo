@@ -5,6 +5,7 @@
 #endif
 
 #include <SDL.h>
+#include <string.h>
 
 #include "common.h"
 #include "window.h"
@@ -149,6 +150,10 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
 #endif // USE_VK
 
 #ifdef USE_GL
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
     p->gl_ctx = SDL_GL_CreateContext(p->win);
     if (!p->gl_ctx) {
         fprintf(stderr, "SDL2: Failed creating GL context: %s\n", SDL_GetError());

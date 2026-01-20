@@ -11,11 +11,11 @@ stages:
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20230730213642
-    IMAGE_UBUNTU_JAMMY_AARCH: registry.videolan.org/libplacebo-ubuntu-jammy-aarch64:20230203024122
+    IMAGE_UBUNTU_NOBLE: registry.videolan.org/libplacebo-ubuntu-noble:20260108182833
+    IMAGE_UBUNTU_NOBLE_AARCH: registry.videolan.org/libplacebo-ubuntu-noble-aarch64:20260110170627
 
 linux:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: compile
     tags:
         - docker
@@ -26,10 +26,11 @@ linux:
                       -Dtests=true
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build
 
 static:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: compile
     tags:
         - docker
@@ -40,10 +41,11 @@ static:
                       --werror
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build
 
 win32:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: compile
     tags:
         - docker
@@ -54,12 +56,14 @@ win32:
                       -Dtests=true
                       -Ddebug-abort=true
                       -Dd3d11=enabled
-                      --cross-file /opt/crossfiles/i686-w64-mingw32.meson
+                      -Dshaderc=disabled
+                      -Dvk-proc-addr=disabled
+                      --cross-file i686-w64-mingw32.meson
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
 win64:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: compile
     tags:
         - docker
@@ -70,12 +74,14 @@ win64:
                       -Dtests=true
                       -Ddebug-abort=true
                       -Dd3d11=enabled
-                      --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
+                      -Dshaderc=disabled
+                      -Dvk-proc-addr=disabled
+                      --cross-file x86_64-w64-mingw32.meson
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
 aarch64:
-    image: $IMAGE_UBUNTU_JAMMY_AARCH
+    image: $IMAGE_UBUNTU_NOBLE_AARCH
     stage: compile
     tags:
         - docker
@@ -101,7 +107,7 @@ macos:
         - cd build && meson test -t 5 -v --num-processes=1
 
 scan:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: compile
     tags:
         - docker
@@ -114,38 +120,43 @@ scan:
                         -Dbench=true
                         -Dshaderc=enabled
                         -Dglslang=enabled
+                        -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build scan-build
 
 llvmpipe:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: test
     tags:
         - docker
         - amd64
     script:
-        - meson build --buildtype release
+        - meson build --buildtype debugoptimized
                       --werror
                       -Dtests=true
                       -Ddebug-abort=true
                       -Dc_args='-DCI_ALLOW_SW -DCI_MAXGL'
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
         - ninja -C build
         - cd build && meson test -t 20 -v --num-processes=1
 
 gpu:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: test
     tags:
         - gpu
     script:
-        - meson build --buildtype release
+        - git clone --depth 1 -b v1.16 https://github.com/linux-test-project/lcov.git
+        - export PATH="`realpath lcov/bin`:$PATH"
+        - meson build --buildtype debugoptimized
                       --werror
                       -Dtests=true
                       -Ddemos=false
                       -Ddebug-abort=true
                       -Dshaderc=enabled
                       -Dglslang=enabled
+                      -Dvulkan-sdk=$VULKAN_SDK
                       -Db_coverage=true
         - ninja -C build
         - vulkaninfo
@@ -166,12 +177,16 @@ gpu:
               path: build/meson-logs/coverage.xml
 
 sanitize:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_NOBLE
     stage: sanitize
     tags:
         - gpu
     variables:
-        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
+        # Disable leak detection, mesa likes to leak some memory, and since
+        # the driver is unloaded we can't really add suppressions for them.
+        # https://gitlab.freedesktop.org/mesa/mesa/-/issues/12805
+        # https://gitlab.freedesktop.org/mesa/mesa/-/issues/12811
+        ASAN_OPTIONS: "halt_on_error=1:abort_on_error=1:print_summary=1:detect_leaks=0"
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized

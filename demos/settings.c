@@ -14,9 +14,6 @@
 #define PL_BASENAME basename
 #endif
 
-#ifdef HAVE_NUKLEAR
-#include "ui.h"
-
 bool parse_args(struct plplay_args *args, int argc, char *argv[])
 {
     static struct option long_options[] = {
@@ -88,6 +85,9 @@ error:
     fprintf(stderr, "  -w, --window    Specify the windowing API\n");
     return false;
 }
+
+#ifdef HAVE_NUKLEAR
+#include "ui.h"
 
 static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *path)
 {
@@ -241,16 +241,18 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_CLEAR_COLOR]    = "Solid color",
                 [PL_CLEAR_TILES]    = "Tiled pattern",
                 [PL_CLEAR_SKIP]     = "Skip clearing",
+                [PL_CLEAR_BLUR]     = "Blurred copy",
             };
 
             nk_label(nk, "Background:", NK_TEXT_LEFT);
-            par->background = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT,
+            par->background = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT - 1,
                                        par->background, 16, nk_vec2(nk_widget_width(nk), 300));
 
             nk_label(nk, "Borders:", NK_TEXT_LEFT);
             par->border = nk_combo(nk, clear_modes, PL_CLEAR_MODE_COUNT,
                                    par->border, 16, nk_vec2(nk_widget_width(nk), 300));
 
+            nk_label(nk, "Background color:", NK_TEXT_LEFT);
             if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
                 nk_layout_row_dynamic(nk, 200, 1);
                 nk_color_pick(nk, &bg, NK_RGBA);
@@ -262,6 +264,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 par->background_transparency = 1.0 - bg.a;
             }
 
+            nk_property_float(nk, "Blur radius", 0, &par->blur_radius, 100.0, 1, 0.1);
             nk_property_int(nk, "Tile size", 2, &par->tile_size, 256, 1, 1);
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 3, (float[]){ 0.4, 0.3, 0.3 });
@@ -428,6 +431,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_DEINTERLACE_WEAVE]  = "Field weaving (no-op)",
                 [PL_DEINTERLACE_BOB]    = "Naive bob (line doubling)",
                 [PL_DEINTERLACE_YADIF]  = "Yadif (\"yet another deinterlacing filter\")",
+                [PL_DEINTERLACE_BWDIF]  = "Bwdif (\"bob weaver deinterlacing filter\")",
             };
 
             nk_label(nk, "Deinterlacing algorithm", NK_TEXT_LEFT);
@@ -437,6 +441,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             switch (dpar->algo) {
             case PL_DEINTERLACE_WEAVE:
             case PL_DEINTERLACE_BOB:
+            case PL_DEINTERLACE_BWDIF:
                 break;
             case PL_DEINTERLACE_YADIF:
                 nk_checkbox_label(nk, "Skip spatial check", &dpar->skip_spatial_check);
@@ -542,7 +547,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
 
             // Convert to human-friendly temperature values for display
             int temp = (int) roundf(adj->temperature * 3500) + 6500;
-            nk_property_int(nk, "Temperature (K)", 3000, &temp, 10000, 10, 5);
+            nk_property_int(nk, "Temperature (K)", 1700, &temp, 10000, 10, 5);
             adj->temperature = (temp - 6500) / 3500.0;
 
             struct pl_cone_params *cpar = &opts->cone_params;

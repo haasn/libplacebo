@@ -229,6 +229,7 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 
     pl_cache_obj obj = { .key = CACHE_KEY_GL_PROG };
     if (cache) {
+        pl_hash_merge(&obj.key, p->sig);
         pl_hash_merge(&obj.key, pl_str0_hash(params->glsl_shader));
         if (params->type == PL_PASS_RASTER)
             pl_hash_merge(&obj.key, pl_str0_hash(params->vertex_shader));

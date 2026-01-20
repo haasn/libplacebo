@@ -120,6 +120,14 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
         (arr).num = _len;                                                       \
     } while (0)
 
+#define PL_ARRAY_CLEAR(parent, arr, len)                                        \
+    do {                                                                        \
+        size_t _len = (len);                                                    \
+        PL_ARRAY_RESIZE(parent, arr, _len);                                     \
+        memset((arr).elem, 0, _len * sizeof((arr).elem[0]));                    \
+        (arr).num = _len;                                                       \
+    } while (0)
+
 #define PL_ARRAY_GROW(parent, arr)                                              \
     do {                                                                        \
         size_t _avail = pl_get_size((arr).elem) / sizeof((arr).elem[0]);        \

@@ -54,9 +54,9 @@ struct vk_ext {
 static const char *vk_instance_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
+    VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
 };
 
 // List of mandatory instance-level function pointers, including functions
@@ -67,10 +67,10 @@ static const struct vk_fun vk_inst_funs[] = {
     PL_VK_INST_FUN(GetDeviceProcAddr),
     PL_VK_INST_FUN(GetPhysicalDeviceExternalBufferProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceExternalSemaphoreProperties),
-    PL_VK_INST_FUN(GetPhysicalDeviceFeatures2KHR),
+    PL_VK_INST_FUN(GetPhysicalDeviceFeatures2),
     PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties),
-    PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties2KHR),
-    PL_VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2KHR),
+    PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties2),
+    PL_VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2),
     PL_VK_INST_FUN(GetPhysicalDeviceMemoryProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceProperties2),
@@ -187,6 +187,23 @@ static const struct vk_ext vk_device_extensions[] = {
             PL_VK_DEV_FUN(QueueSubmit2KHR),
             {0}
         },
+    }, {
+        .name = VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+        .funs = (const struct vk_fun[]) {
+            {0}
+        },
+    }, {
+        .name = VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,
+        .funs = (const struct vk_fun[]) {
+            PL_VK_DEV_FUN(CopyImageToMemoryEXT),
+            PL_VK_DEV_FUN(CopyMemoryToImageEXT),
+            PL_VK_DEV_FUN(TransitionImageLayoutEXT),
+            {0}
+        },
+    }, {
+        .name = VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+    }, {
+        .name = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
     },
 };
 
@@ -214,6 +231,10 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
 #endif
     VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+    VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+    VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,
+    VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+    VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -226,8 +247,21 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "vk_device_extensions?");
 
 // Recommended features; keep in sync with libavutil vulkan hwcontext
+static const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+    .swapchainMaintenance1 = true,
+};
+
+static const VkPhysicalDeviceVulkan14Features recommended_vk14 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+    .pNext = (void *) &swapchain_maintenance1,
+    .hostImageCopy = true,
+    .pushDescriptor = true,
+};
+
 static const VkPhysicalDeviceVulkan13Features recommended_vk13 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    .pNext = (void *) &recommended_vk14,
     .computeFullSubgroups = true,
     .maintenance4 = true,
     .shaderZeroInitializeWorkgroupMemory = true,
@@ -348,8 +382,8 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CreateComputePipelines),
     PL_VK_DEV_FUN(CreateDescriptorPool),
     PL_VK_DEV_FUN(CreateDescriptorSetLayout),
-    PL_VK_DEV_FUN(CreateFence),
     PL_VK_DEV_FUN(CreateFramebuffer),
+    PL_VK_DEV_FUN(CreateFence),
     PL_VK_DEV_FUN(CreateGraphicsPipelines),
     PL_VK_DEV_FUN(CreateImage),
     PL_VK_DEV_FUN(CreateImageView),
@@ -366,8 +400,8 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroyDescriptorPool),
     PL_VK_DEV_FUN(DestroyDescriptorSetLayout),
     PL_VK_DEV_FUN(DestroyDevice),
-    PL_VK_DEV_FUN(DestroyFence),
     PL_VK_DEV_FUN(DestroyFramebuffer),
+    PL_VK_DEV_FUN(DestroyFence),
     PL_VK_DEV_FUN(DestroyImage),
     PL_VK_DEV_FUN(DestroyImageView),
     PL_VK_DEV_FUN(DestroyPipeline),
@@ -393,12 +427,12 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(MapMemory),
     PL_VK_DEV_FUN(QueueSubmit),
     PL_VK_DEV_FUN(QueueWaitIdle),
-    PL_VK_DEV_FUN(ResetFences),
     PL_VK_DEV_FUN(ResetQueryPool),
+    PL_VK_DEV_FUN(ResetFences),
     PL_VK_DEV_FUN(SetDebugUtilsObjectNameEXT),
     PL_VK_DEV_FUN(UpdateDescriptorSets),
-    PL_VK_DEV_FUN(WaitForFences),
     PL_VK_DEV_FUN(WaitSemaphores),
+    PL_VK_DEV_FUN(WaitForFences),
 };
 
 static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
@@ -410,29 +444,6 @@ static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
     } else {
         *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
     };
-
-    if (!*pfn) {
-        // Some functions get their extension suffix stripped when promoted
-        // to core. As a very simple work-around to this, try loading the
-        // function a second time with the reserved suffixes stripped.
-        static const char *ext_suffixes[] = { "KHR", "EXT" };
-        pl_str fun_name = pl_str0(fun->name);
-        char buf[64];
-
-        for (int i = 0; i < PL_ARRAY_SIZE(ext_suffixes); i++) {
-            if (!pl_str_eatend0(&fun_name, ext_suffixes[i]))
-                continue;
-
-            pl_assert(sizeof(buf) > fun_name.len);
-            snprintf(buf, sizeof(buf), "%.*s", PL_STR_FMT(fun_name));
-            if (fun->device_level) {
-                *pfn = vk->GetDeviceProcAddr(vk->dev, buf);
-            } else {
-                *pfn = vk->GetInstanceProcAddr(vk->inst, buf);
-            }
-            return;
-        }
-    }
 }
 
 // Private struct for pl_vk_inst
@@ -483,6 +494,20 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
 
     case 0xf6a37cfa: // VUID-vkGetImageSubresourceLayout-format-04461
         // Work around https://github.com/KhronosGroup/Vulkan-Docs/issues/2109
+        return false;
+
+    case 0x54023d1d: // VUID-VkDescriptorSetLayoutCreateInfo-flags-00281
+        // Work around https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9542
+        return false;
+
+    case 0x8d2176ff: // VUID-VkCopyMemoryToImageInfo-dstImageLayout-09060
+    case 0xa662049a: // VUID-VkHostImageLayoutTransitionInfo-newLayout-09057
+        // Work around https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/10241
+        return false;
+
+    case 0x2d90c7c0: // VUID-VkSwapchainPresentModesCreateInfoKHR-pPresentModes-07763
+    case 0x76cf26e9: // VUID-VkSwapchainPresentModesCreateInfoEXT-pPresentModes-07763
+        // Work around https://gitlab.freedesktop.org/mesa/mesa/-/issues/14622
         return false;
     }
 
@@ -604,11 +629,6 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
 
     PL_ARRAY(const char *) layers = {0};
 
-    // Sorted by priority
-    static const char *debug_layers[] = {
-        "VK_LAYER_KHRONOS_validation",
-        "VK_LAYER_LUNARG_standard_validation",
-    };
 
     // This layer has to be initialized first, otherwise all sorts of weirdness
     // happens (random segfaults, yum)
@@ -616,18 +636,17 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
     uint32_t debug_layer = 0; // layer idx of debug layer
     uint32_t debug_layer_version = 0;
     if (debug) {
-        for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
-            for (int n = 0; n < num_layers_avail; n++) {
-                if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
-                    continue;
+        for (int n = 0; n < num_layers_avail; n++) {
+            const char * const layer = "VK_LAYER_KHRONOS_validation";
+            if (strcmp(layer, layers_avail[n].layerName) != 0)
+                continue;
 
-                debug_layer = n;
-                debug_layer_version = layers_avail[n].specVersion;
-                pl_info(log, "Enabling debug meta layer: %s (v%d.%d.%d)",
-                        debug_layers[i], PRINTF_VER(debug_layer_version));
-                PL_ARRAY_APPEND(tmp, layers, debug_layers[i]);
-                goto debug_layers_done;
-            }
+            debug_layer = n;
+            debug_layer_version = layers_avail[n].specVersion;
+            pl_info(log, "Enabling debug layer: %s (v%d.%d.%d)",
+                    layer, PRINTF_VER(debug_layer_version));
+            PL_ARRAY_APPEND(tmp, layers, layer);
+            goto debug_layers_done;
         }
 
         // No layer found..
@@ -696,9 +715,6 @@ debug_layers_done: ;
         }
     }
 
-    // Add mandatory extensions
-    PL_ARRAY_APPEND(tmp, exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
     // Add optional extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_instance_extensions); i++) {
         const char *ext = vk_instance_extensions[i];
@@ -766,12 +782,26 @@ next_user_ext: ;
 next_opt_user_ext: ;
     }
 
+    const VkDebugUtilsMessengerCreateInfoEXT dinfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = vk_dbg_utils_cb,
+        .pUserData = (void *) log,
+    };
+
     // If debugging is enabled, load the necessary debug utils extension
     if (debug) {
         const char * const ext = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
+                vk_link_struct(&info, &dinfo);
                 goto debug_ext_done;
             }
         }
@@ -779,6 +809,7 @@ next_opt_user_ext: ;
         for (int n = 0; n < layer_exts[debug_layer].num_exts; n++) {
             if (strcmp(ext, layer_exts[debug_layer].exts[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
+                vk_link_struct(&info, &dinfo);
                 goto debug_ext_done;
             }
         }
@@ -792,31 +823,35 @@ next_opt_user_ext: ;
 
 debug_ext_done: ;
 
-    // Limit this to 1.3.250+ because of bugs in older versions.
+    #define ENABLE_BOOL(name) \
+        {"VK_LAYER_KHRONOS_validation", name, VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &(VkBool32){VK_TRUE}}
+    const VkLayerSettingEXT debug_settings[] = {
+        ENABLE_BOOL("validate_best_practices"),
+
+        ENABLE_BOOL("gpuav_enable"),
+        ENABLE_BOOL("gpuav_image_layout"),
+        ENABLE_BOOL("gpuav_debug_validate_instrumented_shaders"),
+
+        ENABLE_BOOL("validate_sync"),
+        ENABLE_BOOL("syncval_shader_accesses_heuristic"),
+        ENABLE_BOOL("syncval_submit_time_validation"),
+    };
+
+    const VkLayerSettingsCreateInfoEXT debug_layer_settings = {
+        .sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+        .settingCount = PL_ARRAY_SIZE(debug_settings),
+        .pSettings = debug_settings,
+    };
+
+    // Limit this to 1.3.296+ because of bugs in older versions.
     if (debug && params->debug_extra &&
-        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 259))
+        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 296))
     {
-        // Try enabling as many validation features as possible
-        static const VkValidationFeatureEnableEXT validation_features[] = {
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-            // Depends on timeline semaphores being implemented:
-            // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7600
-            //VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-        };
-
-        static const VkValidationFeaturesEXT vinfo = {
-            .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-            .pEnabledValidationFeatures = validation_features,
-            .enabledValidationFeatureCount = PL_ARRAY_SIZE(validation_features),
-        };
-
-        const char * const ext = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
+        const char * const ext = VK_EXT_LAYER_SETTINGS_EXTENSION_NAME;
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
-                vk_link_struct(&info, &vinfo);
+                vk_link_struct(&info, &debug_layer_settings);
                 goto debug_extra_ext_done;
             }
         }
@@ -824,13 +859,13 @@ debug_ext_done: ;
         for (int n = 0; n < layer_exts[debug_layer].num_exts; n++) {
             if (strcmp(ext, layer_exts[debug_layer].exts[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(tmp, exts, ext);
-                vk_link_struct(&info, &vinfo);
+                vk_link_struct(&info, &debug_layer_settings);
                 goto debug_extra_ext_done;
             }
         }
 
-        pl_warn(log, "GPU-assisted validation enabled but not supported by "
-                "instance, disabling...");
+        pl_warn(log, "%s not available, debug_extra options were not applied.",
+                VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
     }
 
 debug_extra_ext_done: ;
@@ -873,19 +908,6 @@ debug_extra_ext_done: ;
 
     // Set up a debug callback to catch validation messages
     if (debug) {
-        VkDebugUtilsMessengerCreateInfoEXT dinfo = {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-            .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-            .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            .pfnUserCallback = vk_dbg_utils_cb,
-            .pUserData = (void *) log,
-        };
-
         PL_VK_LOAD_FUN(inst, CreateDebugUtilsMessengerEXT, get_addr);
         CreateDebugUtilsMessengerEXT(inst, &dinfo, PL_VK_ALLOC, &p->debug_utils_cb);
     }
@@ -1121,6 +1143,22 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
     return idx;
 }
 
+static const struct vk_fun *promote_vk_fun(void *parent, const struct vk_fun *f)
+{
+    // Functions get their extension suffix stripped when promoted
+    // to core. Strip the suffixes to query core alias of the function.
+    static const char *const ext_suffixes[] = { "KHR", "EXT" };
+    pl_str fun_name = pl_str0(f->name);
+    for (int i = 0; i < PL_ARRAY_SIZE(ext_suffixes); i++) {
+        if (pl_str_eatend0(&fun_name, ext_suffixes[i])) {
+            struct vk_fun *pf = (struct vk_fun *)pl_memdup_ptr(parent, f);
+            pf->name = pl_strdup0(pf, fun_name);
+            return pf;
+        }
+    }
+    return f;
+}
+
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
     pl_assert(vk->physd);
@@ -1201,7 +1239,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         if (core_ver && vk->api_ver >= core_ver) {
             // Layer is already implicitly enabled by the API version
             for (const struct vk_fun *f = ext->funs; f && f->name; f++)
-                PL_ARRAY_APPEND(tmp, ext_funs,  f);
+                PL_ARRAY_APPEND(tmp, ext_funs, promote_vk_fun(tmp, f));
             continue;
         }
 
@@ -1247,7 +1285,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         memset(&out[1], 0, size - sizeof(out[0]));
     }
 
-    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, features_sup);
+    vk->GetPhysicalDeviceFeatures2(vk->physd, features_sup);
 
     // Filter out unsupported features
     for (VkBaseOutStructure *f = (VkBaseOutStructure *) &features; f; f = f->pNext) {
@@ -1486,8 +1524,13 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
         }
     }
 
+    VkPhysicalDeviceDriverProperties driver_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+    };
+
     VkPhysicalDeviceIDPropertiesKHR id_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+        .pNext = &driver_props,
     };
 
     VkPhysicalDeviceProperties2KHR prop = {
@@ -1505,6 +1548,15 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
     PL_INFO(vk, "    Driver version: %"PRIx32, prop.properties.driverVersion);
     PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
+    PL_INFO(vk, "    Driver ID: %s", vk_driver_id_name(driver_props.driverID));
+    PL_INFO(vk, "    Driver name: %s", driver_props.driverName);
+    PL_INFO(vk, "    Driver info: %s", driver_props.driverInfo);
+    PL_INFO(vk, "    Conformance version: %u.%u.%u.%u",
+            driver_props.conformanceVersion.major,
+            driver_props.conformanceVersion.minor,
+            driver_props.conformanceVersion.subminor,
+            driver_props.conformanceVersion.patch);
+    PL_INFO(vk, "    Driver UUID: %s", PRINT_UUID(id_props.driverUUID));
 
     // Needed by device_init
     vk->api_ver = prop.properties.apiVersion;
@@ -1616,7 +1668,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         uint32_t core_ver = vk_ext_promoted_ver(ext->name);
         if (core_ver && vk->api_ver >= core_ver) {
             for (const struct vk_fun *f = ext->funs; f && f->name; f++)
-                load_vk_fun(vk, f);
+                load_vk_fun(vk, promote_vk_fun(tmp, f));
             continue;
         }
         for (int n = 0; n < params->num_extensions; n++) {
