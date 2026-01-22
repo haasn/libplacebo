@@ -338,14 +338,25 @@ static enum DXGI_FORMAT pick_format(pl_swapchain sw,
     struct priv *p = PL_PRIV(sw);
     struct d3d11_ctx *ctx = p->ctx;
 
+    // Allow 16-bit, which is scRGB in practice, only if explicitly requested.
+    // Shouldn't be used as it's not fully supported in libplacebo yet.
+    bool use_16_bits = p->params.alpha_bits > 8 || p->params.color_bits > 10;
+
+    // TODO: add proper support for scRGB (DXGI_FORMAT_R16G16B16A16_FLOAT)
+    if (use_16_bits && d3d11_format_supported(ctx, DXGI_FORMAT_R16G16B16A16_FLOAT))
+        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+
     bool use_10_bits = pl_color_space_is_hdr(hint) ||
                        pl_color_primaries_is_wide_gamut(hint->primaries) ||
                        !p->params.disable_10bit_sdr;
+    // If >2 alpha bits are requested, don't use rgb10a2, drop to rgba8 instead.
+    // This will most likely disable HDR output as well, but without scRGB support
+    // there's no better alternative.
+    if (p->params.alpha_bits > 2)
+        use_10_bits = false;
 
     if (use_10_bits && d3d11_format_supported(ctx, DXGI_FORMAT_R10G10B10A2_UNORM))
         return DXGI_FORMAT_R10G10B10A2_UNORM;
-
-    // TODO: add support for scRGB (DXGI_FORMAT_R16G16B16A16_FLOAT)
 
     return DXGI_FORMAT_R8G8B8A8_UNORM;
 }
