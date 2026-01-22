@@ -95,10 +95,6 @@ struct priv {
     // Affected by received colorspace hints.
     struct d3d11_csp_mapping csp_map;
 
-    // Whether a swapchain backbuffer format reconfiguration has been
-    // requested by means of an additional resize action.
-    bool update_swapchain_format;
-
     // Whether 10-bit backbuffer format is disabled for SDR content.
     bool disable_10bit_sdr;
 
@@ -191,7 +187,6 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
 
     *width = w;
     *height = h;
-    p->update_swapchain_format = false;
     return true;
 
 error:
@@ -210,12 +205,6 @@ static bool d3d11_sw_start_frame(pl_swapchain sw,
         PL_ERR(sw, "Attempted calling `pl_swapchain_start_frame` while a frame "
                "was already in progress! Call `pl_swapchain_submit_frame` first.");
         return false;
-    }
-
-    if (p->update_swapchain_format) {
-        int w = 0, h = 0;
-        if (!d3d11_sw_resize(sw, &w, &h))
-            return false;
     }
 
     p->backbuffer = get_backbuffer(sw);
@@ -399,6 +388,11 @@ static void update_swapchain_color_config(pl_swapchain sw,
             pl_get_dxgi_csp_name(csp_map.d3d11_csp));
 
     bool fmt_supported = d3d11_format_supported(ctx, csp_map.d3d11_fmt);
+    // Set format first, as not all colorspaces are supported with each formats
+    int w = 0, h = 0;
+    if (!fmt_supported || !d3d11_sw_resize(sw, &w, &h))
+        csp_map.d3d11_fmt = old_map.d3d11_fmt;
+
     bool csp_supported = swapchain3 ?
         d3d11_csp_supported(ctx, swapchain3, csp_map.d3d11_csp) : true;
     if (!fmt_supported || !csp_supported) {
@@ -411,7 +405,6 @@ static void update_swapchain_color_config(pl_swapchain sw,
     }
 
     p->csp_map = csp_map;
-    p->update_swapchain_format = true;
 
     if (!swapchain3)
         goto cleanup;
@@ -419,7 +412,6 @@ static void update_swapchain_color_config(pl_swapchain sw,
     if (!set_swapchain_metadata(ctx, swapchain3, &p->csp_map)) {
         // format succeeded, but color space configuration failed
         p->csp_map = old_map;
-        p->csp_map.d3d11_fmt = csp_map.d3d11_fmt;
     }
 
     pl_d3d11_flush_message_queue(ctx, "After colorspace hint");
