@@ -29,63 +29,9 @@ struct d3d11_csp_mapping {
     struct pl_color_space out_csp;
 };
 
-static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space *hint,
-                                                    bool use_8bit_sdr)
-{
-    if (pl_color_space_is_hdr(hint))
-    {
-        struct pl_color_space pl_csp = pl_color_space_hdr10;
-        pl_csp.hdr = (struct pl_hdr_metadata) {
-            // Whitelist only values that we support signalling metadata for
-            .prim     = hint->hdr.prim,
-            .min_luma = hint->hdr.min_luma,
-            .max_luma = hint->hdr.max_luma,
-            .max_cll  = hint->hdr.max_cll,
-            .max_fall = hint->hdr.max_fall,
-        };
-
-        return (struct d3d11_csp_mapping){
-            .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
-            .d3d11_fmt = DXGI_FORMAT_R10G10B10A2_UNORM,
-            .out_csp   = pl_csp,
-        };
-    } else if (pl_color_primaries_is_wide_gamut(hint->primaries)) {
-        return (struct d3d11_csp_mapping){
-            .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020,
-            .d3d11_fmt = DXGI_FORMAT_R10G10B10A2_UNORM,
-            .out_csp = {
-                .primaries = PL_COLOR_PRIM_BT_2020,
-                .transfer  = PL_COLOR_TRC_GAMMA22,
-            },
-        };
-#if 0 // TODO: Add support for scRGB
-    } else if (pl_color_primaries_is_wide_gamut(hint->primaries) ||
-               hint->transfer == PL_COLOR_TRC_LINEAR)
-    {
-        // scRGB a la VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT,
-        // so could be utilized for HDR/wide gamut content as well
-        // with content that goes beyond 0.0-1.0.
-        return (struct d3d11_csp_mapping){
-            .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709,
-            .d3d11_fmt = DXGI_FORMAT_R16G16B16A16_FLOAT,
-            .out_csp = {
-                .primaries = PL_COLOR_PRIM_BT_709,
-                .transfer  = PL_COLOR_TRC_LINEAR,
-            }
-        };
-#endif
-    }
-
-    return (struct d3d11_csp_mapping){
-        .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
-        .d3d11_fmt = use_8bit_sdr ? DXGI_FORMAT_R8G8B8A8_UNORM :
-                                    DXGI_FORMAT_R10G10B10A2_UNORM,
-        .out_csp = pl_color_space_srgb,
-    };
-}
-
 struct priv {
     struct pl_sw_fns impl;
+    struct pl_d3d11_swapchain_params params;
 
     struct d3d11_ctx *ctx;
     IDXGISwapChain *swapchain;
@@ -94,12 +40,6 @@ struct priv {
     // Currently requested or applied swap chain configuration.
     // Affected by received colorspace hints.
     struct d3d11_csp_mapping csp_map;
-
-    // Whether 10-bit backbuffer format is disabled for SDR content.
-    bool disable_10bit_sdr;
-
-    // Fallback to 8-bit RGB was triggered due to lack of compatiblity
-    bool fallback_8bit_rgb;
 };
 
 static void d3d11_sw_destroy(pl_swapchain sw)
@@ -167,19 +107,7 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
 
         HRESULT hr = IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
                                                   p->csp_map.d3d11_fmt, desc.Flags);
-
-        if (hr == E_INVALIDARG && p->csp_map.d3d11_fmt != DXGI_FORMAT_R8G8B8A8_UNORM)
-        {
-            PL_WARN(sw, "Reconfiguring the swapchain failed, re-trying with R8G8B8A8_UNORM fallback.");
-            D3D(IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
-                                             DXGI_FORMAT_R8G8B8A8_UNORM, desc.Flags));
-
-            // re-configure the colorspace to 8-bit RGB SDR fallback
-            p->csp_map = map_pl_csp_to_d3d11(&pl_color_space_monitor, true);
-            p->fallback_8bit_rgb = true;
-        }
-        else if (FAILED(hr))
-        {
+        if (FAILED(hr)) {
             PL_ERR(sw, "Reconfiguring the swapchain failed with error: %s", pl_hresult_to_str(hr));
             return false;
         }
@@ -188,9 +116,6 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
     *width = w;
     *height = h;
     return true;
-
-error:
-    return false;
 }
 
 static bool d3d11_sw_start_frame(pl_swapchain sw,
@@ -349,6 +274,82 @@ error:
     return false;
 }
 
+static void pick_colorspace(pl_swapchain sw, struct d3d11_csp_mapping *csp_map,
+                            const struct pl_color_space *hint, IDXGISwapChain3 *swapchain3)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct d3d11_ctx *ctx = p->ctx;
+
+    if (!swapchain3)
+        goto srgb;
+
+    // HDR10 output works only for DXGI_FORMAT_R10G10B10A2_UNORM, even though
+    // it says csp is supported, the HDR pass-through makes only sense with rgb10a2.
+    // TODO: scRGB support
+    if (pl_color_space_is_hdr(hint) && csp_map->d3d11_fmt == DXGI_FORMAT_R10G10B10A2_UNORM) {
+        if (d3d11_csp_supported(ctx, swapchain3, DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)) {
+            struct pl_color_space pl_csp = pl_color_space_hdr10;
+            pl_csp.hdr = (struct pl_hdr_metadata) {
+                // Whitelist only values that we support signalling metadata for
+                .prim     = hint->hdr.prim,
+                .min_luma = hint->hdr.min_luma,
+                .max_luma = hint->hdr.max_luma,
+                .max_cll  = hint->hdr.max_cll,
+                .max_fall = hint->hdr.max_fall,
+            };
+            csp_map->d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+            csp_map->out_csp = pl_csp;
+            return;
+        }
+    }
+
+    if (pl_color_primaries_is_wide_gamut(hint->primaries)) {
+        if (d3d11_csp_supported(ctx, swapchain3, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020)) {
+            csp_map->d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020;
+            csp_map->out_csp = (struct pl_color_space){
+                .primaries = PL_COLOR_PRIM_BT_2020,
+                .transfer  = PL_COLOR_TRC_GAMMA22,
+            };
+            return;
+        }
+    }
+
+    if (!d3d11_csp_supported(ctx, swapchain3, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)) {
+        if (d3d11_csp_supported(ctx, swapchain3, DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709)) {
+            csp_map->d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+            csp_map->out_csp = (struct pl_color_space){
+                .primaries = PL_COLOR_PRIM_BT_709,
+                .transfer  = PL_COLOR_TRC_LINEAR,
+            };
+            return;
+        }
+        PL_ERR(ctx, "Couldn't find a supported color space for the swapchain! "
+                    "This is unexpected and may lead to incorrect colors.");
+    }
+
+srgb:
+    csp_map->d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    csp_map->out_csp = pl_color_space_srgb;
+}
+
+static enum DXGI_FORMAT pick_format(pl_swapchain sw,
+                                    const struct pl_color_space *hint)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct d3d11_ctx *ctx = p->ctx;
+
+    bool use_10_bits = pl_color_space_is_hdr(hint) ||
+                       pl_color_primaries_is_wide_gamut(hint->primaries) ||
+                       !p->params.disable_10bit_sdr;
+
+    if (use_10_bits && d3d11_format_supported(ctx, DXGI_FORMAT_R10G10B10A2_UNORM))
+        return DXGI_FORMAT_R10G10B10A2_UNORM;
+
+    // TODO: add support for scRGB (DXGI_FORMAT_R16G16B16A16_FLOAT)
+
+    return DXGI_FORMAT_R8G8B8A8_UNORM;
+}
+
 static void update_swapchain_color_config(pl_swapchain sw,
                                           const struct pl_color_space *csp,
                                           bool is_internal)
@@ -358,10 +359,6 @@ static void update_swapchain_color_config(pl_swapchain sw,
     IDXGISwapChain3 *swapchain3 = NULL;
     struct d3d11_csp_mapping old_map = p->csp_map;
 
-    // ignore config changes in fallback mode
-    if (p->fallback_8bit_rgb)
-        goto cleanup;
-
     HRESULT hr = IDXGISwapChain_QueryInterface(p->swapchain, &IID_IDXGISwapChain3,
                                                (void **)&swapchain3);
     if (FAILED(hr)) {
@@ -370,11 +367,16 @@ static void update_swapchain_color_config(pl_swapchain sw,
         swapchain3 = NULL;
     }
 
-    // Lack of swap chain v3 means we cannot control swap chain color space;
-    // Only effective formats are the 8 and 10 bit RGB ones.
-    struct d3d11_csp_mapping csp_map =
-        map_pl_csp_to_d3d11(swapchain3 ? csp : &pl_color_space_unknown,
-                            p->disable_10bit_sdr);
+    struct d3d11_csp_mapping csp_map = {
+        .d3d11_fmt = pick_format(sw, csp)
+    };
+
+    // Set format first, as not all colorspaces are supported with each formats
+    int w = 0, h = 0;
+    if (!d3d11_sw_resize(sw, &w, &h))
+        csp_map.d3d11_fmt = old_map.d3d11_fmt;
+
+    pick_colorspace(sw, &csp_map, csp, swapchain3);
 
     if (p->csp_map.d3d11_fmt == csp_map.d3d11_fmt &&
         p->csp_map.d3d11_csp == csp_map.d3d11_csp &&
@@ -387,21 +389,10 @@ static void update_swapchain_color_config(pl_swapchain sw,
             pl_get_dxgi_format_name(csp_map.d3d11_fmt),
             pl_get_dxgi_csp_name(csp_map.d3d11_csp));
 
-    bool fmt_supported = d3d11_format_supported(ctx, csp_map.d3d11_fmt);
-    // Set format first, as not all colorspaces are supported with each formats
-    int w = 0, h = 0;
-    if (!fmt_supported || !d3d11_sw_resize(sw, &w, &h))
-        csp_map.d3d11_fmt = old_map.d3d11_fmt;
-
-    bool csp_supported = swapchain3 ?
-        d3d11_csp_supported(ctx, swapchain3, csp_map.d3d11_csp) : true;
-    if (!fmt_supported || !csp_supported) {
-        PL_ERR(ctx, "New swap chain configuration was deemed not supported: "
-                    "format: %s, color space: %s. Failling back to 8bit RGB.",
-               fmt_supported ? "supported" : "unsupported",
-               csp_supported ? "supported" : "unsupported");
-        // fall back to 8bit sRGB if requested configuration is not supported
-        csp_map = map_pl_csp_to_d3d11(&pl_color_space_monitor, true);
+    if (csp_map.d3d11_csp == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709) {
+        // This is the last resort fallback.
+        PL_WARN(ctx, "scRGB (%s) is not fully supported, colors may be incorrect.",
+                pl_get_dxgi_format_name(csp_map.d3d11_fmt));
     }
 
     p->csp_map = csp_map;
@@ -409,10 +400,8 @@ static void update_swapchain_color_config(pl_swapchain sw,
     if (!swapchain3)
         goto cleanup;
 
-    if (!set_swapchain_metadata(ctx, swapchain3, &p->csp_map)) {
-        // format succeeded, but color space configuration failed
+    if (!set_swapchain_metadata(ctx, swapchain3, &p->csp_map))
         p->csp_map = old_map;
-    }
 
     pl_d3d11_flush_message_queue(ctx, "After colorspace hint");
 
@@ -626,21 +615,14 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     *p = (struct priv) {
         .impl = d3d11_swapchain,
         .ctx = ctx,
-        // default to standard 8 or 10 bit RGB, unset pl_color_space
-        .csp_map = {
-            .d3d11_fmt = params->disable_10bit_sdr ?
-                DXGI_FORMAT_R8G8B8A8_UNORM :
-                (d3d11_format_supported(ctx, DXGI_FORMAT_R10G10B10A2_UNORM) ?
-                 DXGI_FORMAT_R10G10B10A2_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM),
-        },
-        .disable_10bit_sdr = params->disable_10bit_sdr,
+        .params = *params,
     };
 
     if (params->swapchain) {
         p->swapchain = params->swapchain;
         IDXGISwapChain_AddRef(params->swapchain);
     } else {
-        p->swapchain = create_swapchain(ctx, params, p->csp_map.d3d11_fmt);
+        p->swapchain = create_swapchain(ctx, params, pick_format(sw, &pl_color_space_srgb));
         if (!p->swapchain)
             goto error;
     }
