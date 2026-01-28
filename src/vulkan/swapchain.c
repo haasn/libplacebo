@@ -143,11 +143,12 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
         };
         return true;
     case VK_COLOR_SPACE_PASS_THROUGH_EXT:
-        // On color-managed Wayland compositors, it behaves similar to
-        // VK_COLOR_SPACE_SRGB_NONLINEAR_KHR as they would treat un-tagged surface
-        // as sRGB, but on other OSes it's behavior is not clearly defined, so
-        // don't use it.
-        return false;
+        // Platform specific output color space, map to unknown
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_UNKNOWN,
+            .transfer  = PL_COLOR_TRC_UNKNOWN,
+        };
+        return true;
 
 #ifdef VK_AMD_display_native_hdr
     case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD:
@@ -206,6 +207,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                         score += 10;
                     else if (space.transfer == PL_COLOR_TRC_LINEAR)
                         continue; // avoid 8-bit linear formats
+                    else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
+                        score += 10;
                     else if (disable10)
                         score += 30;
                     else
@@ -216,6 +219,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                         score += 30;
                     else if (space.transfer == PL_COLOR_TRC_LINEAR)
                         continue; // avoid 10-bit linear formats
+                    else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
+                        score += 20;
                     else if (disable10)
                         score += 20;
                     else
@@ -225,6 +230,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                     if (pl_color_transfer_is_hdr(space.transfer))
                         score += 20;
                     else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                        score += 30;
+                    else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
                         score += 30;
                     else if (disable10)
                         score += 10;
@@ -268,6 +275,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 score += 10000;
             if (space.transfer == hint->transfer)
                 score += 20000;
+            else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
+                continue; // allow unknown (PASS_THROUGH_EXT) only if requested
 
             switch (plfmt->type) {
             case PL_FMT_UNKNOWN: break;
@@ -1046,7 +1055,9 @@ static void vk_sw_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
 
     // This should never fail if the swapchain already exists
     bool ok = pick_surf_format(sw, csp);
-    set_hdr_metadata(p, &csp->hdr);
+    // Don't try to apply anything for VK_COLOR_SPACE_PASS_THROUGH_EXT
+    if (csp->transfer != PL_COLOR_TRC_UNKNOWN)
+        set_hdr_metadata(p, &csp->hdr);
     pl_assert(ok);
 
     pl_mutex_unlock(&p->lock);

@@ -423,7 +423,8 @@ cleanup:
 static void d3d11_sw_colorspace_hint(pl_swapchain sw,
                                      const struct pl_color_space *csp)
 {
-    update_swapchain_color_config(sw, csp, false);
+    if (csp->transfer != PL_COLOR_TRC_UNKNOWN)
+        update_swapchain_color_config(sw, csp, false);
 }
 
 IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw)

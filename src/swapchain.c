@@ -64,7 +64,9 @@ void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
     if (csp) {
         fix = *csp;
         // Ensure we have valid values set for all the fields
-        pl_color_space_infer(&fix);
+        // Empty color request is for passthrough
+        if (fix.primaries != PL_COLOR_PRIM_UNKNOWN || fix.transfer != PL_COLOR_TRC_UNKNOWN)
+            pl_color_space_infer(&fix);
     }
 
     impl->colorspace_hint(sw, &fix);
