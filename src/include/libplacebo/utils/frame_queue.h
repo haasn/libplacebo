@@ -187,8 +187,9 @@ struct pl_queue_params {
     void *priv;
 };
 
-#define PL_QUEUE_DEFAULTS       \
-    .drift_compensation = 1e-3,
+#define PL_QUEUE_DEFAULTS               \
+    .drift_compensation      = 1e-3f,   \
+    .interpolation_threshold = 1e-6f,
 
 #define pl_queue_params(...) (&(struct pl_queue_params) { PL_QUEUE_DEFAULTS __VA_ARGS__ })
 
