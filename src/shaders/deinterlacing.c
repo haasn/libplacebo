@@ -264,9 +264,9 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         #define T ${vecType: comp_mask}                                         \
         T $process(T cur[4], T prev[2], T next[2], T prev2[5], T next2[5])      \
         {                                                                       \
-            const float lf[2] = { 4309.0/8192.0,  213/8192.0 };                 \
-            const float hf[3] = { 5570.0/8192.0, 3801/8192.0, 1016/8192.0 };    \
-            const float sp[2] = { 5077.0/8192.0,  981/8192.0 };                 \
+            const float lf[2] = float[]( 4309.0/8192.0,  213.0/8192.0 );        \
+            const float hf[3] = float[]( 5570.0/8192.0, 3801.0/8192.0, 1016.0/8192.0 ); \
+            const float sp[2] = float[]( 5077.0/8192.0,  981.0/8192.0 );        \
                                                                                 \
             T s = prev2[2] + next2[2];                                          \
             T d = s / 2.0;                                                      \
@@ -310,7 +310,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
                                                                                 \
         T $intra(T cur[4])                                                      \
         {                                                                       \
-            const float sp[2] = { 5077.0/8192.0,  981/8192.0 };                 \
+            const float sp[2] = float[]( 5077.0/8192.0, 981.0/8192.0 );         \
             return sp[0] * (cur[1] + cur[2]) - sp[1] * (cur[0] + cur[3]);       \
         }                                                                       \
         #undef T                                                                \
