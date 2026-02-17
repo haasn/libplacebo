@@ -28,6 +28,7 @@ static struct pl_plane img_plane;
 static struct pl_plane osd_plane;
 static pl_renderer renderer;
 static struct pl_custom_lut *lut;
+static struct pl_custom_lut *palette_lut;
 
 struct file
 {
@@ -105,14 +106,6 @@ static bool upload_plane(const SDL_Surface *img, pl_tex *tex,
 
     SDL_Surface *fixed = NULL;
     const SDL_PixelFormat *fmt = img->format;
-    if (SDL_ISPIXELFORMAT_INDEXED(fmt->format)) {
-        // libplacebo doesn't handle indexed formats yet
-        fixed = SDL_CreateRGBSurfaceWithFormat(0, img->w, img->h, 32,
-                                               SDL_PIXELFORMAT_ABGR8888);
-        SDL_BlitSurface((SDL_Surface *) img, NULL, fixed, NULL);
-        img = fixed;
-        fmt = img->format;
-    }
 
     struct pl_plane_data data = {
         .type           = PL_FMT_UNORM,
@@ -123,8 +116,24 @@ static bool upload_plane(const SDL_Surface *img, pl_tex *tex,
         .pixels         = img->pixels,
     };
 
-    uint64_t masks[4] = { fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask };
-    pl_plane_data_from_mask(&data, masks);
+    if (fmt->palette) {
+        palette_lut = calloc(1, sizeof(struct pl_custom_lut));
+        palette_lut->signature = 1;
+        palette_lut->size[0] = 1 << fmt->BitsPerPixel;
+        palette_lut->size[1] = 1;
+        palette_lut->size[2] = 1;
+        data.component_size[0] = fmt->BitsPerPixel;
+        float *palette = calloc(1 << fmt->BitsPerPixel, sizeof(float[3]));
+        for (int i = 0; i < fmt->palette->ncolors; i++) {
+            palette[3 * i + 0] = fmt->palette->colors[i].r / 255.;
+            palette[3 * i + 1] = fmt->palette->colors[i].g / 255.;
+            palette[3 * i + 2] = fmt->palette->colors[i].b / 255.;
+        }
+        palette_lut->data = palette;
+    } else {
+        uint64_t masks[4] = { fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask };
+        pl_plane_data_from_mask(&data, masks);
+    }
 
     bool ok = pl_upload_plane(win->gpu, plane, tex, &data);
     SDL_FreeSurface(fixed);
@@ -140,6 +149,7 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
         .repr       = pl_color_repr_unknown,
         .color      = pl_color_space_unknown,
         .crop       = {0, 0, img->params.w, img->params.h},
+        .lut        = palette_lut,
     };
 
     // This seems to be the case for SDL2_image
@@ -177,6 +187,12 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
 
     // Use the heaviest preset purely for demonstration/testing purposes
     struct pl_render_params params = pl_render_high_quality_params;
+
+    if (palette_lut) {
+        // Debanding would interpolate palette indices
+        params.deband_params = NULL;
+    }
+
     params.lut = lut;
 
     return pl_render_image(renderer, &image, &target, &params);
