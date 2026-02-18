@@ -48,6 +48,7 @@ void gl_poll_callbacks(pl_gpu gpu)
         case GL_ALREADY_SIGNALED:
         case GL_CONDITION_SATISFIED:
             PL_ARRAY_REMOVE_AT(p->callbacks, 0);
+            gl->DeleteSync(cb.sync);
             cb.callback(cb.priv);
             continue;
 
