@@ -1,0 +1,2309 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://libplacebo.org/custom-shaders/">
+      
+      
+        <link rel="prev" href="../renderer/">
+      
+      
+        <link rel="next" href="../options/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Custom Shaders (mpv .hook syntax) - libplacebo</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../style.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#custom-shaders-mpv-hook-syntax" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="libplacebo" class="md-header__button md-logo" aria-label="libplacebo" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            libplacebo
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Custom Shaders (mpv .hook syntax)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://code.videolan.org/videolan/libplacebo" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="m504 204.6-.7-1.8L433.6 21c-1.4-3.6-3.9-6.6-7.2-8.6-2.4-1.6-5.1-2.5-8-2.8s-5.7.1-8.4 1.1-5.1 2.7-7.1 4.8c-1.9 2.1-3.3 4.7-4.1 7.4l-47 144H161.3l-47.1-144c-.8-2.8-2.2-5.3-4.1-7.4-2-2.1-4.4-3.7-7.1-4.8-2.6-1-5.5-1.4-8.4-1.1s-5.6 1.2-8 2.8c-3.2 2-5.8 5.1-7.2 8.6L9.8 202.8l-.8 1.8c-10 26.2-11.3 55-3.5 82 7.7 26.9 24 50.7 46.4 67.6l.3.2.6.4 106 79.5c38.5 29.1 66.7 50.3 84.6 63.9 3.7 1.9 8.3 4.3 13 4.3s9.3-2.4 13-4.3c17.9-13.5 46.1-34.9 84.6-63.9l106.7-79.9.3-.3c22.4-16.9 38.7-40.6 45.6-67.5 8.6-27 7.4-55.8-2.6-82"/></svg>
+  </div>
+  <div class="md-source__repository">
+    videolan/libplacebo
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="libplacebo" class="md-nav__button md-logo" aria-label="libplacebo" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    libplacebo
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://code.videolan.org/videolan/libplacebo" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="m504 204.6-.7-1.8L433.6 21c-1.4-3.6-3.9-6.6-7.2-8.6-2.4-1.6-5.1-2.5-8-2.8s-5.7.1-8.4 1.1-5.1 2.7-7.1 4.8c-1.9 2.1-3.3 4.7-4.1 7.4l-47 144H161.3l-47.1-144c-.8-2.8-2.2-5.3-4.1-7.4-2-2.1-4.4-3.7-7.1-4.8-2.6-1-5.5-1.4-8.4-1.1s-5.6 1.2-8 2.8c-3.2 2-5.8 5.1-7.2 8.6L9.8 202.8l-.8 1.8c-10 26.2-11.3 55-3.5 82 7.7 26.9 24 50.7 46.4 67.6l.3.2.6.4 106 79.5c38.5 29.1 66.7 50.3 84.6 63.9 3.7 1.9 8.3 4.3 13 4.3s9.3-2.4 13-4.3c17.9-13.5 46.1-34.9 84.6-63.9l106.7-79.9.3-.3c22.4-16.9 38.7-40.6 45.6-67.5 8.6-27 7.4-55.8-2.6-82"/></svg>
+  </div>
+  <div class="md-source__repository">
+    videolan/libplacebo
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../basic-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Basic windowing / output example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../renderer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering content: pl_frame, pl_renderer, and pl_queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Custom Shaders (mpv .hook syntax)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Custom Shaders (mpv .hook syntax)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#expressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expressions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shaders
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hook-texture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HOOK &lt;texture&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bind-texture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BIND &lt;texture&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#save-texture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SAVE &lt;texture&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#desc-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DESC &lt;description&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#offset-xo-yo-align" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OFFSET &lt;xo yo | ALIGN&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#width-expr-height-expr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WIDTH &lt;expr&gt;, HEIGHT &lt;expr&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-expr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WHEN &lt;expr&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#components-num" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COMPONENTS &lt;num&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compute-bw-bh-tw-th" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COMPUTE &lt;bw&gt; &lt;bh&gt; [&lt;tw&gt; &lt;th&gt;]
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#textures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Textures
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Textures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#texture-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TEXTURE &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#size-width-height-depth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SIZE &lt;width&gt; [&lt;height&gt; [&lt;depth&gt;]]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-fmt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FORMAT &lt;fmt&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filter-linear-nearest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FILTER &lt;LINEAR | NEAREST&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#border-clamp-repeat-mirror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BORDER &lt;CLAMP | REPEAT | MIRROR&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STORAGE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#buffers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Buffers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Buffers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#buffer-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BUFFER &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STORAGE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#var-type-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VAR &lt;type&gt; &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tunable-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tunable parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tunable parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#param-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PARAM &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#desc-description_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DESC &lt;description&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minimum-value-maximum-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MINIMUM &lt;value&gt;, MAXIMUM &lt;value&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#type-enum-define-dynamic-constant-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TYPE [ENUM] &lt;DEFINE | [DYNAMIC | CONSTANT] &lt;type&gt;&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../options/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Options
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Developing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glsl/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GLSL shader system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#expressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expressions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shaders
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hook-texture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HOOK &lt;texture&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bind-texture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BIND &lt;texture&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#save-texture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SAVE &lt;texture&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#desc-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DESC &lt;description&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#offset-xo-yo-align" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OFFSET &lt;xo yo | ALIGN&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#width-expr-height-expr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WIDTH &lt;expr&gt;, HEIGHT &lt;expr&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-expr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WHEN &lt;expr&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#components-num" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COMPONENTS &lt;num&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compute-bw-bh-tw-th" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COMPUTE &lt;bw&gt; &lt;bh&gt; [&lt;tw&gt; &lt;th&gt;]
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#textures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Textures
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Textures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#texture-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TEXTURE &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#size-width-height-depth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SIZE &lt;width&gt; [&lt;height&gt; [&lt;depth&gt;]]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-fmt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FORMAT &lt;fmt&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filter-linear-nearest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FILTER &lt;LINEAR | NEAREST&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#border-clamp-repeat-mirror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BORDER &lt;CLAMP | REPEAT | MIRROR&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STORAGE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#buffers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Buffers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Buffers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#buffer-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BUFFER &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STORAGE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#var-type-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VAR &lt;type&gt; &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tunable-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tunable parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tunable parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#param-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PARAM &lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#desc-description_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DESC &lt;description&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minimum-value-maximum-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MINIMUM &lt;value&gt;, MAXIMUM &lt;value&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#type-enum-define-dynamic-constant-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TYPE [ENUM] &lt;DEFINE | [DYNAMIC | CONSTANT] &lt;type&gt;&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="custom-shaders-mpv-hook-syntax">Custom Shaders (mpv .hook syntax)</h1>
+<p>libplacebo supports the same <a href="https://mpv.io/manual/master/#options-glsl-shader">custom shader syntax used by
+mpv</a>, with some important
+changes. This document will serve as a complete reference for this syntax.</p>
+<h2 id="overview">Overview</h2>
+<p>In general, user shaders are divided into distinct <em>blocks</em>. Each block can
+define a shader, a texture, a buffer, or a tunable parameter. Each block
+starts with a collection of header directives, which are lines starting with
+the syntax <code>//!</code>.</p>
+<p>As an example, here is a simple shader that simply inverts the video signal:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-0-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-0-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-0-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-0-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-0-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-0-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-0-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-0-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-0-10">10</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="c1">//!HOOK LUMA</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2"></a><span class="c1">//!HOOK RGB</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">hook</span><span class="p">()</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6"></a><span class="p">{</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7"></a><span class="w">    </span><span class="kt">vec4</span><span class="w"> </span><span class="n">color</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HOOKED_texOff</span><span class="p">(</span><span class="mo">0</span><span class="p">);</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8"></a><span class="w">    </span><span class="n">color</span><span class="p">.</span><span class="n">rgb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">vec3</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">color</span><span class="p">.</span><span class="n">rgb</span><span class="p">;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">color</span><span class="p">;</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10"></a><span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+<p>This shader defines one block - a shader block which hooks into the two
+texture stages <code>LUMA</code> and <code>RGB</code>, binds the hooked texture, inverts the value
+of the <code>rgb</code> channels, and then returns the modified color.</p>
+<h3 id="expressions">Expressions</h3>
+<p>In a few contexts, shader directives accept arithmetic expressions, denoted by
+<code>&lt;expr&gt;</code> in the listing below. For historical reasons, all expressions are
+given in <a href="https://en.wikipedia.org/wiki/Reverse_Polish_notation">reverse polish notation
+(RPN)</a>, and the only
+value type is a floating point number. The following value types and
+arithmetic operations are available:</p>
+<ul>
+<li><code>1.234</code>: Literal float constant, evaluates to itself.</li>
+<li><code>NAME.w</code>, <code>NAME.width</code>: Evaluates to the width of a texture with name <code>NAME</code>.</li>
+<li><code>NAME.h</code>, <code>NAME.height</code>: Evaluates to the height of a texture with name <code>NAME</code>.</li>
+<li><code>PAR</code>: Evaluates to the value of a tunable shader parameter with name <code>PAR</code>.</li>
+<li><code>+</code>: Evaluates to <code>X+Y</code>.</li>
+<li><code>-</code>: Evaluates to <code>X-Y</code>.</li>
+<li><code>*</code>: Evaluates to <code>X*Y</code>.</li>
+<li><code>/</code>: Evaluates to <code>X/Y</code>.</li>
+<li><code>%</code>: Evaluates to <code>fmod(X, Y)</code>.</li>
+<li><code>&gt;</code>: Evaluates to <code>(X &gt; Y) ? 1.0 : 0.0</code>.</li>
+<li><code>&lt;</code>: Evaluates to <code>(X &lt; Y) ? 1.0 : 0.0</code>.</li>
+<li><code>=</code>: Evaluates to <code>fuzzy_eq(X, Y) ? 1.0 : 0.0</code>, with some tolerance to
+  allow for floating point inaccuracy. (Around 1 ppm)</li>
+<li><code>!</code>: Evaluates to <code>X ? 0.0 : 1.0</code>.</li>
+</ul>
+<p>Note that <code>+</code> and <code>*</code> can be used as suitable replacements for the otherwise
+absent boolean logic expressions (<code>||</code> and <code>&amp;&amp;</code>).</p>
+<h2 id="shaders">Shaders</h2>
+<p>Shaders are the default block type, and have no special syntax to indicate
+their presence. Shader stages contain raw GLSL code that will be
+(conditionally) executed. This GLSL snippet must define a single function
+<code>vec4 hook()</code>, or <code>void hook()</code> for compute shaders.</p>
+<p>During the execution of any shader, the following global variables are made
+available:</p>
+<ul>
+<li><code>int frame</code>: A raw counter tracking the number of executions of this shader
+  stage.</li>
+<li><code>float random</code>: A pseudo-random float uniformly distributed in the range
+  <code>[0,1)</code>.</li>
+<li><code>vec2 input_size</code>: The nominal size (in pixels) of the original input image.</li>
+<li><code>vec2 target_size</code>: The nominal size (in pixels) of the output rectangle.</li>
+<li><code>vec2 tex_offset</code>: The nominal offset (in pixels), of the original input crop.</li>
+<li><code>vec4 linearize(vec4 color)</code>: Linearize the input color according to the
+  image's tagged gamma function.</li>
+<li><code>vec4 delinearize(vec4 color)</code>: Opposite counterpart to <code>linearize</code>.</li>
+</ul>
+<p>Shader stages accept the following directives:</p>
+<h3 id="hook-texture"><code>HOOK &lt;texture&gt;</code></h3>
+<p>A <code>HOOK</code> directive determines when a shader stage is run. During internal
+processing, libplacebo goes over a number of pre-defined <em>hook points</em> at set
+points in the processing pipeline. It is only possible to intercept the image,
+and run custom shaders, at these fixed hook points.</p>
+<p>Here is a current list of hook points:</p>
+<ul>
+<li><code>RGB</code>: Input plane containing RGB values</li>
+<li><code>LUMA</code>: Input plane containing a Y value</li>
+<li><code>CHROMA</code>: Input plane containing chroma values (one or both)</li>
+<li><code>ALPHA</code>: Input plane containing a single alpha value</li>
+<li><code>XYZ</code>: Input plane containing XYZ values</li>
+<li><code>CHROMA_SCALED</code>: Chroma plane, after merging and upscaling to luma size</li>
+<li><code>ALPHA_SCALED</code>: Alpha plane, after upscaling to luma size</li>
+<li><code>NATIVE</code>: Merged input planes, before any sort of color conversion (as-is)</li>
+<li><code>MAIN</code>: After conversion to RGB, before linearization/scaling</li>
+<li><code>LINEAR</code>: After conversion to linear light (for scaling purposes)</li>
+<li><code>SIGMOID</code>: After conversion to sigmoidized light (for scaling purposes)</li>
+<li><code>PREKERNEL</code>: Immediately before the execution of the main scaler kernel</li>
+<li><code>POSTKERNEL</code>: Immediately after the execution of the main scaler kernel</li>
+<li><code>SCALED</code>: After scaling, in either linear or non-linear light RGB</li>
+<li><code>PREOUTPUT</code>: After color conversion to target colorspace, before alpha blending</li>
+<li><code>OUTPUT</code>: After alpha blending, before dithering and final output pass</li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title"><code>MAINPRESUB</code></p>
+<p>In mpv, <code>MAIN</code> and <code>MAINPRESUB</code> are separate shader stages, because the
+mpv option <code>--blend-subtitles=video</code> allows rendering overlays directly
+onto the pre-scaled video stage. libplacebo does not support this feature,
+and as such, the <code>MAINPRESUB</code> shader stage does not exist. It is still
+valid to refer to this name in shaders, but it is handled identically to
+<code>MAIN</code>.</p>
+</div>
+<p>It's possible for a hook point to never fire. For example, <code>SIGMOID</code> will not
+fire when downscaling, as sigmoidization only happens when upscaling.
+Similarly, <code>LUMA</code>/<code>CHROMA</code> will not fire on an RGB video and vice versa.</p>
+<p>A single shader stage may hook multiple hook points simultaneously, for
+example, to cover both <code>LUMA</code> and <code>RGB</code> cases with the same logic. (See the
+example shader in the introduction)</p>
+<h3 id="bind-texture"><code>BIND &lt;texture&gt;</code></h3>
+<p>The <code>BIND</code> directive makes a texture available for use in the shader. This can
+be any of the previously named hook points, a custom texture define by a
+<code>TEXTURE</code> block, a custom texture saved by a <code>SAVE</code> directive, or the special
+value <code>HOOKED</code> which allows binding whatever texture hook dispatched this
+shader stage.</p>
+<p>A bound texture will define the following GLSL functions (as macros):</p>
+<ul>
+<li><code>sampler2D NAME_raw</code>: A reference to the raw texture sampler itself.</li>
+<li><code>vec2 NAME_pos</code>: The texel coordinates of the current pixel.</li>
+<li><code>vec2 NAME_map(ivec2 id)</code>: A function that maps from <code>gl_GlobalInvocationID</code>
+  to texel coordinates. (Compute shaders)</li>
+<li><code>vec2 NAME_size</code>: The size (in pixels) of the texture.</li>
+<li><code>vec2 NAME_pt</code>: Convenience macro for <code>1.0 / NAME_size</code>. The size of a
+  single pixel (in texel coordinates).</li>
+<li><code>vec2 NAME_off</code>: The sample offset of the texture. Basically, the pixel
+  coordinates of the top-left corner of the sampled area.</li>
+<li><code>float NAME_mul</code>: The coefficient that must be multiplied into sampled
+  values in order to rescale them to <code>[0,1]</code>.</li>
+<li><code>vec4 NAME_tex(vec2 pos)</code>: A wrapper around <code>NAME_mul * textureLod(NAME_raw,
+  pos, 0.0)</code>.</li>
+<li><code>vec4 NAME_texOff(vec2 offset)</code>: A wrapper around <code>NAME_tex(NAME_pos + NAME_pt * offset)</code>.
+  This can be used to easily access adjacent pixels, e.g. <code>NAME_texOff(-1,2)</code>
+  samples a pixel one to the left and two to the bottom of the current
+  location.</li>
+<li><code>vec4 NAME_gather(vec2 pos, int c)</code>: A wrapper around
+  <code>NAME_mul * textureGather(pos, c)</code>, with appropriate scaling. (Only when
+  supported<sup id="fnref:ifdef"><a class="footnote-ref" href="#fn:ifdef">1</a></sup>)</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Rotation matrix</p>
+<p>For compatibility with mpv, we also define a <code>mat2 NAME_rot</code> which is
+simply equal to a 2x2 identity matrix. libplacebo never rotates input
+planes - all rotation happens during the final output to the display.</p>
+</div>
+<p>This same directive can also be used to bind buffer blocks (i.e.
+uniform/storage buffers), as defined by the <a href="#buffer-name"><code>BUFFER</code> directive</a>.</p>
+<h3 id="save-texture"><code>SAVE &lt;texture&gt;</code></h3>
+<p>By default, after execution of a shader stage, the resulting output is
+captured back into the same hooked texture that triggered the shader. This
+behavior can be overridden using the explicit <code>SAVE</code> directive. For example,
+a shader might need access to a low-res version of the luma input texture in
+order to process chroma:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-1-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-1-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-1-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-1-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-1-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-1-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-1-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-1-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-1-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-1-10">10</a></span>
+<span class="normal"><a href="#__codelineno-1-11">11</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1"></a><span class="c1">//!HOOK CHROMA</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2"></a><span class="c1">//!BIND CHROMA</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3"></a><span class="c1">//!BIND LUMA</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4"></a><span class="c1">//!SAVE LUMA_LOWRES</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5"></a><span class="c1">//!WIDTH CHROMA.w</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6"></a><span class="c1">//!HEIGHT CHROMA.h</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7"></a>
+<a id="__codelineno-1-8" name="__codelineno-1-8"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">hook</span><span class="p">()</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9"></a><span class="p">{</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">LUMA_texOff</span><span class="p">(</span><span class="mo">0</span><span class="p">);</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11"></a><span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+<p>This shader binds both luma and chroma and resizes the luma plane down to the
+size of the chroma plane, saving the result as a new texture <code>LUMA_LOWRES</code>. In
+general, you can pick any name you want, here.</p>
+<h3 id="desc-description"><code>DESC &lt;description&gt;</code></h3>
+<p>This purely informative directive simply gives the shader stage a name. This
+is the name that will be reported to the shader stage and execution time
+metrics.</p>
+<h3 id="offset-xo-yo-align"><code>OFFSET &lt;xo yo | ALIGN&gt;</code></h3>
+<p>This directive indicates a pixel shift (offset) introduced by this pass. These
+pixel offsets will be accumulated and corrected automatically as part of plane
+alignment / main scaling.</p>
+<p>A special value of <code>ALIGN</code> will attempt to counteract any existing offset of
+the hooked texture by aligning it with reference plane (i.e. luma). This can
+be used to e.g. introduce custom chroma scaling in a way that doesn't break
+chroma subtexel offsets.</p>
+<p>An example:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-2-1">1</a></span>
+<span class="normal"><a href="#__codelineno-2-2">2</a></span>
+<span class="normal"><a href="#__codelineno-2-3">3</a></span>
+<span class="normal"><a href="#__codelineno-2-4">4</a></span>
+<span class="normal"><a href="#__codelineno-2-5">5</a></span>
+<span class="normal"><a href="#__codelineno-2-6">6</a></span>
+<span class="normal"><a href="#__codelineno-2-7">7</a></span>
+<span class="normal"><a href="#__codelineno-2-8">8</a></span>
+<span class="normal"><a href="#__codelineno-2-9">9</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1"></a><span class="c1">//!HOOK LUMA</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3"></a><span class="c1">//!OFFSET 100.5 100.5</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5"></a><span class="kt">vec4</span><span class="w"> </span><span class="n">hook</span><span class="p">()</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6"></a><span class="p">{</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="w">    </span><span class="c1">// Constant offset by N pixels towards the bottom right</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">HOOKED_texOff</span><span class="p">(</span><span class="o">-</span><span class="kt">vec2</span><span class="p">(</span><span class="mf">100.5</span><span class="p">));</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+<p>This (slightly silly) shader simply shifts the entire sampled region to the
+bottom right by 100.5 pixels, and propagates this shift to the main scaler
+using the <code>OFFSET</code> directive. As such, the end result of this is that there is
+no visible shift of the overall image, but some detail (~100 pixels) near the
+bottom-right border is lost due to falling outside the bounds of the texture.</p>
+<h3 id="width-expr-height-expr"><code>WIDTH &lt;expr&gt;</code>, <code>HEIGHT &lt;expr&gt;</code></h3>
+<p>These directives can be used to override the dimensions of the resulting
+texture. Note that not all textures can be resized this way. Currently, only
+<code>RGB</code>, <code>LUMA</code>, <code>CHROMA</code>, <code>XYZ</code>, <code>NATIVE</code> and <code>MAIN</code> are resizable. Trying to
+save a texture with an incompatible size to any other shader stage will result
+in an error.</p>
+<h3 id="when-expr"><code>WHEN &lt;expr&gt;</code></h3>
+<p>This directive takes an expression that can be used to make shader stages
+conditionally executed. If this evaluates to 0, the shader stage will be
+skipped.</p>
+<p>Example:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-3-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-3-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-3-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-3-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-3-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-3-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-3-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-3-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-3-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-3-10">10</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1"></a><span class="c1">//!PARAM strength</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2"></a><span class="c1">//!TYPE float</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3"></a><span class="c1">//!MINIMUM 0</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4"></a><span class="mf">1.0</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6"></a><span class="c1">//!HOOK MAIN</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8"></a><span class="c1">//!WHEN intensity 0 &gt;</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9"></a><span class="c1">//!DESC do something based on &#39;intensity&#39;</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10"></a><span class="p">...</span>
+</code></pre></div></td></tr></table></div>
+<p>This example defines a shader stage that only conditionally executes itself
+if the value of the <code>intensity</code> shader parameter is non-zero.</p>
+<h3 id="components-num"><code>COMPONENTS &lt;num&gt;</code></h3>
+<p>This directive overrides the number of components present in a texture.
+For example, if you want to extract a one-dimensional feature map from the
+otherwise 3 or 4 dimensional <code>MAIN</code> texture, you can use this directive to
+save on memory bandwidth and consumption by having libplacebo only allocate a
+one-component texture to store the feature map in:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-4-1">1</a></span>
+<span class="normal"><a href="#__codelineno-4-2">2</a></span>
+<span class="normal"><a href="#__codelineno-4-3">3</a></span>
+<span class="normal"><a href="#__codelineno-4-4">4</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1"></a><span class="c1">//!HOOK MAIN</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3"></a><span class="c1">//!SAVE featuremap</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4"></a><span class="c1">//!COMPONENTS 1</span>
+</code></pre></div></td></tr></table></div>
+<h3 id="compute-bw-bh-tw-th"><code>COMPUTE &lt;bw&gt; &lt;bh&gt; [&lt;tw&gt; &lt;th&gt;]</code></h3>
+<p>This directive specifies that the shader should be treated as a compute
+shader, with the block size <code>bw</code> and <code>bh</code>. The compute shader will be
+dispatched with however many blocks are necessary to completely tile over the
+output. Within each block, there will be <code>tw*th</code> threads, forming a single
+work group. In other words: <code>tw</code> and <code>th</code> specify the work group size, which
+can be different from the block size. So for example, a compute shader with
+<code>bw = bh = 32</code> and <code>tw = th = 8</code> running on a <code>500x500</code> texture would dispatch
+<code>16x16</code> blocks (rounded up), each with <code>8x8</code> threads.</p>
+<p>Instead of defining a <code>vec4 hook()</code>, compute shaders must define a <code>void
+hook()</code> which results directly to the output texture, a <code>writeonly image2D
+out_image</code> made available to the shader stage.</p>
+<p>For example, here is a shader executing a single-pass 41x41 convolution
+(average blur) on the luma plane, using a compute shader to share sampling
+work between adjacent threads in a work group:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-5-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-5-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-5-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-5-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-5-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-5-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-5-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-5-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-5-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-5-10">10</a></span>
+<span class="normal"><a href="#__codelineno-5-11">11</a></span>
+<span class="normal"><a href="#__codelineno-5-12">12</a></span>
+<span class="normal"><a href="#__codelineno-5-13">13</a></span>
+<span class="normal"><a href="#__codelineno-5-14">14</a></span>
+<span class="normal"><a href="#__codelineno-5-15">15</a></span>
+<span class="normal"><a href="#__codelineno-5-16">16</a></span>
+<span class="normal"><a href="#__codelineno-5-17">17</a></span>
+<span class="normal"><a href="#__codelineno-5-18">18</a></span>
+<span class="normal"><a href="#__codelineno-5-19">19</a></span>
+<span class="normal"><a href="#__codelineno-5-20">20</a></span>
+<span class="normal"><a href="#__codelineno-5-21">21</a></span>
+<span class="normal"><a href="#__codelineno-5-22">22</a></span>
+<span class="normal"><a href="#__codelineno-5-23">23</a></span>
+<span class="normal"><a href="#__codelineno-5-24">24</a></span>
+<span class="normal"><a href="#__codelineno-5-25">25</a></span>
+<span class="normal"><a href="#__codelineno-5-26">26</a></span>
+<span class="normal"><a href="#__codelineno-5-27">27</a></span>
+<span class="normal"><a href="#__codelineno-5-28">28</a></span>
+<span class="normal"><a href="#__codelineno-5-29">29</a></span>
+<span class="normal"><a href="#__codelineno-5-30">30</a></span>
+<span class="normal"><a href="#__codelineno-5-31">31</a></span>
+<span class="normal"><a href="#__codelineno-5-32">32</a></span>
+<span class="normal"><a href="#__codelineno-5-33">33</a></span>
+<span class="normal"><a href="#__codelineno-5-34">34</a></span>
+<span class="normal"><a href="#__codelineno-5-35">35</a></span>
+<span class="normal"><a href="#__codelineno-5-36">36</a></span>
+<span class="normal"><a href="#__codelineno-5-37">37</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1"></a><span class="c1">//!HOOK LUMA</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3"></a><span class="c1">//!COMPUTE 32 32</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4"></a><span class="c1">//!DESC avg convolution</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5"></a>
+<a id="__codelineno-5-6" name="__codelineno-5-6"></a><span class="c1">// Kernel size, 41x41 as an example</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7"></a><span class="k">const</span><span class="w"> </span><span class="kt">ivec2</span><span class="w"> </span><span class="n">ksize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="mi">41</span><span class="p">,</span><span class="w"> </span><span class="mi">41</span><span class="p">);</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8"></a><span class="k">const</span><span class="w"> </span><span class="kt">ivec2</span><span class="w"> </span><span class="n">offset</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ksize</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9"></a>
+<a id="__codelineno-5-10" name="__codelineno-5-10"></a><span class="c1">// We need to load extra source texels to account for padding due to kernel</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11"></a><span class="c1">// overhang</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12"></a><span class="k">const</span><span class="w"> </span><span class="kt">ivec2</span><span class="w"> </span><span class="n">isize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="nb">gl_WorkGroupSize</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ksize</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13"></a>
+<a id="__codelineno-5-14" name="__codelineno-5-14"></a><span class="k">shared</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">inp</span><span class="p">[</span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="p">][</span><span class="n">isize</span><span class="p">.</span><span class="n">x</span><span class="p">];</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15"></a>
+<a id="__codelineno-5-16" name="__codelineno-5-16"></a><span class="kt">void</span><span class="w"> </span><span class="n">hook</span><span class="p">()</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17"></a><span class="p">{</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18"></a><span class="w">    </span><span class="c1">// load texels into shmem</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19"></a><span class="w">    </span><span class="kt">ivec2</span><span class="w"> </span><span class="n">base</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="nb">gl_WorkGroupID</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="nb">gl_WorkGroupSize</span><span class="p">);</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">y</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">gl_WorkGroupSize</span><span class="p">.</span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">x</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">x</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">gl_WorkGroupSize</span><span class="p">.</span><span class="n">x</span><span class="p">)</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22"></a><span class="w">            </span><span class="n">inp</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">texelFetch</span><span class="p">(</span><span class="n">HOOKED_raw</span><span class="p">,</span><span class="w"> </span><span class="n">base</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">offset</span><span class="p">,</span><span class="w"> </span><span class="mo">0</span><span class="p">).</span><span class="n">x</span><span class="p">;</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24"></a>
+<a id="__codelineno-5-25" name="__codelineno-5-25"></a><span class="w">    </span><span class="c1">// synchronize threads</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26"></a><span class="w">    </span><span class="n">barrier</span><span class="p">();</span>
+<a id="__codelineno-5-27" name="__codelineno-5-27"></a>
+<a id="__codelineno-5-28" name="__codelineno-5-28"></a><span class="w">    </span><span class="c1">// do convolution</span>
+<a id="__codelineno-5-29" name="__codelineno-5-29"></a><span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">sum</span><span class="p">;</span>
+<a id="__codelineno-5-30" name="__codelineno-5-30"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mo">0</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">ksize</span><span class="p">.</span><span class="n">y</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-31" name="__codelineno-5-31"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mo">0</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">ksize</span><span class="p">.</span><span class="n">x</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="o">++</span><span class="p">)</span>
+<a id="__codelineno-5-32" name="__codelineno-5-32"></a><span class="w">            </span><span class="n">sum</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">inp</span><span class="p">[</span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">y</span><span class="o">+</span><span class="n">y</span><span class="p">][</span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">x</span><span class="o">+</span><span class="n">x</span><span class="p">];</span>
+<a id="__codelineno-5-33" name="__codelineno-5-33"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-34" name="__codelineno-5-34"></a>
+<a id="__codelineno-5-35" name="__codelineno-5-35"></a><span class="w">    </span><span class="kt">vec4</span><span class="w"> </span><span class="n">color</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">vec4</span><span class="p">(</span><span class="n">HOOKED_mul</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">sum</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="n">ksize</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">ksize</span><span class="p">.</span><span class="n">y</span><span class="p">),</span><span class="w"> </span><span class="mo">0</span><span class="p">,</span><span class="w"> </span><span class="mo">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<a id="__codelineno-5-36" name="__codelineno-5-36"></a><span class="w">    </span><span class="n">imageStore</span><span class="p">(</span><span class="n">out_image</span><span class="p">,</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="nb">gl_GlobalInvocationID</span><span class="p">),</span><span class="w"> </span><span class="n">color</span><span class="p">);</span>
+<a id="__codelineno-5-37" name="__codelineno-5-37"></a><span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+<h2 id="textures">Textures</h2>
+<p>Custom textures can be defined and made available to shader stages using
+<code>TEXTURE</code> blocks. These can be used to provide e.g. LUTs or pre-trained
+weights.</p>
+<p>The data for a texture is provided as a raw hexadecimal string encoding the
+in-memory representation of a texture, according to its given texture format,
+for example:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-6-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-6-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-6-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-6-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-6-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-6-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-6-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-6-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-6-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-6-10">10</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="c1">//!TEXTURE COLORS</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2"></a><span class="c1">//!SIZE 3 3</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3"></a><span class="c1">//!FORMAT rgba32f</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4"></a><span class="c1">//!FILTER NEAREST</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5"></a><span class="c1">//!BORDER REPEAT</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6"></a><span class="mo">0000</span><span class="mi">803</span><span class="n">f000000000000000000000000000000000000803f00000000000000000000000</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7"></a><span class="mo">0000000000000</span><span class="mi">803</span><span class="n">f00000000000000000000803f0000803f000000000000803f000000</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8"></a><span class="mo">000000</span><span class="mi">803</span><span class="n">f000000000000803f0000803f00000000000000009a99993e9a99993e9a999</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9"></a><span class="mi">93</span><span class="n">e000000009a99193F9A99193f9a99193f000000000000803f0000803f0000803f0000</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10"></a><span class="mo">0000</span>
+</code></pre></div></td></tr></table></div>
+<p>Texture blocks accept the following directives:</p>
+<h3 id="texture-name"><code>TEXTURE &lt;name&gt;</code></h3>
+<p>This must be the first directive in a texture block, and marks it as such. The
+name given is the name that the texture will be referred to (via <code>BIND</code>
+directives).</p>
+<h3 id="size-width-height-depth"><code>SIZE &lt;width&gt; [&lt;height&gt; [&lt;depth&gt;]]</code></h3>
+<p>This directive gives the size of the texture, as integers. For example,
+<code>//!SIZE 512 512</code> marks a 512x512 texture block. Textures can be 1D, 2D or 3D
+depending on the number of coordinates specified.</p>
+<h3 id="format-fmt"><code>FORMAT &lt;fmt&gt;</code></h3>
+<p>This directive specifies the texture format. A complete list of known textures
+is exposed as part of the <code>pl_gpu</code> struct metadata, but they follow the format
+convention <code>rgba8</code>, <code>rg16hf</code>, <code>rgba32f</code>, <code>r64i</code> and so on.</p>
+<h3 id="filter-linear-nearest"><code>FILTER &lt;LINEAR | NEAREST&gt;</code></h3>
+<p>This directive specifies the texture magnification/minification filter.</p>
+<h3 id="border-clamp-repeat-mirror"><code>BORDER &lt;CLAMP | REPEAT | MIRROR&gt;</code></h3>
+<p>This directive specifies the border clamping method of the texture.</p>
+<h3 id="storage"><code>STORAGE</code></h3>
+<p>If present, this directive marks the texture as a storage image. It will still
+be initialized with the initial values, but rather than being bound as a
+read-only and immutable <code>sampler2D</code>, it is bound as a <code>readwrite coherent
+image2D</code>. Such texture scan be used to, for example, store persistent state
+across invocations of the shader.</p>
+<h2 id="buffers">Buffers</h2>
+<p>Custom uniform / storage shader buffer  blocks can be defined using <code>BUFFER</code>
+directives.</p>
+<p>The (initial) data for a buffer is provided as a raw hexadecimal string
+encoding the in-memory representation of a buffer in the corresponding GLSL
+packing layout (std140 or std430 for uniform and storage blocks,
+respectively):</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-7-1">1</a></span>
+<span class="normal"><a href="#__codelineno-7-2">2</a></span>
+<span class="normal"><a href="#__codelineno-7-3">3</a></span>
+<span class="normal"><a href="#__codelineno-7-4">4</a></span>
+<span class="normal"><a href="#__codelineno-7-5">5</a></span>
+<span class="normal"><a href="#__codelineno-7-6">6</a></span>
+<span class="normal"><a href="#__codelineno-7-7">7</a></span>
+<span class="normal"><a href="#__codelineno-7-8">8</a></span>
+<span class="normal"><a href="#__codelineno-7-9">9</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1"></a><span class="c1">//!BUFFER buf_uniform</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2"></a><span class="c1">//!VAR float foo</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3"></a><span class="c1">//!VAR float bar</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4"></a><span class="mo">0000000000000000</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5"></a>
+<a id="__codelineno-7-6" name="__codelineno-7-6"></a><span class="c1">//!BUFFER buf_storage</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7"></a><span class="c1">//!VAR vec2 bat</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8"></a><span class="c1">//!VAR int big[32];</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9"></a><span class="c1">//!STORAGE</span>
+</code></pre></div></td></tr></table></div>
+<p>Buffer blocks accept the following directives:</p>
+<h3 id="buffer-name"><code>BUFFER &lt;name&gt;</code></h3>
+<p>This must be the first directive in a buffer block, and marks it as such. The
+name given is mostly cosmetic, as individual variables can be accessed
+directly using the names given in the corresponding <code>VAR</code> directives.</p>
+<h3 id="storage_1"><code>STORAGE</code></h3>
+<p>If present, this directive marks the buffer as a (readwrite coherent) shader
+storage block, instead of a readonly uniform buffer block. Such storage blocks
+can be used to track and evolve state across invocations of this shader.</p>
+<p>Storage blocks may also be initialized with default data, but this is
+optional. They can also be initialized as part of the first shader execution
+(e.g. by testing for <code>frame == 0</code>).</p>
+<h3 id="var-type-name"><code>VAR &lt;type&gt; &lt;name&gt;</code></h3>
+<p>This directive appends a new variable to the shader block, with GLSL type
+<code>&lt;type&gt;</code> and shader name <code>&lt;name&gt;</code>. For example, <code>VAR float foo</code> introduces a
+<code>float foo;</code> member into the buffer block, and <code>VAR mat4 transform</code> introduces
+a <code>mat4 transform;</code> member.</p>
+<p>It is also possible to introduce array variables, using <code>[N]</code> as part of the
+variable name.</p>
+<h2 id="tunable-parameters">Tunable parameters</h2>
+<p>Finally, the <code>PARAM</code> directive allows introducing tunable shader parameters,
+which are exposed programmatically as part of the C API (<code>pl_hook</code>).<sup id="fnref:mpv"><a class="footnote-ref" href="#fn:mpv">2</a></sup></p>
+<p>The default value of a parameter is given as the block body, for example:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-8-1">1</a></span>
+<span class="normal"><a href="#__codelineno-8-2">2</a></span>
+<span class="normal"><a href="#__codelineno-8-3">3</a></span>
+<span class="normal"><a href="#__codelineno-8-4">4</a></span>
+<span class="normal"><a href="#__codelineno-8-5">5</a></span>
+<span class="normal"><a href="#__codelineno-8-6">6</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1"></a><span class="c1">//!PARAM contrast</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2"></a><span class="c1">//!DESC Gain to apply to image brightness</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3"></a><span class="c1">//!TYPE float</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4"></a><span class="c1">//!MINIMUM 0.0</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5"></a><span class="c1">//!MAXIMUM 100.0</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6"></a><span class="mf">1.0</span>
+</code></pre></div></td></tr></table></div>
+<p>Parameters accept the following directives:</p>
+<h3 id="param-name"><code>PARAM &lt;name&gt;</code></h3>
+<p>This must be the first directive in a parameter block, and marks it as such.
+The name given is the name that will be used to refer to this parameter in
+GLSL code.</p>
+<h3 id="desc-description_1"><code>DESC &lt;description&gt;</code></h3>
+<p>This directive can be used to provide a friendlier description of the shader
+parameter, exposed as part of the C API to end users.</p>
+<h3 id="minimum-value-maximum-value"><code>MINIMUM &lt;value&gt;</code>, <code>MAXIMUM &lt;value&gt;</code></h3>
+<p>Provides the minimum/maximum value bound of this parameter. If absent, no
+minimum/maximum is enforced.</p>
+<h3 id="type-enum-define-dynamic-constant-type"><code>TYPE [ENUM] &lt;DEFINE | [DYNAMIC | CONSTANT] &lt;type&gt;&gt;</code></h3>
+<p>This gives the type of the parameter, which determines what type of values it
+can hold and how it will be made available to the shader. <code>&lt;type&gt;</code> must be
+a scalar GLSL numeric type, such as <code>int</code>, <code>float</code> or <code>uint</code>.</p>
+<p>If a type is <code>ENUM</code>, it is treated as an enumeration type. To use this, <code>type</code>
+must either be <code>int</code> or <code>DEFINE</code>. Instead of providing a single default value,
+the param body should be a list of all possible enumeration values (as separate
+lines). These names will be made available inside the shader body (as a
+<code>#define</code>), as well as inside RPN expressions (e.g. <code>WHEN</code>). The qualifiers
+<code>MINIMUM</code> and <code>MAXIMUM</code> are ignored for <code>ENUM</code> parameters, with the value
+range instead being set implicitly from the list of options.</p>
+<p>The optional qualifiers <code>DYNAMIC</code> or <code>CONSTANT</code> mark the parameter as
+dynamically changing and compile-time constant, respectively. A <code>DYNAMIC</code>
+variable is assumed to change frequently, and will be grouped with other
+frequently-changing input parameters. A <code>CONSTANT</code> parameter will be
+introduced as a compile-time constant into the shader header, which means thy
+can be used in e.g. constant expressions such as array sizes.<sup id="fnref:spec"><a class="footnote-ref" href="#fn:spec">3</a></sup></p>
+<p>Finally, the special type <code>TYPE DEFINE</code> marks a variable as a preprocessor
+define, which can be used inside <code>#if</code> preprocessor expressions. For example:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-9-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-9-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-9-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-9-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-9-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-9-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-9-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-9-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-9-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-9-10">10</a></span>
+<span class="normal"><a href="#__codelineno-9-11">11</a></span>
+<span class="normal"><a href="#__codelineno-9-12">12</a></span>
+<span class="normal"><a href="#__codelineno-9-13">13</a></span>
+<span class="normal"><a href="#__codelineno-9-14">14</a></span>
+<span class="normal"><a href="#__codelineno-9-15">15</a></span>
+<span class="normal"><a href="#__codelineno-9-16">16</a></span>
+<span class="normal"><a href="#__codelineno-9-17">17</a></span>
+<span class="normal"><a href="#__codelineno-9-18">18</a></span>
+<span class="normal"><a href="#__codelineno-9-19">19</a></span>
+<span class="normal"><a href="#__codelineno-9-20">20</a></span>
+<span class="normal"><a href="#__codelineno-9-21">21</a></span>
+<span class="normal"><a href="#__codelineno-9-22">22</a></span>
+<span class="normal"><a href="#__codelineno-9-23">23</a></span>
+<span class="normal"><a href="#__codelineno-9-24">24</a></span>
+<span class="normal"><a href="#__codelineno-9-25">25</a></span>
+<span class="normal"><a href="#__codelineno-9-26">26</a></span>
+<span class="normal"><a href="#__codelineno-9-27">27</a></span>
+<span class="normal"><a href="#__codelineno-9-28">28</a></span>
+<span class="normal"><a href="#__codelineno-9-29">29</a></span>
+<span class="normal"><a href="#__codelineno-9-30">30</a></span>
+<span class="normal"><a href="#__codelineno-9-31">31</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="c1">//!PARAM taps</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2"></a><span class="c1">//!DESC Smoothing taps</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3"></a><span class="c1">//!TYPE DEFINE</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4"></a><span class="c1">//!MINIMUM 0</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5"></a><span class="c1">//!MAXIMUM 5</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6"></a><span class="mi">2</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7"></a>
+<a id="__codelineno-9-8" name="__codelineno-9-8"></a><span class="c1">//!HOOK LUMA</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10"></a><span class="k">const</span><span class="w"> </span><span class="kt">uint</span><span class="w"> </span><span class="n">row_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">taps</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11"></a><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">weights</span><span class="p">[</span><span class="n">row_size</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12"></a><span class="cp">#if taps == 0</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13"></a><span class="w">    </span><span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14"></a><span class="cp">#endif</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15"></a>
+<a id="__codelineno-9-16" name="__codelineno-9-16"></a><span class="cp">#if taps == 1</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17"></a><span class="w">    </span><span class="mf">0.10650697891920</span><span class="p">,</span>
+<a id="__codelineno-9-18" name="__codelineno-9-18"></a><span class="w">    </span><span class="mf">0.78698604216159</span><span class="p">,</span>
+<a id="__codelineno-9-19" name="__codelineno-9-19"></a><span class="w">    </span><span class="mf">0.10650697891920</span><span class="p">,</span>
+<a id="__codelineno-9-20" name="__codelineno-9-20"></a><span class="cp">#endif</span>
+<a id="__codelineno-9-21" name="__codelineno-9-21"></a>
+<a id="__codelineno-9-22" name="__codelineno-9-22"></a><span class="cp">#if taps == 2</span>
+<a id="__codelineno-9-23" name="__codelineno-9-23"></a><span class="w">    </span><span class="mf">0.05448868454964</span><span class="p">,</span>
+<a id="__codelineno-9-24" name="__codelineno-9-24"></a><span class="w">    </span><span class="mf">0.24420134200323</span><span class="p">,</span>
+<a id="__codelineno-9-25" name="__codelineno-9-25"></a><span class="w">    </span><span class="mf">0.40261994689424</span><span class="p">,</span>
+<a id="__codelineno-9-26" name="__codelineno-9-26"></a><span class="w">    </span><span class="mf">0.24420134200323</span><span class="p">,</span>
+<a id="__codelineno-9-27" name="__codelineno-9-27"></a><span class="w">    </span><span class="mf">0.05448868454964</span><span class="p">,</span>
+<a id="__codelineno-9-28" name="__codelineno-9-28"></a><span class="cp">#endif</span>
+<a id="__codelineno-9-29" name="__codelineno-9-29"></a>
+<a id="__codelineno-9-30" name="__codelineno-9-30"></a><span class="w">    </span><span class="c1">// ...</span>
+<a id="__codelineno-9-31" name="__codelineno-9-31"></a><span class="p">};</span>
+</code></pre></div></td></tr></table></div>
+<p>An example of an enum parameter:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-10-1"> 1</a></span>
+<span class="normal"><a href="#__codelineno-10-2"> 2</a></span>
+<span class="normal"><a href="#__codelineno-10-3"> 3</a></span>
+<span class="normal"><a href="#__codelineno-10-4"> 4</a></span>
+<span class="normal"><a href="#__codelineno-10-5"> 5</a></span>
+<span class="normal"><a href="#__codelineno-10-6"> 6</a></span>
+<span class="normal"><a href="#__codelineno-10-7"> 7</a></span>
+<span class="normal"><a href="#__codelineno-10-8"> 8</a></span>
+<span class="normal"><a href="#__codelineno-10-9"> 9</a></span>
+<span class="normal"><a href="#__codelineno-10-10">10</a></span>
+<span class="normal"><a href="#__codelineno-10-11">11</a></span>
+<span class="normal"><a href="#__codelineno-10-12">12</a></span>
+<span class="normal"><a href="#__codelineno-10-13">13</a></span>
+<span class="normal"><a href="#__codelineno-10-14">14</a></span>
+<span class="normal"><a href="#__codelineno-10-15">15</a></span>
+<span class="normal"><a href="#__codelineno-10-16">16</a></span>
+<span class="normal"><a href="#__codelineno-10-17">17</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1"></a><span class="c1">//!PARAM csp</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2"></a><span class="c1">//!DESC Colorspace</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3"></a><span class="c1">//!TYPE ENUM int</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4"></a><span class="n">BT709</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5"></a><span class="n">BT2020</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6"></a><span class="n">DCIP3</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7"></a>
+<a id="__codelineno-10-8" name="__codelineno-10-8"></a><span class="c1">//!HOOK MAIN</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10"></a><span class="k">const</span><span class="w"> </span><span class="kt">mat3</span><span class="w"> </span><span class="n">matrices</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11"></a><span class="w">    </span><span class="kt">mat3</span><span class="p">(...),</span><span class="w"> </span><span class="c1">// BT709</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12"></a><span class="w">    </span><span class="kt">mat3</span><span class="p">(...),</span><span class="w"> </span><span class="c1">// BT2020</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13"></a><span class="w">    </span><span class="kt">mat3</span><span class="p">(...),</span><span class="w"> </span><span class="c1">// DCIP3</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14"></a><span class="p">};</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15"></a>
+<a id="__codelineno-10-16" name="__codelineno-10-16"></a><span class="cp">#define MAT matrices[csp]</span>
+<a id="__codelineno-10-17" name="__codelineno-10-17"></a><span class="c1">// ...</span>
+</code></pre></div></td></tr></table></div>
+<h2 id="full-example">Full example</h2>
+<p>A collection of full examples can be found in the <a href="https://github.com/mpv-player/mpv/wiki/User-Scripts#user-shaders">mpv user shaders
+wiki</a>, but
+here is an example of a parametrized Gaussian smoothed film grain compute
+shader:</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-11-1">  1</a></span>
+<span class="normal"><a href="#__codelineno-11-2">  2</a></span>
+<span class="normal"><a href="#__codelineno-11-3">  3</a></span>
+<span class="normal"><a href="#__codelineno-11-4">  4</a></span>
+<span class="normal"><a href="#__codelineno-11-5">  5</a></span>
+<span class="normal"><a href="#__codelineno-11-6">  6</a></span>
+<span class="normal"><a href="#__codelineno-11-7">  7</a></span>
+<span class="normal"><a href="#__codelineno-11-8">  8</a></span>
+<span class="normal"><a href="#__codelineno-11-9">  9</a></span>
+<span class="normal"><a href="#__codelineno-11-10"> 10</a></span>
+<span class="normal"><a href="#__codelineno-11-11"> 11</a></span>
+<span class="normal"><a href="#__codelineno-11-12"> 12</a></span>
+<span class="normal"><a href="#__codelineno-11-13"> 13</a></span>
+<span class="normal"><a href="#__codelineno-11-14"> 14</a></span>
+<span class="normal"><a href="#__codelineno-11-15"> 15</a></span>
+<span class="normal"><a href="#__codelineno-11-16"> 16</a></span>
+<span class="normal"><a href="#__codelineno-11-17"> 17</a></span>
+<span class="normal"><a href="#__codelineno-11-18"> 18</a></span>
+<span class="normal"><a href="#__codelineno-11-19"> 19</a></span>
+<span class="normal"><a href="#__codelineno-11-20"> 20</a></span>
+<span class="normal"><a href="#__codelineno-11-21"> 21</a></span>
+<span class="normal"><a href="#__codelineno-11-22"> 22</a></span>
+<span class="normal"><a href="#__codelineno-11-23"> 23</a></span>
+<span class="normal"><a href="#__codelineno-11-24"> 24</a></span>
+<span class="normal"><a href="#__codelineno-11-25"> 25</a></span>
+<span class="normal"><a href="#__codelineno-11-26"> 26</a></span>
+<span class="normal"><a href="#__codelineno-11-27"> 27</a></span>
+<span class="normal"><a href="#__codelineno-11-28"> 28</a></span>
+<span class="normal"><a href="#__codelineno-11-29"> 29</a></span>
+<span class="normal"><a href="#__codelineno-11-30"> 30</a></span>
+<span class="normal"><a href="#__codelineno-11-31"> 31</a></span>
+<span class="normal"><a href="#__codelineno-11-32"> 32</a></span>
+<span class="normal"><a href="#__codelineno-11-33"> 33</a></span>
+<span class="normal"><a href="#__codelineno-11-34"> 34</a></span>
+<span class="normal"><a href="#__codelineno-11-35"> 35</a></span>
+<span class="normal"><a href="#__codelineno-11-36"> 36</a></span>
+<span class="normal"><a href="#__codelineno-11-37"> 37</a></span>
+<span class="normal"><a href="#__codelineno-11-38"> 38</a></span>
+<span class="normal"><a href="#__codelineno-11-39"> 39</a></span>
+<span class="normal"><a href="#__codelineno-11-40"> 40</a></span>
+<span class="normal"><a href="#__codelineno-11-41"> 41</a></span>
+<span class="normal"><a href="#__codelineno-11-42"> 42</a></span>
+<span class="normal"><a href="#__codelineno-11-43"> 43</a></span>
+<span class="normal"><a href="#__codelineno-11-44"> 44</a></span>
+<span class="normal"><a href="#__codelineno-11-45"> 45</a></span>
+<span class="normal"><a href="#__codelineno-11-46"> 46</a></span>
+<span class="normal"><a href="#__codelineno-11-47"> 47</a></span>
+<span class="normal"><a href="#__codelineno-11-48"> 48</a></span>
+<span class="normal"><a href="#__codelineno-11-49"> 49</a></span>
+<span class="normal"><a href="#__codelineno-11-50"> 50</a></span>
+<span class="normal"><a href="#__codelineno-11-51"> 51</a></span>
+<span class="normal"><a href="#__codelineno-11-52"> 52</a></span>
+<span class="normal"><a href="#__codelineno-11-53"> 53</a></span>
+<span class="normal"><a href="#__codelineno-11-54"> 54</a></span>
+<span class="normal"><a href="#__codelineno-11-55"> 55</a></span>
+<span class="normal"><a href="#__codelineno-11-56"> 56</a></span>
+<span class="normal"><a href="#__codelineno-11-57"> 57</a></span>
+<span class="normal"><a href="#__codelineno-11-58"> 58</a></span>
+<span class="normal"><a href="#__codelineno-11-59"> 59</a></span>
+<span class="normal"><a href="#__codelineno-11-60"> 60</a></span>
+<span class="normal"><a href="#__codelineno-11-61"> 61</a></span>
+<span class="normal"><a href="#__codelineno-11-62"> 62</a></span>
+<span class="normal"><a href="#__codelineno-11-63"> 63</a></span>
+<span class="normal"><a href="#__codelineno-11-64"> 64</a></span>
+<span class="normal"><a href="#__codelineno-11-65"> 65</a></span>
+<span class="normal"><a href="#__codelineno-11-66"> 66</a></span>
+<span class="normal"><a href="#__codelineno-11-67"> 67</a></span>
+<span class="normal"><a href="#__codelineno-11-68"> 68</a></span>
+<span class="normal"><a href="#__codelineno-11-69"> 69</a></span>
+<span class="normal"><a href="#__codelineno-11-70"> 70</a></span>
+<span class="normal"><a href="#__codelineno-11-71"> 71</a></span>
+<span class="normal"><a href="#__codelineno-11-72"> 72</a></span>
+<span class="normal"><a href="#__codelineno-11-73"> 73</a></span>
+<span class="normal"><a href="#__codelineno-11-74"> 74</a></span>
+<span class="normal"><a href="#__codelineno-11-75"> 75</a></span>
+<span class="normal"><a href="#__codelineno-11-76"> 76</a></span>
+<span class="normal"><a href="#__codelineno-11-77"> 77</a></span>
+<span class="normal"><a href="#__codelineno-11-78"> 78</a></span>
+<span class="normal"><a href="#__codelineno-11-79"> 79</a></span>
+<span class="normal"><a href="#__codelineno-11-80"> 80</a></span>
+<span class="normal"><a href="#__codelineno-11-81"> 81</a></span>
+<span class="normal"><a href="#__codelineno-11-82"> 82</a></span>
+<span class="normal"><a href="#__codelineno-11-83"> 83</a></span>
+<span class="normal"><a href="#__codelineno-11-84"> 84</a></span>
+<span class="normal"><a href="#__codelineno-11-85"> 85</a></span>
+<span class="normal"><a href="#__codelineno-11-86"> 86</a></span>
+<span class="normal"><a href="#__codelineno-11-87"> 87</a></span>
+<span class="normal"><a href="#__codelineno-11-88"> 88</a></span>
+<span class="normal"><a href="#__codelineno-11-89"> 89</a></span>
+<span class="normal"><a href="#__codelineno-11-90"> 90</a></span>
+<span class="normal"><a href="#__codelineno-11-91"> 91</a></span>
+<span class="normal"><a href="#__codelineno-11-92"> 92</a></span>
+<span class="normal"><a href="#__codelineno-11-93"> 93</a></span>
+<span class="normal"><a href="#__codelineno-11-94"> 94</a></span>
+<span class="normal"><a href="#__codelineno-11-95"> 95</a></span>
+<span class="normal"><a href="#__codelineno-11-96"> 96</a></span>
+<span class="normal"><a href="#__codelineno-11-97"> 97</a></span>
+<span class="normal"><a href="#__codelineno-11-98"> 98</a></span>
+<span class="normal"><a href="#__codelineno-11-99"> 99</a></span>
+<span class="normal"><a href="#__codelineno-11-100">100</a></span>
+<span class="normal"><a href="#__codelineno-11-101">101</a></span>
+<span class="normal"><a href="#__codelineno-11-102">102</a></span>
+<span class="normal"><a href="#__codelineno-11-103">103</a></span>
+<span class="normal"><a href="#__codelineno-11-104">104</a></span>
+<span class="normal"><a href="#__codelineno-11-105">105</a></span>
+<span class="normal"><a href="#__codelineno-11-106">106</a></span>
+<span class="normal"><a href="#__codelineno-11-107">107</a></span>
+<span class="normal"><a href="#__codelineno-11-108">108</a></span>
+<span class="normal"><a href="#__codelineno-11-109">109</a></span>
+<span class="normal"><a href="#__codelineno-11-110">110</a></span>
+<span class="normal"><a href="#__codelineno-11-111">111</a></span>
+<span class="normal"><a href="#__codelineno-11-112">112</a></span>
+<span class="normal"><a href="#__codelineno-11-113">113</a></span>
+<span class="normal"><a href="#__codelineno-11-114">114</a></span>
+<span class="normal"><a href="#__codelineno-11-115">115</a></span>
+<span class="normal"><a href="#__codelineno-11-116">116</a></span>
+<span class="normal"><a href="#__codelineno-11-117">117</a></span>
+<span class="normal"><a href="#__codelineno-11-118">118</a></span>
+<span class="normal"><a href="#__codelineno-11-119">119</a></span>
+<span class="normal"><a href="#__codelineno-11-120">120</a></span>
+<span class="normal"><a href="#__codelineno-11-121">121</a></span>
+<span class="normal"><a href="#__codelineno-11-122">122</a></span>
+<span class="normal"><a href="#__codelineno-11-123">123</a></span>
+<span class="normal"><a href="#__codelineno-11-124">124</a></span>
+<span class="normal"><a href="#__codelineno-11-125">125</a></span>
+<span class="normal"><a href="#__codelineno-11-126">126</a></span>
+<span class="normal"><a href="#__codelineno-11-127">127</a></span>
+<span class="normal"><a href="#__codelineno-11-128">128</a></span>
+<span class="normal"><a href="#__codelineno-11-129">129</a></span>
+<span class="normal"><a href="#__codelineno-11-130">130</a></span>
+<span class="normal"><a href="#__codelineno-11-131">131</a></span>
+<span class="normal"><a href="#__codelineno-11-132">132</a></span>
+<span class="normal"><a href="#__codelineno-11-133">133</a></span>
+<span class="normal"><a href="#__codelineno-11-134">134</a></span>
+<span class="normal"><a href="#__codelineno-11-135">135</a></span>
+<span class="normal"><a href="#__codelineno-11-136">136</a></span>
+<span class="normal"><a href="#__codelineno-11-137">137</a></span>
+<span class="normal"><a href="#__codelineno-11-138">138</a></span>
+<span class="normal"><a href="#__codelineno-11-139">139</a></span>
+<span class="normal"><a href="#__codelineno-11-140">140</a></span>
+<span class="normal"><a href="#__codelineno-11-141">141</a></span>
+<span class="normal"><a href="#__codelineno-11-142">142</a></span>
+<span class="normal"><a href="#__codelineno-11-143">143</a></span>
+<span class="normal"><a href="#__codelineno-11-144">144</a></span>
+<span class="normal"><a href="#__codelineno-11-145">145</a></span>
+<span class="normal"><a href="#__codelineno-11-146">146</a></span>
+<span class="normal"><a href="#__codelineno-11-147">147</a></span>
+<span class="normal"><a href="#__codelineno-11-148">148</a></span>
+<span class="normal"><a href="#__codelineno-11-149">149</a></span>
+<span class="normal"><a href="#__codelineno-11-150">150</a></span>
+<span class="normal"><a href="#__codelineno-11-151">151</a></span>
+<span class="normal"><a href="#__codelineno-11-152">152</a></span>
+<span class="normal"><a href="#__codelineno-11-153">153</a></span>
+<span class="normal"><a href="#__codelineno-11-154">154</a></span>
+<span class="normal"><a href="#__codelineno-11-155">155</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1"></a><span class="c1">//!PARAM intensity</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2"></a><span class="c1">//!DESC Film grain intensity</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3"></a><span class="c1">//!TYPE float</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4"></a><span class="c1">//!MINIMUM 0</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5"></a><span class="mf">0.1</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6"></a>
+<a id="__codelineno-11-7" name="__codelineno-11-7"></a><span class="c1">//!PARAM taps</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8"></a><span class="c1">//!DESC Film grain smoothing taps</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9"></a><span class="c1">//!TYPE DEFINE</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10"></a><span class="c1">//!MINIMUM 0</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11"></a><span class="c1">//!MAXIMUM 5</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12"></a><span class="mi">2</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13"></a>
+<a id="__codelineno-11-14" name="__codelineno-11-14"></a><span class="c1">//!HOOK LUMA</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15"></a><span class="c1">//!BIND HOOKED</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16"></a><span class="c1">//!DESC Apply gaussian smoothed film grain</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17"></a><span class="c1">//!WHEN intensity 0 &gt;</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18"></a><span class="c1">//!COMPUTE 32 32</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19"></a>
+<a id="__codelineno-11-20" name="__codelineno-11-20"></a><span class="k">const</span><span class="w"> </span><span class="kt">uint</span><span class="w"> </span><span class="n">row_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">taps</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<a id="__codelineno-11-21" name="__codelineno-11-21"></a><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">weights</span><span class="p">[</span><span class="n">row_size</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-22" name="__codelineno-11-22"></a><span class="cp">#if taps == 0</span>
+<a id="__codelineno-11-23" name="__codelineno-11-23"></a><span class="w">    </span><span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-11-24" name="__codelineno-11-24"></a><span class="cp">#endif</span>
+<a id="__codelineno-11-25" name="__codelineno-11-25"></a>
+<a id="__codelineno-11-26" name="__codelineno-11-26"></a><span class="cp">#if taps == 1</span>
+<a id="__codelineno-11-27" name="__codelineno-11-27"></a><span class="w">    </span><span class="mf">0.10650697891920</span><span class="p">,</span>
+<a id="__codelineno-11-28" name="__codelineno-11-28"></a><span class="w">    </span><span class="mf">0.78698604216159</span><span class="p">,</span>
+<a id="__codelineno-11-29" name="__codelineno-11-29"></a><span class="w">    </span><span class="mf">0.10650697891920</span><span class="p">,</span>
+<a id="__codelineno-11-30" name="__codelineno-11-30"></a><span class="cp">#endif</span>
+<a id="__codelineno-11-31" name="__codelineno-11-31"></a>
+<a id="__codelineno-11-32" name="__codelineno-11-32"></a><span class="cp">#if taps == 2</span>
+<a id="__codelineno-11-33" name="__codelineno-11-33"></a><span class="w">    </span><span class="mf">0.05448868454964</span><span class="p">,</span>
+<a id="__codelineno-11-34" name="__codelineno-11-34"></a><span class="w">    </span><span class="mf">0.24420134200323</span><span class="p">,</span>
+<a id="__codelineno-11-35" name="__codelineno-11-35"></a><span class="w">    </span><span class="mf">0.40261994689424</span><span class="p">,</span>
+<a id="__codelineno-11-36" name="__codelineno-11-36"></a><span class="w">    </span><span class="mf">0.24420134200323</span><span class="p">,</span>
+<a id="__codelineno-11-37" name="__codelineno-11-37"></a><span class="w">    </span><span class="mf">0.05448868454964</span><span class="p">,</span>
+<a id="__codelineno-11-38" name="__codelineno-11-38"></a><span class="cp">#endif</span>
+<a id="__codelineno-11-39" name="__codelineno-11-39"></a>
+<a id="__codelineno-11-40" name="__codelineno-11-40"></a><span class="cp">#if taps == 3</span>
+<a id="__codelineno-11-41" name="__codelineno-11-41"></a><span class="w">    </span><span class="mf">0.03663284536919</span><span class="p">,</span>
+<a id="__codelineno-11-42" name="__codelineno-11-42"></a><span class="w">    </span><span class="mf">0.11128075847888</span><span class="p">,</span>
+<a id="__codelineno-11-43" name="__codelineno-11-43"></a><span class="w">    </span><span class="mf">0.21674532140370</span><span class="p">,</span>
+<a id="__codelineno-11-44" name="__codelineno-11-44"></a><span class="w">    </span><span class="mf">0.27068214949642</span><span class="p">,</span>
+<a id="__codelineno-11-45" name="__codelineno-11-45"></a><span class="w">    </span><span class="mf">0.21674532140370</span><span class="p">,</span>
+<a id="__codelineno-11-46" name="__codelineno-11-46"></a><span class="w">    </span><span class="mf">0.11128075847888</span><span class="p">,</span>
+<a id="__codelineno-11-47" name="__codelineno-11-47"></a><span class="w">    </span><span class="mf">0.03663284536919</span><span class="p">,</span>
+<a id="__codelineno-11-48" name="__codelineno-11-48"></a><span class="cp">#endif</span>
+<a id="__codelineno-11-49" name="__codelineno-11-49"></a>
+<a id="__codelineno-11-50" name="__codelineno-11-50"></a><span class="cp">#if taps == 4</span>
+<a id="__codelineno-11-51" name="__codelineno-11-51"></a><span class="w">    </span><span class="mf">0.02763055063889</span><span class="p">,</span>
+<a id="__codelineno-11-52" name="__codelineno-11-52"></a><span class="w">    </span><span class="mf">0.06628224528636</span><span class="p">,</span>
+<a id="__codelineno-11-53" name="__codelineno-11-53"></a><span class="w">    </span><span class="mf">0.12383153680577</span><span class="p">,</span>
+<a id="__codelineno-11-54" name="__codelineno-11-54"></a><span class="w">    </span><span class="mf">0.18017382291138</span><span class="p">,</span>
+<a id="__codelineno-11-55" name="__codelineno-11-55"></a><span class="w">    </span><span class="mf">0.20416368871516</span><span class="p">,</span>
+<a id="__codelineno-11-56" name="__codelineno-11-56"></a><span class="w">    </span><span class="mf">0.18017382291138</span><span class="p">,</span>
+<a id="__codelineno-11-57" name="__codelineno-11-57"></a><span class="w">    </span><span class="mf">0.12383153680577</span><span class="p">,</span>
+<a id="__codelineno-11-58" name="__codelineno-11-58"></a><span class="w">    </span><span class="mf">0.06628224528636</span><span class="p">,</span>
+<a id="__codelineno-11-59" name="__codelineno-11-59"></a><span class="w">    </span><span class="mf">0.02763055063889</span><span class="p">,</span>
+<a id="__codelineno-11-60" name="__codelineno-11-60"></a><span class="cp">#endif</span>
+<a id="__codelineno-11-61" name="__codelineno-11-61"></a>
+<a id="__codelineno-11-62" name="__codelineno-11-62"></a><span class="cp">#if taps == 5</span>
+<a id="__codelineno-11-63" name="__codelineno-11-63"></a><span class="w">    </span><span class="mf">0.02219054849244</span><span class="p">,</span>
+<a id="__codelineno-11-64" name="__codelineno-11-64"></a><span class="w">    </span><span class="mf">0.04558899978527</span><span class="p">,</span>
+<a id="__codelineno-11-65" name="__codelineno-11-65"></a><span class="w">    </span><span class="mf">0.07981140824009</span><span class="p">,</span>
+<a id="__codelineno-11-66" name="__codelineno-11-66"></a><span class="w">    </span><span class="mf">0.11906462996609</span><span class="p">,</span>
+<a id="__codelineno-11-67" name="__codelineno-11-67"></a><span class="w">    </span><span class="mf">0.15136080967773</span><span class="p">,</span>
+<a id="__codelineno-11-68" name="__codelineno-11-68"></a><span class="w">    </span><span class="mf">0.16396720767670</span><span class="p">,</span>
+<a id="__codelineno-11-69" name="__codelineno-11-69"></a><span class="w">    </span><span class="mf">0.15136080967773</span><span class="p">,</span>
+<a id="__codelineno-11-70" name="__codelineno-11-70"></a><span class="w">    </span><span class="mf">0.11906462996609</span><span class="p">,</span>
+<a id="__codelineno-11-71" name="__codelineno-11-71"></a><span class="w">    </span><span class="mf">0.07981140824009</span><span class="p">,</span>
+<a id="__codelineno-11-72" name="__codelineno-11-72"></a><span class="w">    </span><span class="mf">0.04558899978527</span><span class="p">,</span>
+<a id="__codelineno-11-73" name="__codelineno-11-73"></a><span class="w">    </span><span class="mf">0.02219054849244</span><span class="p">,</span>
+<a id="__codelineno-11-74" name="__codelineno-11-74"></a><span class="cp">#endif</span>
+<a id="__codelineno-11-75" name="__codelineno-11-75"></a><span class="p">};</span>
+<a id="__codelineno-11-76" name="__codelineno-11-76"></a>
+<a id="__codelineno-11-77" name="__codelineno-11-77"></a><span class="k">const</span><span class="w"> </span><span class="kt">uvec2</span><span class="w"> </span><span class="n">isize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">uvec2</span><span class="p">(</span><span class="nb">gl_WorkGroupSize</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">uvec2</span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">taps</span><span class="p">);</span>
+<a id="__codelineno-11-78" name="__codelineno-11-78"></a><span class="k">shared</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">grain</span><span class="p">[</span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="p">][</span><span class="n">isize</span><span class="p">.</span><span class="n">x</span><span class="p">];</span>
+<a id="__codelineno-11-79" name="__codelineno-11-79"></a>
+<a id="__codelineno-11-80" name="__codelineno-11-80"></a><span class="c1">// PRNG</span>
+<a id="__codelineno-11-81" name="__codelineno-11-81"></a><span class="kt">float</span><span class="w"> </span><span class="n">permute</span><span class="p">(</span><span class="kt">float</span><span class="w"> </span><span class="n">x</span><span class="p">)</span>
+<a id="__codelineno-11-82" name="__codelineno-11-82"></a><span class="p">{</span>
+<a id="__codelineno-11-83" name="__codelineno-11-83"></a><span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mf">34.0</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">1.0</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<a id="__codelineno-11-84" name="__codelineno-11-84"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">fract</span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1.0</span><span class="o">/</span><span class="mf">289.0</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">289.0</span><span class="p">;</span>
+<a id="__codelineno-11-85" name="__codelineno-11-85"></a><span class="p">}</span>
+<a id="__codelineno-11-86" name="__codelineno-11-86"></a>
+<a id="__codelineno-11-87" name="__codelineno-11-87"></a><span class="kt">float</span><span class="w"> </span><span class="n">seed</span><span class="p">(</span><span class="kt">uvec2</span><span class="w"> </span><span class="n">pos</span><span class="p">)</span>
+<a id="__codelineno-11-88" name="__codelineno-11-88"></a><span class="p">{</span>
+<a id="__codelineno-11-89" name="__codelineno-11-89"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">phi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.61803398874989</span><span class="p">;</span>
+<a id="__codelineno-11-90" name="__codelineno-11-90"></a><span class="w">    </span><span class="kt">vec3</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">vec3</span><span class="p">(</span><span class="n">fract</span><span class="p">(</span><span class="n">phi</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="kt">vec2</span><span class="p">(</span><span class="n">pos</span><span class="p">)),</span><span class="w"> </span><span class="n">random</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">vec3</span><span class="p">(</span><span class="mf">1.0</span><span class="p">);</span>
+<a id="__codelineno-11-91" name="__codelineno-11-91"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">permute</span><span class="p">(</span><span class="n">permute</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">z</span><span class="p">;</span>
+<a id="__codelineno-11-92" name="__codelineno-11-92"></a><span class="p">}</span>
+<a id="__codelineno-11-93" name="__codelineno-11-93"></a>
+<a id="__codelineno-11-94" name="__codelineno-11-94"></a><span class="kt">float</span><span class="w"> </span><span class="n">rand</span><span class="p">(</span><span class="k">inout</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">state</span><span class="p">)</span>
+<a id="__codelineno-11-95" name="__codelineno-11-95"></a><span class="p">{</span>
+<a id="__codelineno-11-96" name="__codelineno-11-96"></a><span class="w">    </span><span class="n">state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">permute</span><span class="p">(</span><span class="n">state</span><span class="p">);</span>
+<a id="__codelineno-11-97" name="__codelineno-11-97"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">fract</span><span class="p">(</span><span class="n">state</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1.0</span><span class="o">/</span><span class="mf">41.0</span><span class="p">);</span>
+<a id="__codelineno-11-98" name="__codelineno-11-98"></a><span class="p">}</span>
+<a id="__codelineno-11-99" name="__codelineno-11-99"></a>
+<a id="__codelineno-11-100" name="__codelineno-11-100"></a><span class="c1">// Turns uniform white noise into gaussian white noise by passing it</span>
+<a id="__codelineno-11-101" name="__codelineno-11-101"></a><span class="c1">// through an approximation of the gaussian quantile function</span>
+<a id="__codelineno-11-102" name="__codelineno-11-102"></a><span class="kt">float</span><span class="w"> </span><span class="n">rand_gaussian</span><span class="p">(</span><span class="k">inout</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">state</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-103" name="__codelineno-11-103"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">a0</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.151015505647689</span><span class="p">;</span>
+<a id="__codelineno-11-104" name="__codelineno-11-104"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">a1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mf">0.5303572634357367</span><span class="p">;</span>
+<a id="__codelineno-11-105" name="__codelineno-11-105"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">a2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.365020122861334</span><span class="p">;</span>
+<a id="__codelineno-11-106" name="__codelineno-11-106"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">b0</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.132089632343748</span><span class="p">;</span>
+<a id="__codelineno-11-107" name="__codelineno-11-107"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="n">b1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="mf">0.7607324991323768</span><span class="p">;</span>
+<a id="__codelineno-11-108" name="__codelineno-11-108"></a>
+<a id="__codelineno-11-109" name="__codelineno-11-109"></a><span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.95</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">rand</span><span class="p">(</span><span class="n">state</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">0.025</span><span class="p">;</span>
+<a id="__codelineno-11-110" name="__codelineno-11-110"></a><span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">0.5</span><span class="p">;</span>
+<a id="__codelineno-11-111" name="__codelineno-11-111"></a><span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">q</span><span class="p">;</span>
+<a id="__codelineno-11-112" name="__codelineno-11-112"></a>
+<a id="__codelineno-11-113" name="__codelineno-11-113"></a><span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">a2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">a1</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">a0</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="o">*</span><span class="n">r</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b1</span><span class="o">*</span><span class="n">r</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b0</span><span class="p">));</span>
+<a id="__codelineno-11-114" name="__codelineno-11-114"></a><span class="w">    </span><span class="n">g</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mf">0.255121822830526</span><span class="p">;</span><span class="w"> </span><span class="c1">// normalize to [-1,1)</span>
+<a id="__codelineno-11-115" name="__codelineno-11-115"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">g</span><span class="p">;</span>
+<a id="__codelineno-11-116" name="__codelineno-11-116"></a><span class="p">}</span>
+<a id="__codelineno-11-117" name="__codelineno-11-117"></a>
+<a id="__codelineno-11-118" name="__codelineno-11-118"></a><span class="kt">void</span><span class="w"> </span><span class="n">hook</span><span class="p">()</span>
+<a id="__codelineno-11-119" name="__codelineno-11-119"></a><span class="p">{</span>
+<a id="__codelineno-11-120" name="__codelineno-11-120"></a><span class="w">    </span><span class="c1">// generate grain in `grain`</span>
+<a id="__codelineno-11-121" name="__codelineno-11-121"></a><span class="w">    </span><span class="kt">uint</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">gl_WorkGroupSize</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">gl_WorkGroupSize</span><span class="p">.</span><span class="n">y</span><span class="p">;</span>
+<a id="__codelineno-11-122" name="__codelineno-11-122"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">gl_LocalInvocationIndex</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">x</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">num_threads</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-123" name="__codelineno-11-123"></a><span class="w">        </span><span class="kt">uvec2</span><span class="w"> </span><span class="n">pos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">uvec2</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="p">);</span>
+<a id="__codelineno-11-124" name="__codelineno-11-124"></a><span class="w">        </span><span class="kt">float</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">seed</span><span class="p">(</span><span class="nb">gl_WorkGroupID</span><span class="p">.</span><span class="n">xy</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">gl_WorkGroupSize</span><span class="p">.</span><span class="n">xy</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">pos</span><span class="p">);</span>
+<a id="__codelineno-11-125" name="__codelineno-11-125"></a><span class="w">        </span><span class="n">grain</span><span class="p">[</span><span class="n">pos</span><span class="p">.</span><span class="n">y</span><span class="p">][</span><span class="n">pos</span><span class="p">.</span><span class="n">x</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rand_gaussian</span><span class="p">(</span><span class="n">state</span><span class="p">);</span>
+<a id="__codelineno-11-126" name="__codelineno-11-126"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-11-127" name="__codelineno-11-127"></a>
+<a id="__codelineno-11-128" name="__codelineno-11-128"></a><span class="w">    </span><span class="c1">// make writes visible</span>
+<a id="__codelineno-11-129" name="__codelineno-11-129"></a><span class="w">    </span><span class="n">barrier</span><span class="p">();</span>
+<a id="__codelineno-11-130" name="__codelineno-11-130"></a>
+<a id="__codelineno-11-131" name="__codelineno-11-131"></a><span class="w">    </span><span class="c1">// convolve horizontally</span>
+<a id="__codelineno-11-132" name="__codelineno-11-132"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">y</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">isize</span><span class="p">.</span><span class="n">y</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">gl_WorkGroupSize</span><span class="p">.</span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-133" name="__codelineno-11-133"></a><span class="w">        </span><span class="kt">float</span><span class="w"> </span><span class="n">hsum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mo">0</span><span class="p">;</span>
+<a id="__codelineno-11-134" name="__codelineno-11-134"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mo">0</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">row_size</span><span class="p">;</span><span class="w"> </span><span class="n">x</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-135" name="__codelineno-11-135"></a><span class="w">            </span><span class="kt">float</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">grain</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<a id="__codelineno-11-136" name="__codelineno-11-136"></a><span class="w">            </span><span class="n">hsum</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">weights</span><span class="p">[</span><span class="n">x</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">g</span><span class="p">;</span>
+<a id="__codelineno-11-137" name="__codelineno-11-137"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-11-138" name="__codelineno-11-138"></a>
+<a id="__codelineno-11-139" name="__codelineno-11-139"></a><span class="w">        </span><span class="c1">// update grain LUT</span>
+<a id="__codelineno-11-140" name="__codelineno-11-140"></a><span class="w">        </span><span class="n">grain</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">taps</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hsum</span><span class="p">;</span>
+<a id="__codelineno-11-141" name="__codelineno-11-141"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-11-142" name="__codelineno-11-142"></a>
+<a id="__codelineno-11-143" name="__codelineno-11-143"></a><span class="w">    </span><span class="n">barrier</span><span class="p">();</span>
+<a id="__codelineno-11-144" name="__codelineno-11-144"></a>
+<a id="__codelineno-11-145" name="__codelineno-11-145"></a><span class="w">    </span><span class="c1">// convolve vertically</span>
+<a id="__codelineno-11-146" name="__codelineno-11-146"></a><span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">vsum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0</span><span class="p">;</span>
+<a id="__codelineno-11-147" name="__codelineno-11-147"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">uint</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mo">0</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">row_size</span><span class="p">;</span><span class="w"> </span><span class="n">y</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-148" name="__codelineno-11-148"></a><span class="w">        </span><span class="kt">float</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">grain</span><span class="p">[</span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="p">][</span><span class="nb">gl_LocalInvocationID</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">taps</span><span class="p">];</span>
+<a id="__codelineno-11-149" name="__codelineno-11-149"></a><span class="w">        </span><span class="n">vsum</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">weights</span><span class="p">[</span><span class="n">y</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">g</span><span class="p">;</span>
+<a id="__codelineno-11-150" name="__codelineno-11-150"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-11-151" name="__codelineno-11-151"></a>
+<a id="__codelineno-11-152" name="__codelineno-11-152"></a><span class="w">    </span><span class="kt">vec4</span><span class="w"> </span><span class="n">color</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HOOKED_tex</span><span class="p">(</span><span class="n">HOOKED_pos</span><span class="p">);</span>
+<a id="__codelineno-11-153" name="__codelineno-11-153"></a><span class="w">    </span><span class="n">color</span><span class="p">.</span><span class="n">rgb</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="kt">vec3</span><span class="p">(</span><span class="n">intensity</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">vsum</span><span class="p">);</span>
+<a id="__codelineno-11-154" name="__codelineno-11-154"></a><span class="w">    </span><span class="n">imageStore</span><span class="p">(</span><span class="n">out_image</span><span class="p">,</span><span class="w"> </span><span class="kt">ivec2</span><span class="p">(</span><span class="nb">gl_GlobalInvocationID</span><span class="p">),</span><span class="w"> </span><span class="n">color</span><span class="p">);</span>
+<a id="__codelineno-11-155" name="__codelineno-11-155"></a><span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:ifdef">
+<p>Because these are macros, their presence can be tested for using
+  <code>#ifdef</code> inside the GLSL preprocessor.&#160;<a class="footnote-backref" href="#fnref:ifdef" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:mpv">
+<p>In mpv using <code>--vo=gpu-next</code>, these can be set using the
+  <a href="https://mpv.io/manual/master/#options-glsl-shader-opts"><code>--glsl-shader-opts</code> option</a>.&#160;<a class="footnote-backref" href="#fnref:mpv" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:spec">
+<p>On supported platforms, these are implemented using specialization
+  constants, which can be updated at run-time without requiring a full shader
+  recompilation.&#160;<a class="footnote-backref" href="#fnref:spec" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2017-2022 Niklas Haas
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
