@@ -349,6 +349,20 @@ static void bench_yadif(pl_shader sh, pl_shader_obj *state, pl_tex src)
     ));
 }
 
+static void bench_bwdif(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_deinterlace_source dsrc = {
+        .prev = pl_field_pair(src),
+        .cur = pl_field_pair(src),
+        .next = pl_field_pair(src),
+        .field = PL_FIELD_TOP,
+    };
+
+    pl_shader_deinterlace(sh, &dsrc, pl_deinterlace_params(
+        .algo = PL_DEINTERLACE_BWDIF,
+    ));
+}
+
 static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_film_grain_params params = {
@@ -516,6 +530,7 @@ int main()
     benchmark(vk->gpu, "weave", BENCH_SH(bench_weave));
     benchmark(vk->gpu, "bob", BENCH_SH(bench_bob));
     benchmark(vk->gpu, "yadif", BENCH_SH(bench_yadif));
+    benchmark(vk->gpu, "bwdif", BENCH_SH(bench_bwdif));
 
     // Polar sampling
     benchmark(vk->gpu, "polar", BENCH_SH(bench_polar));
