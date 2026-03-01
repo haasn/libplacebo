@@ -84,13 +84,20 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
     }
 
     ident_t prev = cur, next = cur;
-    if (params->algo >= PL_DEINTERLACE_YADIF) {
+    const int bw = PL_DEF(sh_glsl(sh).subgroup_size, 32);
+    if (params->algo == PL_DEINTERLACE_YADIF) {
         // Try using a compute shader for these, for the sole reason of
         // optimizing for thread group synchronicity. Otherwise, because we
         // alternate between lines output as-is and lines output deinterlaced,
         // half of our thread group will be mostly idle at any point in time.
-        const int bw = PL_DEF(sh_glsl(sh).subgroup_size, 32);
         sh_try_compute(sh, bw, 1, true, 0);
+    } else{
+        // Try using a compute shader with a 2D block size for 
+        // cache locality between threads in the non-intra-only case
+        const int bw2d = bw >= 64 ? 8 : 4;
+        const int bh2d = bw >= 64 ? 8 : 8;
+        sh_try_compute(sh, bw2d, bh2d, true, 0);
+
     }
 
     if (!intra_only && src->prev.top && src->prev.top != src->cur.top) {
