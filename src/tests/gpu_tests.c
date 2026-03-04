@@ -576,6 +576,100 @@ static void pl_shader_tests(pl_gpu gpu)
         TEST_FBO_PATTERN(epsilon, "transfer function: %s", pl_color_transfer_name(trc));
     }
 
+    // Test scRGB. Mostly to make sure we output correct scale and out-of-gamut values.
+    // BT.2020 LINEAR to scRGB with Display P3 display primaries.
+    {
+        static const float bt2020_in[][4] = {
+            { 1.0f, 1.0f, 1.0f, 1.0f }, // white
+            { 1.0f, 0.0f, 0.0f, 1.0f }, // red
+            { 0.0f, 1.0f, 0.0f, 1.0f }, // green
+            { 0.0f, 0.0f, 1.0f, 1.0f }, // blue
+        };
+
+        static const float clip_ref[][3] = {
+            {  2.5375f,   2.5375f,   2.5375f  },
+            {  4.2135f,  -0.3160f,  -0.0461f  },
+            { -1.4911f,   2.8747f,  -0.2552f  },
+            { -0.1849f,  -0.0212f,   2.8388f  },
+        };
+
+        static const float sat_ref[][3] = {
+            {  2.5375f,   2.5375f,   2.5375f  },
+            {  3.1083f,  -0.1067f,  -0.0464f  },
+            { -0.5708f,   2.6442f,  -0.1995f  },
+            {  0.0000f,   0.0000f,   2.7834f  },
+        };
+
+        const int N = PL_ARRAY_SIZE(bt2020_in);
+
+        pl_tex bt2020_tex = pl_tex_create(gpu, &(struct pl_tex_params) {
+            .format       = fbo_fmt,
+            .w            = N,
+            .h            = 1,
+            .sampleable   = true,
+            .initial_data = bt2020_in,
+        });
+        REQUIRE(bt2020_tex);
+
+        pl_tex ref_fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
+            .format        = fbo_fmt,
+            .w             = N,
+            .h             = 1,
+            .renderable    = true,
+            .storable      = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
+            .host_readable = true,
+        });
+        REQUIRE(ref_fbo);
+
+        for (int g = 0; g < pl_num_gamut_map_functions; g++) {
+            const float (*ref)[3] = NULL;
+            if (pl_gamut_map_functions[g] == &pl_gamut_map_clip)
+                ref = clip_ref;
+            else if (pl_gamut_map_functions[g] == &pl_gamut_map_saturation)
+                ref = sat_ref;
+
+            if (!ref)
+                continue;
+
+            pl_shader_obj gmap_state = NULL;
+            sh = pl_dispatch_begin(dp);
+            pl_shader_sample_nearest(sh, pl_sample_src( .tex = bt2020_tex ));
+            pl_shader_color_map(sh, &(struct pl_color_map_params) {
+                                    .gamut_mapping = pl_gamut_map_functions[g],
+                                },
+                                (struct pl_color_space) {
+                                    .primaries = PL_COLOR_PRIM_BT_2020,
+                                    .transfer  = PL_COLOR_TRC_LINEAR,
+                                },
+                                (struct pl_color_space) {
+                                    .primaries = PL_COLOR_PRIM_BT_709,
+                                    .transfer  = PL_COLOR_TRC_SCRGB,
+                                    .hdr.prim  = *pl_raw_primaries_get(PL_COLOR_PRIM_DISPLAY_P3),
+                                }, &gmap_state, false);
+            REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
+                .shader = &sh,
+                .target = ref_fbo,
+            )));
+            pl_shader_obj_destroy(&gmap_state);
+
+            static float p3_out[PL_ARRAY_SIZE(bt2020_in) * 4];
+            REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+                .tex = ref_fbo,
+                .ptr = p3_out,
+            }));
+
+            for (int i = 0; i < N; i++) {
+                float *c = &p3_out[i * 4];
+                REQUIRE_FEQ(c[0], ref[i][0], 1e-4f);
+                REQUIRE_FEQ(c[1], ref[i][1], 1e-4f);
+                REQUIRE_FEQ(c[2], ref[i][2], 1e-4f);
+            }
+        }
+
+        pl_tex_destroy(gpu, &bt2020_tex);
+        pl_tex_destroy(gpu, &ref_fbo);
+    }
+
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
         if (sys == PL_COLOR_SYSTEM_DOLBYVISION)
             continue; // requires metadata

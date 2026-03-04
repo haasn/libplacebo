@@ -608,8 +608,9 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
     // displayed on the display where such would be possible. That said, the
     // problem is that not all gamma curves are well-defined on the values
     // outside this range, so we ignore it and just clamp anyway for sanity.
-    GLSL("// pl_shader_linearize           \n"
-         "color.rgb = max(color.rgb, 0.0); \n");
+    GLSL("// pl_shader_linearize \n");
+    if (csp->transfer != PL_COLOR_TRC_SCRGB)
+        GLSL("color.rgb = max(color.rgb, 0.0); \n");
 
     switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
@@ -700,6 +701,10 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
              "    lessThanEqual(vec3(%f), color.rgb));                    \n",
              SLOG_Q, SLOG_P, SLOG_C, SLOG_A, SLOG_B, SLOG_K2, SLOG_Q);
         return;
+    case PL_COLOR_TRC_SCRGB:
+        GLSL("color.rgb *= vec3(%f); \n",
+             PL_COLOR_SCRGB_WHITE / PL_COLOR_SDR_WHITE);
+        return;
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_COUNT:
         break;
@@ -741,7 +746,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
              SH_FLOAT(-csp_min / (csp_max - csp_min)));
     }
 
-    GLSL("color.rgb = max(color.rgb, 0.0); \n");
+    if (csp->transfer != PL_COLOR_TRC_SCRGB)
+        GLSL("color.rgb = max(color.rgb, 0.0); \n");
 
     switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
@@ -827,6 +833,10 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
              "                    + vec3(%f),                                 \n"
              "                lessThanEqual(vec3(0.0), color.rgb));           \n",
              SLOG_P, SLOG_Q, SLOG_A / M_LN10, SLOG_K2, SLOG_B, SLOG_C);
+        return;
+    case PL_COLOR_TRC_SCRGB:
+        GLSL("color.rgb *= vec3(%f); \n",
+             PL_COLOR_SDR_WHITE / PL_COLOR_SCRGB_WHITE);
         return;
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_COUNT:

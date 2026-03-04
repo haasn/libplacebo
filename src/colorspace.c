@@ -307,6 +307,7 @@ const char *const pl_color_transfer_names[PL_COLOR_TRC_COUNT] = {
     [PL_COLOR_TRC_V_LOG]        = "Panasonic V-Log (VARICAM)",
     [PL_COLOR_TRC_S_LOG1]       = "Sony S-Log1",
     [PL_COLOR_TRC_S_LOG2]       = "Sony S-Log2",
+    [PL_COLOR_TRC_SCRGB]        = "IEC 61966-2-2 scRGB (extended linear BT.709)",
 };
 
 const char *pl_color_transfer_name(enum pl_color_transfer trc)
@@ -334,6 +335,9 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_PRO_PHOTO:
     case PL_COLOR_TRC_ST428:
         return 1.0;
+    // scRGB has no nominal peak since it's a linear transfer function used with
+    // 16hf values. Define it to 10000 nits, same as PQ.
+    case PL_COLOR_TRC_SCRGB:
     case PL_COLOR_TRC_PQ:       return 10000.0 / PL_COLOR_SDR_WHITE;
     case PL_COLOR_TRC_HLG:      return 12.0 / HLG_75;
     case PL_COLOR_TRC_V_LOG:    return 46.0855;
@@ -536,6 +540,7 @@ bool pl_color_space_is_black_scaled(const struct pl_color_space *csp)
 
     case PL_COLOR_TRC_BT_1886:
     case PL_COLOR_TRC_PQ:
+    case PL_COLOR_TRC_SCRGB:
     case PL_COLOR_TRC_V_LOG:
     case PL_COLOR_TRC_S_LOG1:
     case PL_COLOR_TRC_S_LOG2:
@@ -570,7 +575,8 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         .out_max    = &csp_max,
     ));
 
-    MAP3(fmaxf(X, 0));
+    if (csp->transfer != PL_COLOR_TRC_SCRGB)
+        MAP3(fmaxf(X, 0));
 
     switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
@@ -630,6 +636,9 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         MAP3(X >= SLOG_Q ? (powf(10, (X - SLOG_C) / SLOG_A) - SLOG_B) / SLOG_K2
                          : (X - SLOG_Q) / SLOG_P);
         goto scale_out;
+    case PL_COLOR_TRC_SCRGB:
+        MAP3(X * (PL_COLOR_SCRGB_WHITE / PL_COLOR_SDR_WHITE));
+        return;
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_COUNT:
         break;
@@ -659,7 +668,8 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
     if (pl_color_space_is_black_scaled(csp) && csp->transfer != PL_COLOR_TRC_HLG)
         MAP3((X - csp_min) / (csp_max - csp_min));
 
-    MAP3(fmaxf(X, 0));
+    if (csp->transfer != PL_COLOR_TRC_SCRGB)
+        MAP3(fmaxf(X, 0));
 
     switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
@@ -716,6 +726,9 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
     case PL_COLOR_TRC_S_LOG2:
         MAP3(X >= 0 ? SLOG_A * log10f(SLOG_B * X + SLOG_C)
                     : SLOG_P * X + SLOG_Q);
+        return;
+    case PL_COLOR_TRC_SCRGB:
+        MAP3(X * (PL_COLOR_SDR_WHITE / PL_COLOR_SCRGB_WHITE));
         return;
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_COUNT:
@@ -905,6 +918,7 @@ static void infer_both_ref(struct pl_color_space *space,
             space->transfer = PL_COLOR_TRC_SRGB;
             break;
         case PL_COLOR_TRC_LINEAR:
+        case PL_COLOR_TRC_SCRGB:
         case PL_COLOR_TRC_GAMMA18:
         case PL_COLOR_TRC_GAMMA20:
         case PL_COLOR_TRC_GAMMA24:

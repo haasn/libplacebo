@@ -246,6 +246,7 @@ PL_LIBAV_API enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_
 #endif
     case PL_COLOR_TRC_S_LOG1:       return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_S_LOG2:       return AVCOL_TRC_UNSPECIFIED; // missing
+    case PL_COLOR_TRC_SCRGB:        return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_COUNT:        return AVCOL_TRC_UNSPECIFIED;
     }
 

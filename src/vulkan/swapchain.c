@@ -100,6 +100,11 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
         };
         return true;
     case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_BT_709,
+            .transfer  = PL_COLOR_TRC_SCRGB,
+        };
+        return true;
     case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT:
         // TODO
         return false;
@@ -205,7 +210,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 case 8:
                     if (pl_color_transfer_is_hdr(space.transfer))
                         score += 10;
-                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR ||
+                             space.transfer == PL_COLOR_TRC_SCRGB)
                         continue; // avoid 8-bit linear formats
                     else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
                         score += 10;
@@ -217,7 +223,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 case 10:
                     if (pl_color_transfer_is_hdr(space.transfer))
                         score += 30;
-                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR ||
+                             space.transfer == PL_COLOR_TRC_SCRGB)
                         continue; // avoid 10-bit linear formats
                     else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
                         score += 20;
@@ -229,7 +236,8 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
                 case 16:
                     if (pl_color_transfer_is_hdr(space.transfer))
                         score += 20;
-                    else if (space.transfer == PL_COLOR_TRC_LINEAR)
+                    else if (space.transfer == PL_COLOR_TRC_LINEAR ||
+                             space.transfer == PL_COLOR_TRC_SCRGB)
                         score += 30;
                     else if (space.transfer == PL_COLOR_TRC_UNKNOWN)
                         score += 30;

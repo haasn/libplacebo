@@ -253,6 +253,7 @@ enum pl_color_transfer {
     PL_COLOR_TRC_V_LOG,         // Panasonic V-Log (VARICAM)
     PL_COLOR_TRC_S_LOG1,        // Sony S-Log1
     PL_COLOR_TRC_S_LOG2,        // Sony S-Log2
+    PL_COLOR_TRC_SCRGB,         // IEC 61966-2-2 scRGB (extended linear BT.709)
     PL_COLOR_TRC_COUNT
 };
 
@@ -278,6 +279,13 @@ static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
 // that is assumed for SDR content, for use when mapping between HDR and SDR in
 // display space. See ITU-R Report BT.2408 for more information.
 #define PL_COLOR_SDR_WHITE 203.0f
+
+// This defines the reference white level for scRGB (IEC 61966-2-2), in cd/m^2.
+// In scRGB, a linear signal value of 1.0 corresponds to exactly 80 cd/m^2.
+// Signal values above 1.0 represent HDR luminance; values below 0.0 represent
+// out-of-gamut colors. This constant is used to convert between libplacebo's
+// internal NORM scale (1.0 = PL_COLOR_SDR_WHITE) and scRGB output values.
+#define PL_COLOR_SCRGB_WHITE 80.0f
 
 // This defines the assumed contrast level of an unknown SDR display. This
 // will be used to determine the black point in the absence of any tagged
