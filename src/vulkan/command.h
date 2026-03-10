@@ -50,6 +50,7 @@ struct vk_cmd {
     VkQueue queue;           // the submission queue (for recording/pending)
     int qindex;              // the index of `queue` in `pool`
     VkCommandBuffer buf;     // the command buffer itself
+    VkFence fence;           // Only used on MoltenVK
     // Command dependencies and signals. Not owned by the vk_cmd.
     PL_ARRAY(VkSemaphoreSubmitInfo) deps;
     PL_ARRAY(VkSemaphoreSubmitInfo) sigs;
