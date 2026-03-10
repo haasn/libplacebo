@@ -1540,6 +1540,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
 
     vk->GetPhysicalDeviceProperties2(vk->physd, &prop);
     vk->props = prop.properties;
+    vk->driver_props = driver_props;
 
     PL_INFO(vk, "Vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);

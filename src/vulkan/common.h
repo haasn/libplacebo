@@ -69,6 +69,7 @@ struct vk_ctx {
     VkInstance inst;
     VkPhysicalDevice physd;
     VkPhysicalDeviceProperties props;
+    VkPhysicalDeviceDriverProperties driver_props;
     VkPhysicalDeviceFeatures2 features;
     uint32_t api_ver; // device API version
     VkDevice dev;
