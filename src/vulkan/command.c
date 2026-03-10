@@ -22,6 +22,10 @@
 static VkResult vk_cmd_poll(struct vk_cmd *cmd, uint64_t timeout)
 {
     struct vk_ctx *vk = cmd->pool->vk;
+
+    if (cmd->fence)
+        return vk->WaitForFences(vk->dev, 1, &cmd->fence, VK_TRUE, timeout);
+
     return vk->WaitSemaphores(vk->dev, &(VkSemaphoreWaitInfo) {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
@@ -64,6 +68,7 @@ static void vk_cmd_destroy(struct vk_cmd *cmd)
     struct vk_ctx *vk = cmd->pool->vk;
     vk_cmd_poll(cmd, UINT64_MAX);
     vk_cmd_reset(cmd);
+    vk->DestroyFence(vk->dev, cmd->fence, PL_VK_ALLOC);
     vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
 
     pl_free(cmd);
@@ -84,6 +89,17 @@ static struct vk_cmd *vk_cmd_create(struct vk_cmdpool *pool)
 
     VK(vk->AllocateCommandBuffers(vk->dev, &ainfo, &cmd->buf));
 
+    // Fences may be used to workaround buggy timeline semaphore support
+    // on certain platforms. See:
+    // <https://github.com/KhronosGroup/MoltenVK/issues/2697>
+    if (vk->driver_props.driverID == VK_DRIVER_ID_MOLTENVK) {
+        VkFenceCreateInfo finfo = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+        VK(vk->CreateFence(vk->dev, &finfo, PL_VK_ALLOC, &cmd->fence));
+        PL_VK_NAME(FENCE, cmd->fence, "cmd");
+    }
     return cmd;
 
 error:
@@ -399,6 +415,9 @@ struct vk_cmd *vk_cmd_begin(struct vk_cmdpool *pool, pl_debug_tag debug_tag)
     VK(vk->BeginCommandBuffer(cmd->buf, &binfo));
     PL_VK_NAME_HANDLE(COMMAND_BUFFER, cmd->buf, PL_DEF(debug_tag, "vk_cmd"));
 
+    if (cmd->fence)
+        vk->ResetFences(vk->dev, 1, &cmd->fence);
+
     pool->sync[cmd->qindex].value++;
     cmd->sync = pool->sync[cmd->qindex];
     vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, cmd->sync);
@@ -509,7 +528,7 @@ bool vk_cmd_submit(struct vk_cmd **pcmd)
 
     pl_assert(pool->sync[cmd->qindex].value == cmd->sync.value);
     vk->lock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
-    VkResult res = vk_queue_submit2(vk, cmd->queue, &sinfo, VK_NULL_HANDLE);
+    VkResult res = vk_queue_submit2(vk, cmd->queue, &sinfo, cmd->fence);
     vk->unlock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
     PL_VK_ASSERT(res, "vkQueueSubmit2");
 
