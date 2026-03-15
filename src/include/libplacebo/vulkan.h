@@ -433,6 +433,9 @@ struct pl_vulkan_import_params {
 
     // Functions for locking a queue. If set, these will be used instead of
     // libplacebo's internal functions for `pl_vulkan.(un)lock_queue`.
+    // If not set, libplacebo will use its own internal locking, unless the
+    // device was created with VK_KHR_internally_synchronized_queues enabled
+    // (as indicated by `features`), in which case locking is skipped.
     void (*lock_queue)(void *ctx, uint32_t qf, uint32_t qidx);
     void (*unlock_queue)(void *ctx, uint32_t qf, uint32_t qidx);
     void *queue_ctx;
