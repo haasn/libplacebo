@@ -1063,9 +1063,17 @@ static void vk_sw_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
 
     // This should never fail if the swapchain already exists
     bool ok = pick_surf_format(sw, csp);
-    // Don't try to apply anything for VK_COLOR_SPACE_PASS_THROUGH_EXT
-    if (csp->transfer != PL_COLOR_TRC_UNKNOWN)
+
+    if (p->protoInfo.imageColorSpace == VK_COLOR_SPACE_PASS_THROUGH_EXT) {
+        // Don't try to apply anything for VK_COLOR_SPACE_PASS_THROUGH_EXT and
+        // also immediately cleanup the retired swapchain. This is needed
+        // because the driver might hold Wayland color surface parented to that
+        // swapchain.
+        vk_sw_recreate(sw, 0, 0);
+        cleanup_retired_swapchains(sw, 0);
+    } else {
         set_hdr_metadata(p, &csp->hdr);
+    }
     pl_assert(ok);
 
     pl_mutex_unlock(&p->lock);
