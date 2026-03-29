@@ -1069,8 +1069,10 @@ static void vk_sw_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
         // also immediately cleanup the retired swapchain. This is needed
         // because the driver might hold Wayland color surface parented to that
         // swapchain.
-        vk_sw_resize(sw, 0, 0);
-        cleanup_retired_swapchains(sw, 0);
+        if (p->needs_recreate) {
+            vk_sw_recreate(sw, 0, 0);
+            cleanup_retired_swapchains(sw, UINT64_MAX);
+        }
     } else {
         set_hdr_metadata(p, &csp->hdr);
     }
