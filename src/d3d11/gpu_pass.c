@@ -214,7 +214,6 @@ static bool alloc_hlsl_reg_bindings(pl_gpu gpu, pl_pass pass,
 
     // In a raster pass, one of the UAV slots is used by the runtime for the RTV
     int uav_offset = stage == GLSL_SHADER_COMPUTE ? 0 : 1;
-    int max_uavs = p->max_uavs - uav_offset;
 
     for (int i = 0; i < res_count; i++) {
         unsigned int binding = spvc_compiler_get_decoration(sc_comp,
@@ -273,52 +272,54 @@ static bool alloc_hlsl_reg_bindings(pl_gpu gpu, pl_pass pass,
             break;
         }
 
+        // Use the SPIR-V binding directly as the HLSL register slot. This
+        // keeps slots in sync with SPIRV-Cross's default fallback when its
+        // resource-binding remap lookup silently misses, avoiding register
+        // collisions. Per-namespace arrays become sparse.
         if (has_cbv) {
-            hlslbind.cbv.register_binding = pass_s->cbvs.num;
-            PL_ARRAY_APPEND(pass, pass_s->cbvs, binding);
-            if (pass_s->cbvs.num > D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
+            hlslbind.cbv.register_binding = binding;
+            while (pass_s->cbvs.num <= binding)
+                PL_ARRAY_APPEND(pass, pass_s->cbvs, HLSL_BINDING_NOT_USED);
+            pass_s->cbvs.elem[binding] = binding;
+            if (binding >= D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
                 PL_ERR(gpu, "Too many constant buffers in shader");
                 goto error;
             }
         }
 
         if (has_sampler) {
-            hlslbind.sampler.register_binding = pass_s->samplers.num;
-            PL_ARRAY_APPEND(pass, pass_s->samplers, binding);
-            if (pass_s->samplers.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
+            hlslbind.sampler.register_binding = binding;
+            while (pass_s->samplers.num <= binding)
+                PL_ARRAY_APPEND(pass, pass_s->samplers, HLSL_BINDING_NOT_USED);
+            pass_s->samplers.elem[binding] = binding;
+            if (binding >= D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
                 PL_ERR(gpu, "Too many samplers in shader");
                 goto error;
             }
         }
 
         if (has_srv) {
-            hlslbind.srv.register_binding = pass_s->srvs.num;
-            PL_ARRAY_APPEND(pass, pass_s->srvs, binding);
-            if (pass_s->srvs.num > p->max_srvs) {
+            hlslbind.srv.register_binding = binding;
+            while (pass_s->srvs.num <= binding)
+                PL_ARRAY_APPEND(pass, pass_s->srvs, HLSL_BINDING_NOT_USED);
+            pass_s->srvs.elem[binding] = binding;
+            if (binding >= p->max_srvs) {
                 PL_ERR(gpu, "Too many SRVs in shader");
                 goto error;
             }
         }
 
         if (has_uav) {
-            // UAV registers are shared between the vertex and fragment shaders
-            // in a raster pass, so check if the UAV for this resource has
-            // already been allocated
-            bool uav_bound = false;
-            for (int j = 0; j < pass_p->uavs.num; j++) {
-                if (pass_p->uavs.elem[j] == binding) {
-                    uav_bound = true;
-                    break;
-                }
-            }
-
-            if (!uav_bound) {
-                hlslbind.uav.register_binding = pass_p->uavs.num + uav_offset;
-                PL_ARRAY_APPEND(pass, pass_p->uavs, binding);
-                if (pass_p->uavs.num > max_uavs) {
-                    PL_ERR(gpu, "Too many UAVs in shader");
-                    goto error;
-                }
+            // UAVs are shared between VS and PS in a raster pass. Since slot
+            // is derived from binding, both stages land on the same slot.
+            int uav_slot = binding + uav_offset;
+            hlslbind.uav.register_binding = uav_slot;
+            while (pass_p->uavs.num <= uav_slot)
+                PL_ARRAY_APPEND(pass, pass_p->uavs, HLSL_BINDING_NOT_USED);
+            pass_p->uavs.elem[uav_slot] = binding;
+            if (uav_slot >= p->max_uavs) {
+                PL_ERR(gpu, "Too many UAVs in shader");
+                goto error;
             }
         }
 
@@ -442,10 +443,12 @@ static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
             binding.stage = stage_to_spv(stage);
             binding.binding = pass_p->max_binding + 1;
 
-            // Allocate a CBV register for the buffer
-            binding.cbv.register_binding = pass_s->cbvs.num;
-            PL_ARRAY_APPEND(pass, pass_s->cbvs, HLSL_BINDING_NUM_WORKGROUPS);
-            if (pass_s->cbvs.num >
+            // Allocate a CBV register matching the synthesized binding
+            binding.cbv.register_binding = binding.binding;
+            while (pass_s->cbvs.num <= binding.binding)
+                PL_ARRAY_APPEND(pass, pass_s->cbvs, HLSL_BINDING_NOT_USED);
+            pass_s->cbvs.elem[binding.binding] = HLSL_BINDING_NUM_WORKGROUPS;
+            if (binding.binding >=
                     D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
                 PL_ERR(gpu, "Not enough constant buffer slots for gl_NumWorkGroups");
                 goto error;
