@@ -29,6 +29,7 @@ struct cached_frame {
     uint64_t signature;
     uint64_t params_hash; // for detecting `pl_render_params` changes
     struct pl_color_space color;
+    struct pl_color_repr repr;
     struct pl_icc_profile profile;
     pl_rect2df crop;
     pl_tex tex;
@@ -3641,6 +3642,11 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (!out_w || !out_h)
         goto fallback;
 
+    // Frames are cached and blended in linear light to avoid flickering
+    // on high-contrast transitions
+    struct pl_color_space mix_csp = target->color;
+    mix_csp.transfer = PL_COLOR_TRC_LINEAR;
+
     int fidx = 0;
     struct cached_frame frames[MAX_MIX_FRAMES];
     float weights[MAX_MIX_FRAMES];
@@ -3778,7 +3784,7 @@ retry:
                         f->tex->params.h == out_h &&
                         pl_rect2d_eq(f->crop, img->crop) &&
                         f->params_hash == par_info.hash &&
-                        pl_color_space_equal(&f->color, &target->color) &&
+                        pl_color_space_equal(&f->color, &mix_csp) &&
                         pl_icc_profile_equal(&f->profile, &target->profile);
         }
 
@@ -3826,6 +3832,11 @@ retry:
             if (!pass_init(&inter_pass, true))
                 goto fail;
 
+            // Override transfer after pass_init, we want consistent mix_csp,
+            // and avoid any inference that happens in pass_fix_frames. This is
+            // later applied on main output pass.
+            inter_pass.target.color = mix_csp;
+
             pass_begin_frame(&inter_pass);
             if (!(ok = pass_read_image(&inter_pass)))
                 goto inter_pass_error;
@@ -3834,6 +3845,8 @@ retry:
             pass_convert_colors(&inter_pass);
 
             pl_assert(inter_pass.img.sh); // guaranteed by `pass_convert_colors`
+            pl_assert(inter_pass.img.color.transfer == PL_COLOR_TRC_LINEAR);
+
             pl_shader_set_alpha(inter_pass.img.sh, &inter_pass.img.repr,
                                 PL_ALPHA_PREMULTIPLIED); // for frame mixing
 
@@ -3873,6 +3886,7 @@ retry:
             f->params_hash = par_info.hash;
             f->crop = img->crop;
             f->color = inter_pass.img.color;
+            f->repr = inter_pass.img.repr;
             f->comps = inter_pass.img.comps;
             f->profile = target->profile;
             // fall through
@@ -3944,18 +3958,19 @@ inter_pass_error:
 
         GLSL("color = textureLod("$", "$", 0.0); \n", tex, pos);
 
-        // Note: This ignores differences in ICC profile, which we decide to
-        // just simply not care about. Doing that properly would require
-        // converting between different image profiles, and the headache of
-        // finagling that state is just not worth it because this is an
-        // exceptionally unlikely hypothetical.
-        //
-        // This also ignores differences in HDR metadata, which we deliberately
-        // ignore because it causes aggressive shader recompilation.
+        // Usually a no-op. Handles mixed-colorspace frames when
+        // preserve_mixing_cache spans target changes. ICC diffs ignored
+        struct pl_color_repr frame_repr = frames[i].repr;
         struct pl_color_space frame_csp = frames[i].color;
-        struct pl_color_space mix_csp = target->color;
-        frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
-        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(frame_csp, mix_csp));
+        // Ignore differences in HDR metadata, which may cause shader or lut
+        // recompilation. Note that when preserve_mixing_cache is false, frames
+        // will be always re-rendered with the target's HDR metadata.
+        frame_csp.hdr = mix_csp.hdr;
+        if (!pl_color_space_equal(&frame_csp, &mix_csp)) {
+            pl_shader_set_alpha(sh, &frame_repr, PL_ALPHA_INDEPENDENT);
+            pl_shader_color_map_ex(sh, NULL, pl_color_map_args(frame_csp, mix_csp));
+        }
+        pl_shader_set_alpha(sh, &frame_repr, PL_ALPHA_PREMULTIPLIED);
 
         float weight = weights[i] / wsum;
         GLSL("mix_color += vec4("$") * color; \n", SH_FLOAT_DYN(weight));
@@ -3979,6 +3994,12 @@ inter_pass_error:
             .alpha = comps >= 4 ? PL_ALPHA_PREMULTIPLIED : PL_ALPHA_NONE,
         },
     };
+
+    // Re-encode to target transfer, this will in practice delinearize only.
+    if (!pl_color_space_equal(&mix_csp, &pass.img.color)) {
+        pl_shader_set_alpha(sh, &pass.img.repr, PL_ALPHA_INDEPENDENT);
+        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(mix_csp, pass.img.color));
+    }
 
     if (!pass_output_target(&pass))
         goto fallback;
