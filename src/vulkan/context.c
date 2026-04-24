@@ -435,7 +435,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(FreeCommandBuffers),
     PL_VK_DEV_FUN(FreeMemory),
     PL_VK_DEV_FUN(GetBufferMemoryRequirements),
-    PL_VK_DEV_FUN(GetDeviceQueue),
+    PL_VK_DEV_FUN(GetDeviceQueue2),
     PL_VK_DEV_FUN(GetImageMemoryRequirements2),
     PL_VK_DEV_FUN(GetImageSubresourceLayout),
     PL_VK_DEV_FUN(GetPipelineCacheData),
@@ -1347,14 +1347,13 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         use_qf |= qfs[i].queueFlags & params->extra_queues;
         if (!use_qf)
             continue;
-        VkDeviceQueueCreateFlags qflags = 0;
 #ifdef VK_KHR_internally_synchronized_queues
         if (has_synchronized_queues(&vk->features))
-            qflags |= VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
+            vk->queue_flags |= VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
 #endif
         PL_ARRAY_APPEND(tmp, qinfos, (VkDeviceQueueCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .flags = qflags,
+            .flags = vk->queue_flags,
             .queueFamilyIndex = i,
             .queueCount = qfs[i].queueCount,
             .pQueuePriorities = pl_calloc(tmp, qfs[i].queueCount, sizeof(float)),

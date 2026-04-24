@@ -348,7 +348,13 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
     };
 
     for (int n = 0; n < qnum; n++) {
-        vk->GetDeviceQueue(vk->dev, qf, n, &pool->queues[n]);
+        VkDeviceQueueInfo2 qinfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+            .flags = vk->queue_flags,
+            .queueFamilyIndex = qf,
+            .queueIndex       = n,
+        };
+        vk->GetDeviceQueue2(vk->dev, &qinfo, &pool->queues[n]);
         VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &pool->sync[n].sem));
         PL_VK_NAME(SEMAPHORE, pool->sync[n].sem, "cmd");
     }
