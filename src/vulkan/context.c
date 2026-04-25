@@ -1339,6 +1339,11 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         goto error;
     }
 
+#ifdef VK_KHR_internally_synchronized_queues
+    if (has_synchronized_queues(&vk->features))
+        vk->queue_flags |= VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
+#endif
+
     // Enable all queues at device creation time, to maximize compatibility
     // with other API users (e.g. FFmpeg)
     PL_ARRAY(VkDeviceQueueCreateInfo) qinfos = {0};
@@ -1347,10 +1352,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         use_qf |= qfs[i].queueFlags & params->extra_queues;
         if (!use_qf)
             continue;
-#ifdef VK_KHR_internally_synchronized_queues
-        if (has_synchronized_queues(&vk->features))
-            vk->queue_flags |= VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
-#endif
         PL_ARRAY_APPEND(tmp, qinfos, (VkDeviceQueueCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .flags = vk->queue_flags,
