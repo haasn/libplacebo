@@ -3725,8 +3725,9 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         for (int i = 1; i < images->num_frames; i++) {
             if (images->timestamps[i] >= 0.0 && images->timestamps[i - 1] < 0) {
                 float frame_dur = images->timestamps[i] - images->timestamps[i - 1];
-                if (images->vsync_duration > frame_dur && !params->skip_anti_aliasing)
-                    mixer.blur *= images->vsync_duration / frame_dur;
+                float sample_dur = PL_MAX(frame_dur, images->vsync_duration);
+                if (sample_dur > 1.0f && !params->skip_anti_aliasing)
+                    mixer.blur *= sample_dur;
                 break;
             }
         }
