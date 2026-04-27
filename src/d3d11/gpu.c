@@ -361,6 +361,64 @@ static bool load_d3d_compiler(pl_gpu gpu)
     return false;
 }
 
+// D3D11_REQ_TEXTURE*_DIMENSION values are feature-level minimums requred to
+// be supported by a D3D11 implementation, but the actuall maximum texture
+// dimensions supported by a given implementation may be higher. Probe maximum
+// supported dimensions, to support bigger ones if possible. This is useful for
+// support huge images, for example when using WARP software rendering.
+static void probe_max_tex_dim(struct pl_gpu_t *gpu)
+{
+    struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
+    struct d3d11_ctx *ctx = p->ctx;
+    // 27-bit shader address space is the absolute D3D11 ceiling for any dim.
+    const uint32_t hard_cap = 1u << 27;
+
+#ifdef PL_HAVE_DXGI_DEBUG
+    // Suppress expected validation errors, which will happen during probing.
+    DXGI_INFO_QUEUE_MESSAGE_ID deny_ids[] = {
+        D3D11_MESSAGE_ID_CREATETEXTURE1D_INVALIDDIMENSIONS,
+        D3D11_MESSAGE_ID_CREATETEXTURE1D_INVALIDARG_RETURN,
+        D3D11_MESSAGE_ID_CREATETEXTURE2D_INVALIDDIMENSIONS,
+        D3D11_MESSAGE_ID_CREATETEXTURE2D_INVALIDARG_RETURN,
+    };
+    DXGI_INFO_QUEUE_FILTER filter = {
+        .DenyList = {
+            .NumIDs = PL_ARRAY_SIZE(deny_ids),
+            .pIDList = deny_ids,
+        },
+    };
+    if (ctx->iqueue)
+        IDXGIInfoQueue_PushStorageFilter(ctx->iqueue, DXGI_DEBUG_D3D11, &filter);
+#endif
+
+    for (uint32_t dim = gpu->limits.max_tex_1d_dim * 2; dim <= hard_cap; dim *= 2) {
+        D3D11_TEXTURE1D_DESC desc = {
+            .Width = dim, .MipLevels = 1, .ArraySize = 1,
+            .Format = DXGI_FORMAT_R8_UNORM,
+            .BindFlags = D3D11_BIND_SHADER_RESOURCE,
+        };
+        if (FAILED(ID3D11Device_CreateTexture1D(p->dev, &desc, NULL, NULL)))
+            break;
+        gpu->limits.max_tex_1d_dim = dim;
+    }
+
+    for (uint32_t dim = gpu->limits.max_tex_2d_dim * 2; dim <= hard_cap; dim *= 2) {
+        D3D11_TEXTURE2D_DESC desc = {
+            .Width = dim, .Height = dim, .MipLevels = 1, .ArraySize = 1,
+            .SampleDesc.Count = 1, .Format = DXGI_FORMAT_R8_UNORM,
+            .BindFlags = D3D11_BIND_SHADER_RESOURCE,
+        };
+        if (FAILED(ID3D11Device_CreateTexture2D(p->dev, &desc, NULL, NULL)))
+            break;
+        gpu->limits.max_tex_2d_dim = dim;
+    }
+
+#ifdef PL_HAVE_DXGI_DEBUG
+    if (ctx->iqueue)
+        IDXGIInfoQueue_PopStorageFilter(ctx->iqueue, DXGI_DEBUG_D3D11);
+#endif
+}
+
 static struct pl_gpu_fns pl_fns_d3d11 = {
     .tex_create             = pl_d3d11_tex_create,
     .tex_destroy            = pl_d3d11_tex_destroy,
@@ -500,6 +558,8 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx,
         gpu->limits.max_tex_2d_dim = D3D_FL9_1_REQ_TEXTURE2D_U_OR_V_DIMENSION;
         gpu->limits.max_tex_3d_dim = D3D_FL9_1_REQ_TEXTURE3D_U_V_OR_W_DIMENSION;
     }
+
+    probe_max_tex_dim(gpu);
 
     if (p->fl >= D3D_FEATURE_LEVEL_10_0) {
         gpu->limits.max_buffer_texels =
