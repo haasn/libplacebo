@@ -2563,10 +2563,34 @@ static bool pass_output_target(struct pass_state *pass)
     const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
     const struct pl_frame *target = &pass->target;
+    const struct pl_plane *ref = &target->planes[pass->dst_ref];
     pl_renderer rr = pass->rr;
 
     struct img *img = &pass->img;
-    pl_shader sh = img_sh(pass, img);
+
+    bool need_clear = pl_frame_is_cropped(target);
+    pl_tex border_tex = NULL;
+    if (need_clear && params->border == PL_CLEAR_BLUR &&
+        !(rr->errors & PL_RENDER_ERR_BLUR))
+    {
+        pl_tex tex = img_tex(pass, img);
+        if (!tex) {
+            PL_ERR(rr, "Output requires blurred borders, but FBOs are "
+                "unavailable. This combination is unsupported.");
+            return false;
+        }
+
+        const int ref_w = ref->texture->params.w, ref_h = ref->texture->params.h;
+        pl_rect2df rect = img->rect;
+        pl_rect2df_aspect_set(&rect, (float) ref_w / ref_h, 0.0);
+        pl_rect2df_rotate(&rect, pass->rotation);
+
+        border_tex = pass_blur(pass, tex, img->comps, &rect, params->blur_radius);
+        if (!border_tex) {
+            PL_ERR(rr, "Failed to generate blurred borders.");
+            return false;
+        }
+    }
 
     if (params->corner_rounding > 0.0f) {
         const float out_w2 = fabsf(pl_rect_w(target->crop)) / 2.0f;
@@ -2577,6 +2601,8 @@ static bool pass_output_target(struct pass_state *pass)
             .x0 = -out_w2, .y0 = -out_h2,
             .x1 =  out_w2, .y1 =  out_h2,
         };
+
+        pl_shader sh = img_sh(pass, img);
         GLSL("float radius = "$";                           \n"
              "vec2 size2 = vec2("$", "$");                  \n"
              "vec2 relpos = "$";                            \n"
@@ -2605,12 +2631,11 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
-    const struct pl_plane *ref = &target->planes[pass->dst_ref];
     pl_rect2d dst_rect = pass->dst_rect;
     if (params->distort_params) {
         struct pl_distort_params dpars = *params->distort_params;
         if (dpars.alpha_mode) {
-            pl_shader_set_alpha(sh, &img->repr, dpars.alpha_mode);
+            pl_shader_set_alpha(img_sh(pass, img), &img->repr, dpars.alpha_mode);
             img->repr.alpha = dpars.alpha_mode;
             img->comps = 4;
         }
@@ -2651,11 +2676,12 @@ static bool pass_output_target(struct pass_state *pass)
         img->w = abs(pl_rect_w(dst_rect));
         img->h = abs(pl_rect_h(dst_rect));
         img->tex = NULL;
-        img->sh = sh = pl_dispatch_begin(rr->dp);
-        pl_shader_distort(sh, tex, img->w, img->h, &dpars);
+        img->sh = pl_dispatch_begin(rr->dp);
+        pl_shader_distort(img->sh, tex, img->w, img->h, &dpars);
     }
 
     pass_hook(pass, img, PL_HOOK_PRE_OUTPUT);
+    pl_shader sh = img_sh(pass, img);
 
     enum pl_clear_mode background = params->background;
     if (params->blend_against_tiles)
@@ -2752,30 +2778,8 @@ static bool pass_output_target(struct pass_state *pass)
     bool flipped_x = dst_rect.x1 < dst_rect.x0,
          flipped_y = dst_rect.y1 < dst_rect.y0;
 
-    if (pl_frame_is_cropped(target)) {
-        pl_tex border_tex = NULL;
-        if (params->border == PL_CLEAR_BLUR && !(rr->errors & PL_RENDER_ERR_BLUR)) {
-            pl_tex tex = img_tex(pass, img);
-            if (!tex) {
-                PL_ERR(rr, "Output requires blurred borders, but FBOs are "
-                    "unavailable. This combination is unsupported.");
-                return false;
-            }
-
-            const int ref_w = ref->texture->params.w, ref_h = ref->texture->params.h;
-            pl_rect2df rect = img->rect;
-            pl_rect2df_aspect_set(&rect, (float) ref_w / ref_h, 0.0);
-            pl_rect2df_rotate(&rect, pass->rotation);
-
-            border_tex = pass_blur(pass, tex, img->comps, &rect, params->blur_radius);
-            if (!border_tex) {
-                PL_ERR(rr, "Failed to generate blurred borders.");
-                return false;
-            }
-        }
-
+    if (need_clear)
         clear_target(rr, target, border_tex, scale, params);
-    }
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
