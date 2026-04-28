@@ -2499,89 +2499,15 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
     case PL_CLEAR_TILES:
         pl_frame_clear_tiles(rr->gpu, target, params->tile_colors, params->tile_size);
         break;
-    case PL_CLEAR_BLUR: ;
-        // Map of the output frame buffer:
-        //
-        //   0-----1-------------2-----------3
-        //   |     .             .           |
-        //   |     8-------------9           | <- y0
-        //   |     |             |           |
-        //   |     |             |           |
-        //   |     A-------------B           | <- y1
-        //   |     .             .           |
-        //   4-----5-------------6-----------7
-        //         ^x0           ^x1
-        //
-        // Generate the following quads:
-        //
-        //   0-1-4-5 (if x0 > 0)
-        //   2-3-6-7 (if x1 < w)
-        //   1-2-8-9 (if y0 > 0)
-        //   A-B-5-6 (if y1 < h)
-
-        const struct pl_plane *ref = &target->planes[frame_ref(target)];
-        const float w  = ref->texture->params.w, h = ref->texture->params.h;
-        const float x0 = target->crop.x0 / w, x1 = target->crop.x1 / w;
-        const float y0 = target->crop.y0 / h, y1 = target->crop.y1 / h;
-
-        struct { float pos[2]; float coord[2]; } vertices[12] = {
-            { .coord = {  0,  0 } }, { .coord = { x0,  0 } },
-            { .coord = { x1,  0 } }, { .coord = {  1,  0 } },
-            { .coord = {  0,  1 } }, { .coord = { x0,  1 } },
-            { .coord = { x1,  1 } }, { .coord = {  1,  1 } },
-            { .coord = { x0, y0 } }, { .coord = { x1, y0 } },
-            { .coord = { x0, y1 } }, { .coord = { x1, y1 } },
-        };
-
-
-        for (int i = 0; i < PL_ARRAY_SIZE(vertices); i++) {
-            vertices[i].pos[0] = 2.0f * vertices[i].coord[0] - 1.0f;
-            vertices[i].pos[1] = 2.0f * vertices[i].coord[1] - 1.0f;
-        }
-
-        uint16_t indices[4 * 6];
-        int nb_indices = 0;
-        #define ADD_QUAD(A, B, C, D)   \
-        do {                           \
-            indices[nb_indices++] = A; \
-            indices[nb_indices++] = B; \
-            indices[nb_indices++] = C; \
-            indices[nb_indices++] = C; \
-            indices[nb_indices++] = B; \
-            indices[nb_indices++] = D; \
-        } while (0)
-
-        if (x0 > 0)
-            ADD_QUAD(0, 1, 4, 5);
-        if (x1 < 1)
-            ADD_QUAD(2, 3, 6, 7);
-        if (y0 > 0)
-            ADD_QUAD(1, 2, 8, 9);
-        if (y1 < 1)
-            ADD_QUAD(10, 11, 5, 6);
-
+    case PL_CLEAR_BLUR:
         for (int p = 0; p < target->num_planes; p++) {
             const struct pl_plane *plane = &target->planes[p];
 
             pl_shader sh = pl_dispatch_begin(rr->dp);
             sh_describe(sh, "draw border");
-            sh->output = PL_SHADER_SIG_COLOR;
+            pl_shader_sample_direct(sh, pl_sample_src( .tex = background ));
 
-            ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
-                .desc = {
-                    .name = "bg_tex",
-                    .type = PL_DESC_SAMPLED_TEX,
-                },
-                .binding = {
-                    .object = background,
-                    .address_mode = PL_TEX_ADDRESS_CLAMP,
-                    .sample_mode = PL_TEX_SAMPLE_LINEAR,
-                },
-            });
-
-            GLSL("vec4 color = textureLod("$", coord, 0.0); \n"
-                 "color.%s *= vec%d(1.0 / "$"); \n",
-                 tex,
+            GLSL("color.%s *= vec%d(1.0 / "$"); \n",
                  params->blend_params ? "rgb" : "rgba",
                  params->blend_params ? 3 : 4,
                  SH_FLOAT(bg_scale));
@@ -2589,20 +2515,10 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
             swizzle_color(sh, plane->components, plane->component_mapping,
                           params->blend_params);
 
-            pl_dispatch_vertex(rr->dp, pl_dispatch_vertex_params(
-                .shader             = &sh,
-                .target             = plane->texture,
-                .blend_params       = params->blend_params,
-                .vertex_attribs     = rr->osd_attribs, // reuse OSD attribs
-                .num_vertex_attribs = 2,
-                .vertex_flipped     = plane->flipped,
-                .vertex_stride      = sizeof(vertices[0]),
-                .vertex_coords      = PL_COORDS_NORMALIZED,
-                .vertex_type        = PL_PRIM_TRIANGLE_LIST,
-                .vertex_count       = nb_indices,
-                .vertex_data        = vertices,
-                .index_data         = indices,
-                .index_fmt          = PL_INDEX_UINT16,
+            pl_dispatch_finish(rr->dp, pl_dispatch_params(
+                .shader         = &sh,
+                .target         = plane->texture,
+                .blend_params   = params->blend_params,
             ));
         }
         break;
