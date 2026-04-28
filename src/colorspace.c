@@ -198,9 +198,10 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
     }
 
     // If one of these is set but not the other, use the set one
-    int tex_bits = PL_DEF(bits->sample_depth, 8);
-    int col_bits = PL_DEF(bits->color_depth, tex_bits);
-    tex_bits = PL_DEF(tex_bits, col_bits);
+    int tex_bits = PL_DEF(bits->sample_depth, bits->color_depth);
+    int col_bits = PL_DEF(bits->color_depth,  bits->sample_depth);
+    if (!tex_bits)
+        tex_bits = col_bits = 8;
 
     if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_LIMITED) {
         // Limit range is always shifted directly
