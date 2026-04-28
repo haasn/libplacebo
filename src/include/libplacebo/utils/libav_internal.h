@@ -777,6 +777,9 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
         },
     };
 
+    if (frame->sample_aspect_ratio.num && frame->sample_aspect_ratio.den)
+        out->pixel_aspect_ratio = av_q2d(frame->sample_aspect_ratio);
+
     pl_color_space_from_avframe(&out->color, frame);
 
     if (frame->colorspace == AVCOL_SPC_ICTCP &&
@@ -869,6 +872,9 @@ PL_LIBAV_API void pl_frame_copy_stream_props(struct pl_frame *out,
         double rot = av_display_rotation_get((const int32_t *) sd);
         out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
     }
+
+    if (stream->sample_aspect_ratio.num && stream->sample_aspect_ratio.den)
+        out->pixel_aspect_ratio = av_q2d(stream->sample_aspect_ratio);
 
 #ifdef PL_HAVE_LAV_HDR
     pl_map_hdr_metadata(&out->color.hdr, &(struct pl_av_hdr_metadata) {
