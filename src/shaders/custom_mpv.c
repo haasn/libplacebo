@@ -27,7 +27,7 @@
 // Hard-coded size limits, mainly for convenience (to avoid dynamic memory)
 #define SHADER_MAX_HOOKS 16
 #define SHADER_MAX_BINDS 16
-#define MAX_SHEXP_SIZE 32
+#define MAX_SHEXP_SIZE 64
 
 enum shexp_op {
     SHEXP_OP_ADD,
