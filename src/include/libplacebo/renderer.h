@@ -614,6 +614,14 @@ struct pl_frame {
     // compensate).
     pl_rotation rotation;
 
+    // The pixel aspect ratio of this frame. This is informational only, since
+    // the effective DAR is already given by the relative ratio between the
+    // frame crop and the target crop. If left unset, defaults to 1.0.
+    //
+    // Note that this is relative to the raw (encoded) pixels, i.e. before
+    // application of any `rotation`.
+    float pixel_aspect_ratio;
+
     // A list of additional overlays associated with this frame. Note that will
     // be rendered directly onto intermediate/cache frames, so changing any of
     // these overlays may require flushing the renderer cache.
