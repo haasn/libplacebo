@@ -2337,7 +2337,7 @@ error:
 }
 
 static pl_tex pass_blur(struct pass_state *pass, pl_tex src_tex, int comps,
-                        struct pl_rect2df *rect, float radius)
+                        float radius)
 {
     pl_renderer rr = pass->rr;
     if (radius <= 0.0f || (src_tex->params.w == 1 && src_tex->params.h == 1))
@@ -2357,8 +2357,8 @@ static pl_tex pass_blur(struct pass_state *pass, pl_tex src_tex, int comps,
     if (offset > a_max)
         offset = radius / sqrtf(powf(4, ++passes) - 1.0f);
 
-    int w = rect ? ceilf(fabsf(pl_rect_w(*rect))) : src_tex->params.w;
-    int h = rect ? ceilf(fabsf(pl_rect_h(*rect))) : src_tex->params.h;
+    int w = src_tex->params.w;
+    int h = src_tex->params.h;
     for (int i = 0; i < passes + 1; i++) {
         tmp[i] = get_fbo(pass, w, h, NULL, comps, PL_DEBUG_TAG);
         if (!tmp[i])
@@ -2381,7 +2381,7 @@ static pl_tex pass_blur(struct pass_state *pass, pl_tex src_tex, int comps,
         sh->output = PL_SHADER_SIG_COLOR;
 
         tex = sh_bind(sh, prev, PL_TEX_ADDRESS_MIRROR, PL_TEX_SAMPLE_LINEAR,
-                      "prev", i == 0 ? rect : NULL, &pos, NULL);
+                      "prev", NULL, &pos, NULL);
         if (!tex)
             goto error;
 
@@ -2482,10 +2482,12 @@ static uint8_t plane_comps(const struct pl_plane *plane,
 
 static int frame_ref(const struct pl_frame *frame);
 
-static void clear_target(pl_renderer rr, const struct pl_frame *target,
-                         const pl_tex background, float bg_scale,
-                         const struct pl_render_params *params)
+static void clear_target(struct pass_state *pass, const pl_tex background,
+                         float bg_scale, const struct pl_render_params *params)
 {
+    pl_renderer rr = pass->rr;
+    const struct pl_frame *target = &pass->target;
+
     enum pl_clear_mode border = params->border;
     if (params->skip_target_clearing)
         border = PL_CLEAR_SKIP;
@@ -2502,10 +2504,27 @@ static void clear_target(pl_renderer rr, const struct pl_frame *target,
     case PL_CLEAR_BLUR:
         for (int p = 0; p < target->num_planes; p++) {
             const struct pl_plane *plane = &target->planes[p];
-
             pl_shader sh = pl_dispatch_begin(rr->dp);
+            sh->output_w = plane->texture->params.w;
+            sh->output_h = plane->texture->params.h;
+
+            if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90) {
+                PL_SWAP(sh->output_w, sh->output_h);
+                sh->transpose = true;
+            }
+
+            pl_rect2df rect = pass->img.rect;
+            pl_rect2df_aspect_set(&rect, (float) sh->output_w / sh->output_h, 0.0);
+            if (pass->dst_rect.x1 < pass->dst_rect.x0)
+                PL_SWAP(rect.x0, rect.x1);
+            if (pass->dst_rect.y1 < pass->dst_rect.y0)
+                PL_SWAP(rect.y0, rect.y1);
+
             sh_describe(sh, "draw border");
-            pl_shader_sample_direct(sh, pl_sample_src( .tex = background ));
+            pl_shader_sample_direct(sh, pl_sample_src(
+                .tex  = background,
+                .rect = rect,
+            ));
 
             GLSL("color.%s *= vec%d(1.0 / "$"); \n",
                  params->blend_params ? "rgb" : "rgba",
@@ -2580,12 +2599,7 @@ static bool pass_output_target(struct pass_state *pass)
             return false;
         }
 
-        const int ref_w = ref->texture->params.w, ref_h = ref->texture->params.h;
-        pl_rect2df rect = img->rect;
-        pl_rect2df_aspect_set(&rect, (float) ref_w / ref_h, 0.0);
-        pl_rect2df_rotate(&rect, pass->rotation);
-
-        border_tex = pass_blur(pass, tex, img->comps, &rect, params->blur_radius);
+        border_tex = pass_blur(pass, tex, img->comps, params->blur_radius);
         if (!border_tex) {
             PL_ERR(rr, "Failed to generate blurred borders.");
             return false;
@@ -2779,7 +2793,7 @@ static bool pass_output_target(struct pass_state *pass)
          flipped_y = dst_rect.y1 < dst_rect.y0;
 
     if (need_clear)
-        clear_target(rr, target, border_tex, scale, params);
+        clear_target(pass, border_tex, scale, params);
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -3373,7 +3387,7 @@ static bool draw_empty_overlays(pl_renderer rr,
     if (!pass_init(&pass, false))
         return false;
 
-    clear_target(rr, ptarget, NULL, 0.0f, params);
+    clear_target(&pass, NULL, 0.0f, params);
     if (!ptarget->num_overlays)
         goto done;
 
