@@ -402,10 +402,9 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
 
     assert(mix->num_frames);
     pl_rect2df crop = mix->frames[0]->crop;
-    if (p->stream->sample_aspect_ratio.num && p->target_zoom != ZOOM_RAW) {
-        float sar = av_q2d(p->stream->sample_aspect_ratio);
+    float sar = mix->frames[0]->pixel_aspect_ratio;
+    if (sar && p->target_zoom != ZOOM_RAW)
         pl_rect2df_stretch(&crop, fmaxf(1.0f, sar), fmaxf(1.0f, 1.0 / sar));
-    }
 
     // Apply target rotation and un-rotate crop relative to target
     target.rotation = p->target_rot;
