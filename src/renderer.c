@@ -4386,15 +4386,15 @@ bool pl_frame_is_cropped(const struct pl_frame *frame)
         x1 = roundf(PL_MAX(frame->crop.x0, frame->crop.x1)),
         y1 = roundf(PL_MAX(frame->crop.y0, frame->crop.y1));
 
-    pl_tex ref = frame->planes[frame_ref(frame)].texture;
-    pl_assert(ref);
+    int ref_w, ref_h;
+    pl_frame_size(frame, &ref_w, &ref_h);
 
     if (!x0 && !x1)
-        x1 = ref->params.w;
+        x1 = ref_w;
     if (!y0 && !y1)
-        y1 = ref->params.h;
+        y1 = ref_h;
 
-    return x0 > 0 || y0 > 0 || x1 < ref->params.w || y1 < ref->params.h;
+    return x0 > 0 || y0 > 0 || x1 < ref_w || y1 < ref_h;
 }
 
 // Encodes an sRGB color into the frame's native color representation
