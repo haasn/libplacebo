@@ -145,9 +145,13 @@ def get_vkfeatures(registry):
                 stype = f.attrib['values']
             elif f.find('type').text == 'VkBool32':
                 fname = f.find('name').text
+                # `featurelink` carries the canonical feature identity when
+                # the name is ambiguous across feature structs.
+                # If absent, the name itself is the identity.
+                flink = f.attrib.get('featurelink', fname)
                 if is_base:
                     fname = 'features.' + fname
-                features.append(Obj(name = fname))
+                features.append(Obj(name = fname, link = flink))
 
         core_ver = None
         if res := re.match(r'VkPhysicalDeviceVulkan(\d)(\d)Features', sname):
@@ -161,11 +165,11 @@ def get_vkfeatures(registry):
 
         structs.append(struct)
         for f in features:
-            featuremap.setdefault(f.name, []).append(struct)
+            featuremap.setdefault(f.link, []).append(struct)
 
     for s in structs:
         for f in s.features:
-            f.replacements = featuremap[f.name]
+            f.replacements = featuremap[f.link]
             core_ver = next(( r.core_ver for r in f.replacements if r.core_ver ), None)
             for r in f.replacements:
                 if not r.core_ver:
