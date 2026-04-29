@@ -648,6 +648,14 @@ ident_t sh_subpass(pl_shader sh, pl_shader sub)
 {
     pl_assert(sh->mutable);
 
+    if (sub->failed) {
+        // The sub-shader's GLSL buffer may contain a partially-emitted
+        // function body. Merging it would produce broken shader code.
+        // Propagate the failure to the parent so the caller bails out cleanly.
+        PL_TRACE(sh, "Attempting to merge a failed shader!");
+        return NULL_IDENT;
+    }
+
     if (sh->prefix == sub->prefix) {
         PL_TRACE(sh, "Can't merge shaders: conflicting identifiers!");
         return NULL_IDENT;
