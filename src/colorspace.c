@@ -800,6 +800,9 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
         // Initialize from static HDR10 metadata, in all cases
         min_luma = pl_hdr_rescale(PL_HDR_NITS, scaling, csp->hdr.min_luma);
         max_luma = pl_hdr_rescale(PL_HDR_NITS, scaling, csp->hdr.max_luma);
+        // Fall back to MaxCLL if mastering display max luminance is missing
+        if (!max_luma && csp->hdr.max_cll)
+            max_luma = pl_hdr_rescale(PL_HDR_NITS, scaling, csp->hdr.max_cll);
     }
 
     if (metadata_compat(params->metadata, PL_HDR_METADATA_HDR10PLUS) &&

@@ -423,7 +423,8 @@ struct pl_hdr_metadata {
     struct pl_raw_primaries prim;   // mastering display primaries
     float min_luma, max_luma;       // min/max luminance (in cd/m²)
 
-    // Content light level. (Note: this is ignored by libplacebo itself)
+    // Content light level. `max_cll` is used as a fallback when mastering
+    // display max luminance metadata is unavailable.
     float max_cll;                  // max content light level (in cd/m²)
     float max_fall;                 // max frame average light level (in cd/m²)
 
