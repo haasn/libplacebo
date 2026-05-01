@@ -1071,6 +1071,44 @@ struct pl_avframe_priv {
     pl_tex planar; // for planar vulkan textures
 };
 
+#define COMP_MAX(x, y) ((x) > (y) ? (x) : (y))
+#define COMP_MIN(x, y) ((x) < (y) ? (x) : (y))
+#define COMP_ABS(x) ((x) < 0 ? -(x) : (x))
+
+static void pl_map_hwframe_bit_encoding(struct pl_bit_encoding *out_bits,
+                                        enum AVPixelFormat pix_fmt)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
+    struct pl_bit_encoding bits = {0};
+    bool is_supported = true;
+    if (!out_bits || !desc)
+        return;
+
+    // Calculate bit encoding from all components (excluding alpha)
+    for (int c = 0; c < COMP_MIN(desc->nb_components, 3); c++) {
+        const AVComponentDescriptor *comp = &desc->comp[c];
+        struct pl_bit_encoding cbits = {
+            .sample_depth = comp->depth + COMP_ABS(comp->shift),
+            .color_depth  = comp->depth,
+            .bit_shift    = COMP_MAX(comp->shift, 0),
+        };
+
+        if (bits.sample_depth && !pl_bit_encoding_equal(&bits, &cbits)) {
+            // Bit encoding differs between components, cannot handle this
+            is_supported = false;
+            break;
+        }
+
+        bits = cbits;
+    }
+    if (is_supported)
+        *out_bits = bits;
+}
+
+#undef COMP_MAX
+#undef COMP_MIN
+#undef COMP_ABS
+
 static void pl_fix_hwframe_sample_depth(struct pl_frame *out)
 {
     pl_fmt fmt = out->planes[0].texture->params.format;
@@ -1119,12 +1157,8 @@ static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
             return false;
     }
 
+    pl_map_hwframe_bit_encoding(&out->repr.bits, hwfc->sw_format);
     pl_fix_hwframe_sample_depth(out);
-
-    switch (hwfc->sw_format) {
-    case AV_PIX_FMT_P010: out->repr.bits.bit_shift = 6; break;
-    default: break;
-    }
 
     return true;
 }
@@ -1265,8 +1299,11 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
     if (!vk)
         return false;
 
+    pl_map_hwframe_bit_encoding(&out->repr.bits, hwfc->sw_format);
+
     for (int n = 0; n < out->num_planes; n++) {
         struct pl_plane *plane = &out->planes[n];
+        struct pl_bit_encoding bits = {0};
         bool chroma = n == 1 || n == 2;
         int num_subplanes;
         assert(vk_fmt[n]);
@@ -1275,7 +1312,7 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
             .image  = vkf->img[n],
             .width  = AV_CEIL_RSHIFT(hwfc->width, chroma ? desc->log2_chroma_w : 0),
             .height = AV_CEIL_RSHIFT(hwfc->height, chroma ? desc->log2_chroma_h : 0),
-            .format = map_vk_fmt(vkfc, vk_fmt[n], &out->repr.bits),
+            .format = map_vk_fmt(vkfc, vk_fmt[n], &bits),
             .usage  = vkfc->usage,
         ));
         if (!plane->texture)
@@ -1284,6 +1321,15 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
         num_subplanes = plane->texture->params.format->num_planes;
         if (num_subplanes) {
             assert(num_subplanes == out->num_planes);
+
+            // Cannot shift on non-mutable multiplane vk image
+            if (!n && num_subplanes > 1 && out->repr.bits.bit_shift) {
+                if (vkfc->img_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
+                    assert(out->repr.bits.bit_shift == bits.bit_shift);
+                else
+                    out->repr.bits.bit_shift = 0;
+            }
+
             priv->planar = plane->texture;
             for (int i = 0; i < num_subplanes; i++)
                 out->planes[i].texture = priv->planar->planes[i];
