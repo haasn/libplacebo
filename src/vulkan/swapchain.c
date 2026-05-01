@@ -708,8 +708,7 @@ static bool vk_sw_image_init(pl_swapchain sw, int idx)
 
     pl_assert(current->vkimages.elem[idx] != VK_NULL_HANDLE);
 
-    char name[32];
-    snprintf(name, sizeof(name), "swapchain #%d", idx);
+    char *name = pl_asprintf(NULL, "swapchain #%d", idx);
     pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
         .image = current->vkimages.elem[idx],
         .width = p->protoInfo.imageExtent.width,
@@ -719,8 +718,11 @@ static bool vk_sw_image_init(pl_swapchain sw, int idx)
         .debug_tag = name,
     ));
 
-    if (!tex)
+    if (!tex) {
+        pl_free(name);
         goto error;
+    }
+    pl_steal((void *) tex, name);
 
     current->images.elem[idx] = tex;
     current->vkimages.elem[idx] = VK_NULL_HANDLE;
