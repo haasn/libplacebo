@@ -26,6 +26,7 @@ struct pl_pass_vk {
     VkPipeline pipe;
     VkPipelineLayout pipeLayout;
     VkRenderPass renderPass;
+    VkImageLayout color_layout;
     // Descriptor set (bindings)
     bool use_pushd;
     VkDescriptorSetLayout dsLayout;
@@ -298,6 +299,24 @@ pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);
     pass_vk->dmask = -1; // all descriptors available
 
+    // Match the layout required for compute storage writes when the target
+    // format is storage-capable and compute shaders are supported. In this
+    // case, it is likely that a compute shader will be dispatched. Some (broken)
+    // drivers do not handle layout transitions properly, which produces image
+    // corruption when raster and compute passes share the same target texture.
+    // Additionally, this is actually a small optimization, because we avoid
+    // unnecessary layout transitions, although we may lose performance in a
+    // pure raster pipeline.
+    // Modern GPUs have unified image layouts, so there is no need for
+    // transitions. On other hardware, the performance impact should be minimal
+    // for our use case. Any heavier processing is done in compute shaders anyway.
+    pass_vk->color_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (params->type == PL_PASS_RASTER && gpu->glsl.compute &&
+        (params->target_format->caps & PL_FMT_CAP_STORABLE))
+    {
+        pass_vk->color_layout = VK_IMAGE_LAYOUT_GENERAL;
+    }
+
     // temporary allocations
     void *tmp = pl_tmp(NULL);
 
@@ -533,8 +552,8 @@ no_descriptors: ;
                             ? VK_ATTACHMENT_LOAD_OP_LOAD
                             : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .initialLayout = pass_vk->color_layout,
+                .finalLayout = pass_vk->color_layout,
             },
             .subpassCount = 1,
             .pSubpasses = &(VkSubpassDescription) {
@@ -542,7 +561,7 @@ no_descriptors: ;
                 .colorAttachmentCount = 1,
                 .pColorAttachments = &(VkAttachmentReference) {
                     .attachment = 0,
-                    .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    .layout = pass_vk->color_layout,
                 },
             },
         };
@@ -913,7 +932,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             fbo_access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
 
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                       fbo_access, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                       fbo_access, pass_vk->color_layout,
                        VK_QUEUE_FAMILY_IGNORED);
 
         VkViewport viewport = {
