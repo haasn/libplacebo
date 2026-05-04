@@ -268,7 +268,9 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
                            // Work around <https://forums.developer.nvidia.com/t/373037>
                            strcmp(vendor, "NVIDIA Corporation");
     p->has_invalidate_tex = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
-    p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 30, 0);
+    p->has_disjoint = gl_test_ext(gpu, "GL_EXT_disjoint_timer_query", 0, 0);
+    p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 30, 0) ||
+                     p->has_disjoint;
     p->has_storage = gl_test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 31) &&
                      gl_test_ext(gpu, "GL_ARB_texture_storage", 42, 30);
     p->has_readback = true;
@@ -546,6 +548,7 @@ void gl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
 
 struct pl_timer_t {
     GLuint query[QUERY_OBJECT_NUM];
+    uint64_t disjoint_events[QUERY_OBJECT_NUM]; // p->disjoint_events at begin
     int index_write; // next index to write to
     int index_read; // next index to read from
 };
@@ -602,7 +605,17 @@ static uint64_t gl_timer_query(pl_gpu gpu, pl_timer timer)
         gl->GetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
     }
 
+    bool dropped = false;
+    if (p->has_disjoint) {
+        GLint disjoint = 0;
+        gl->GetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
+        p->disjoint_events += !!disjoint;
+        dropped = timer->disjoint_events[timer->index_read] != p->disjoint_events;
+    }
+
     timer->index_read = (timer->index_read + 1) % QUERY_OBJECT_NUM;
+    if (dropped)
+        res = gl_timer_query(gpu, timer);
     // fall through
 
 done:
@@ -616,6 +629,8 @@ void gl_timer_begin(pl_gpu gpu, pl_timer timer)
         return;
 
     const gl_funcs *gl = gl_funcs_get(gpu);
+    struct pl_gl *p = PL_PRIV(gpu);
+    timer->disjoint_events[timer->index_write] = p->disjoint_events;
     gl->BeginQuery(GL_TIME_ELAPSED, timer->query[timer->index_write]);
 }
 

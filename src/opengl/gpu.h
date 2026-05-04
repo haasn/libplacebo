@@ -30,6 +30,7 @@ struct pl_gl {
     pl_opengl gl;
     uint64_t sig; // hash of GL_VERSION, GL_VENDOR, GL_RENDERER
     bool failed;
+    uint64_t disjoint_events;
 
     // For import/export
     EGLDisplay egl_dpy;
@@ -55,6 +56,7 @@ struct pl_gl {
     bool has_invalidate_tex;
     bool has_vao;
     bool has_queries;
+    bool has_disjoint;
     bool has_modifiers;
     bool has_readback;
     bool has_egl_storage;

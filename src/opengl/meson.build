@@ -51,6 +51,7 @@ if opengl_build.allowed()
     'GL_ARB_half_float_pixel',
     'GL_EXT_EGL_image_storage',
     'GL_EXT_color_buffer_float',
+    'GL_EXT_disjoint_timer_query',
     'GL_EXT_texture3D',
     'GL_EXT_texture_format_BGRA8888',
     'GL_EXT_texture_norm16',
