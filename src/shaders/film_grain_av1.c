@@ -827,10 +827,13 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
              "uvec2 local_id  = gl_LocalInvocationID.xy;  \n"
              "uvec2 global_id = gl_GlobalInvocationID.xy; \n");
     } else {
-        GLSL("uvec2 global_id = uvec2(gl_FragCoord);                  \n"
+        ident_t coords = sh_attr_vec2(sh, "grain_pixel_coord", &(pl_rect2df) {
+            .x0 = 0, .y0 = 0, .x1 = tex_w, .y1 = tex_h,
+        });
+        GLSL("uvec2 global_id = uvec2("$");                            \n"
              "uvec2 block_id  = global_id / uvec2(%d, %d);            \n"
              "uvec2 local_id  = global_id - uvec2(%d, %d) * block_id; \n",
-             bw, bh, bw, bh);
+             coords, bw, bh, bw, bh);
     }
 
     // Load the data vector which holds the offsets
