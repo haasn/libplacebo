@@ -310,14 +310,16 @@ static bool alloc_hlsl_reg_bindings(pl_gpu gpu, pl_pass pass,
         }
 
         if (has_uav) {
-            // UAVs are shared between VS and PS in a raster pass. Since slot
-            // is derived from binding, both stages land on the same slot.
-            int uav_slot = binding + uav_offset;
-            hlslbind.uav.register_binding = uav_slot;
-            while (pass_p->uavs.num <= uav_slot)
+            // UAVs are shared between VS and PS in a raster pass. The HLSL
+            // register is shifted by uav_offset since the runtime reserves
+            // slot 0 for the RTV, but the array index uses the bare binding
+            // because OMSetRenderTargetsAndUnorderedAccessViews is called
+            // with UAVStartSlot=uav_offset.
+            hlslbind.uav.register_binding = binding + uav_offset;
+            while (pass_p->uavs.num <= binding)
                 PL_ARRAY_APPEND(pass, pass_p->uavs, HLSL_BINDING_NOT_USED);
-            pass_p->uavs.elem[uav_slot] = binding;
-            if (uav_slot >= p->max_uavs) {
+            pass_p->uavs.elem[binding] = binding;
+            if (binding + uav_offset >= p->max_uavs) {
                 PL_ERR(gpu, "Too many UAVs in shader");
                 goto error;
             }
