@@ -353,19 +353,57 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     } else {
         gl->PixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
+        // Use immutable storage for storable textures. This works around
+        // an NVIDIA OpenGL driver bug. With mutable-storage textures the
+        // driver defers allocation until first use, and the first imageStore
+        // from a compute shader is silently dropped despite a correct
+        // GL_SHADER_IMAGE_ACCESS_BARRIER_BIT / GL_TEXTURE_FETCH_BARRIER_BIT
+        // barriers.
         switch (dims) {
         case 1:
-            gl->TexImage1D(tex_gl->target, 0, tex_gl->iformat, params->w, 0,
-                           tex_gl->format, tex_gl->type, params->initial_data);
+            if (params->storable) {
+                gl->TexStorage1D(tex_gl->target, 1, tex_gl->iformat, params->w);
+                if (params->initial_data) {
+                    gl->TexSubImage1D(tex_gl->target, 0, 0, params->w,
+                                      tex_gl->format, tex_gl->type,
+                                      params->initial_data);
+                }
+            } else {
+                gl->TexImage1D(tex_gl->target, 0, tex_gl->iformat, params->w, 0,
+                               tex_gl->format, tex_gl->type, params->initial_data);
+            }
             break;
         case 2:
-            gl->TexImage2D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
-                           0, tex_gl->format, tex_gl->type, params->initial_data);
+            if (params->storable) {
+                gl->TexStorage2D(tex_gl->target, 1, tex_gl->iformat,
+                                 params->w, params->h);
+                if (params->initial_data) {
+                    gl->TexSubImage2D(tex_gl->target, 0, 0, 0,
+                                      params->w, params->h,
+                                      tex_gl->format, tex_gl->type,
+                                      params->initial_data);
+                }
+            } else {
+                gl->TexImage2D(tex_gl->target, 0, tex_gl->iformat,
+                               params->w, params->h, 0,
+                               tex_gl->format, tex_gl->type, params->initial_data);
+            }
             break;
         case 3:
-            gl->TexImage3D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
-                           params->d, 0, tex_gl->format, tex_gl->type,
-                           params->initial_data);
+            if (params->storable) {
+                gl->TexStorage3D(tex_gl->target, 1, tex_gl->iformat,
+                                 params->w, params->h, params->d);
+                if (params->initial_data) {
+                    gl->TexSubImage3D(tex_gl->target, 0, 0, 0, 0,
+                                      params->w, params->h, params->d,
+                                      tex_gl->format, tex_gl->type,
+                                      params->initial_data);
+                }
+            } else {
+                gl->TexImage3D(tex_gl->target, 0, tex_gl->iformat,
+                               params->w, params->h, params->d, 0,
+                               tex_gl->format, tex_gl->type, params->initial_data);
+            }
             break;
         }
 

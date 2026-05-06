@@ -44,6 +44,7 @@ if opengl_build.allowed()
     'GL_ARB_texture_float',
     'GL_ARB_texture_gather',
     'GL_ARB_texture_rg',
+    'GL_ARB_texture_storage',
     'GL_ARB_timer_query',
     'GL_ARB_uniform_buffer_object',
     'GL_ARB_vertex_array_object',
