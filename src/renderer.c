@@ -421,7 +421,7 @@ static void find_fbo_format(struct pass_state *pass)
 
         // Probe the right variant for each number of channels, falling
         // back to the next biggest format
-        for (int c = 1; c < 4; c++) {
+        for (int c = 3; c >= 1; c--) {
             pass->fbofmt[c] = pl_find_fmt(rr->gpu, configs[i].type, c,
                                         configs[i].depth, 0, fmt->caps);
             pass->fbofmt[c] = PL_DEF(pass->fbofmt[c], pass->fbofmt[c+1]);
