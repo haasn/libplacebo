@@ -315,21 +315,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if (host_writable || tex->params.blit_dst)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-    // Opportunistically try and use host image copies if possible
-    const VkDeviceSize size_estimate = fmt->internal_size * PL_ALIGN2(params->w, 8) *
-                                       PL_MAX(params->h, 1) * PL_MAX(params->d, 1);
-    if (((tex->params.host_readable && p->host_dl_layouts.num) ||
-         (host_writable && p->host_ul_layouts.num)) && fmtp->can_host_copy &&
-        (p->rebar_enabled || size_estimate < gpu->limits.max_mapped_vram / 1024))
-        usage |= VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
-
-    if (!usage) {
-        // Vulkan requires images have at least *some* image usage set, but our
-        // API is perfectly happy with a (useless) image. So just put
-        // VK_IMAGE_USAGE_TRANSFER_DST_BIT since this harmless.
-        usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    }
-
     if (tex_vk->num_planes) {
         flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
                  VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
@@ -430,6 +415,41 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         pl_assert(drm_list.drmFormatModifierCount > 0);
         vk_link_struct(&iinfo, &drm_list);
         iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+    }
+
+    // Opportunistically try and use host image copies if possible. On
+    // implementations where identicalMemoryTypeRequirements is false, adding
+    // HOST_TRANSFER_BIT can eliminate every memory type for an image. Probe
+    // if the image would be usable with HOST_TRANSFER_BIT.
+    const VkDeviceSize size_estimate = fmt->internal_size * PL_ALIGN2(params->w, 8) *
+                                       PL_MAX(params->h, 1) * PL_MAX(params->d, 1);
+    if (((tex->params.host_readable && p->host_dl_layouts.num) ||
+         (host_writable && p->host_ul_layouts.num)) && fmtp->can_host_copy &&
+        (p->rebar_enabled || size_estimate < gpu->limits.max_mapped_vram / 1024))
+    {
+        bool ok = p->host_copy_identical;
+        if (!ok && vk->GetDeviceImageMemoryRequirements) {
+            VkImageCreateInfo probe_iinfo = iinfo;
+            probe_iinfo.usage = iinfo.usage | VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
+            VkDeviceImageMemoryRequirements probe_info = {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS,
+                .pCreateInfo = &probe_iinfo,
+            };
+            VkMemoryRequirements2 probe_reqs = {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+            };
+            vk->GetDeviceImageMemoryRequirements(vk->dev, &probe_info, &probe_reqs);
+            ok = probe_reqs.memoryRequirements.memoryTypeBits != 0;
+        }
+        if (ok)
+            iinfo.usage |= VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
+    }
+
+    if (!iinfo.usage) {
+        // Vulkan requires images have at least *some* image usage set, but our
+        // API is perfectly happy with a (useless) image. So just put
+        // VK_IMAGE_USAGE_TRANSFER_DST_BIT since this harmless.
+        iinfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
     // Double-check physical image format limits and fail if invalid

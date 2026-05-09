@@ -597,6 +597,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         copy_props.pCopySrcLayouts = p->host_dl_layouts.elem;
         vk->GetPhysicalDeviceProperties2(vk->physd, &props);
     }
+    p->host_copy_identical = copy_props.identicalMemoryTypeRequirements;
 
     vk_setup_formats(gpu);
 

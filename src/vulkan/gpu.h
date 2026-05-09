@@ -77,6 +77,10 @@ struct pl_vk {
     // Array of image layouts compatible with VK_EXT_host_image_copy
     PL_ARRAY(VkImageLayout) host_ul_layouts;
     PL_ARRAY(VkImageLayout) host_dl_layouts;
+
+    // Indicates that HOST_TRANSFER_BIT does not affect the memory type
+    // requirements of the image.
+    bool host_copy_identical;
 };
 
 struct vk_cmd *_begin_cmd(pl_gpu, enum queue_type, const char *label, pl_timer);
