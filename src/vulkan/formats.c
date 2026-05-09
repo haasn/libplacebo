@@ -610,12 +610,6 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             features_vk14 && features_vk14->hostImageCopy)
             fmtp->can_host_copy = true;
 
-        // Host copy seems to fail on some Intel GPUs, particularly on our CI
-        // machine, exclude for now this GPU.
-        // https://gitlab.freedesktop.org/mesa/mesa/-/issues/14633
-        if (vk->props.vendorID == VK_VENDOR_ID_INTEL && vk->props.deviceID == 0x3185)
-            fmtp->can_host_copy = false;
-
         // For blit emulation via compute shaders
         if (!(fmt->caps & PL_FMT_CAP_BLITTABLE) && (fmt->caps & PL_FMT_CAP_STORABLE)) {
             fmt->caps |= PL_FMT_CAP_BLITTABLE;
