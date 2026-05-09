@@ -897,8 +897,9 @@ static bool try_host_xfer(pl_gpu gpu, pl_tex tex, bool upload)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    const PL_ARRAY(VkImageLayout) *src_layouts = (void *) &p->host_dl_layouts;
     const PL_ARRAY(VkImageLayout) *layouts = upload ? (void *) &p->host_ul_layouts
-                                                    : (void *) &p->host_dl_layouts;
+                                                    : (void *) src_layouts;
 
     if (!(tex_vk->usage_flags & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) |
         !layouts->num || tex->params.format->emulated)
@@ -913,6 +914,19 @@ static bool try_host_xfer(pl_gpu gpu, pl_tex tex, bool upload)
         if (tex_vk->layout == layouts->elem[i])
             return true;
     }
+
+    // Check if old layout transition is supported. The implementation must
+    // include the VK_IMAGE_LAYOUT_GENERAL layout in supported dst layouts, so
+    // no need to check.
+    bool old_supported = false;
+    for (int i = 0; i < src_layouts->num; i++) {
+        if (tex_vk->layout == src_layouts->elem[i]) {
+            old_supported = true;
+            break;
+        }
+    }
+    if (!old_supported)
+        return false;
 
     // Need to perform a layout transition
     VK(vk->TransitionImageLayoutEXT(vk->dev, 1, &(VkHostImageLayoutTransitionInfoEXT) {
