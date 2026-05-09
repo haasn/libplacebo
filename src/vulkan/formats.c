@@ -606,12 +606,9 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
         }
 
         // Internal capabilities
-        if (vk->props.vendorID != VK_VENDOR_ID_NVIDIA &&
-            vk->props.vendorID != VK_VENDOR_ID_APPLE) { // FIXME: remove when upstream works
-            if ((texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT) &&
-                features_vk14 && features_vk14->hostImageCopy)
-                fmtp->can_host_copy = true;
-        }
+        if ((texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT) &&
+            features_vk14 && features_vk14->hostImageCopy)
+            fmtp->can_host_copy = true;
 
         // Host copy seems to fail on some Intel GPUs, particularly on our CI
         // machine, exclude for now this GPU.
