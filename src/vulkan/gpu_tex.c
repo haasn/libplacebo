@@ -1295,7 +1295,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
 #define MASK(field, cap)                                                        \
     do {                                                                        \
         if (tex->params.field && !(fmt->caps & cap)) {                          \
-            PL_WARN(gpu, "Masking `" #field "` from wrapped texture because "   \
+            PL_DEBUG(gpu, "Masking `" #field "` from wrapped texture because "   \
                     "the corresponding format '%s' does not support " #cap,     \
                     fmt->name);                                                 \
             tex->params.field = false;                                          \
