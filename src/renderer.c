@@ -3928,10 +3928,14 @@ inter_pass_error:
          "// pl_render_image_mix        \n"
          "{                             \n");
 
-    // With a single frame there is nothing to mix
+    // With a single frame there is nothing to mix, so we can skip the
+    // linearize/delinearize roundtrip.
     bool mixing = fidx > 1;
-    if (mixing)
+    struct pl_color_space mix_csp = target->color;
+    if (mixing) {
+        mix_csp.transfer = PL_COLOR_TRC_LINEAR;
         GLSL("vec4 mix_color = vec4(0.0); \n");
+    }
 
     int comps = 0;
     for (int i = 0; i < fidx; i++) {
@@ -3957,7 +3961,6 @@ inter_pass_error:
         // Ignore differences in HDR metadata, which may cause shader or lut
         // recompilation. Note that when preserve_mixing_cache is false, frames
         // will be always re-rendered with the target's HDR metadata.
-        struct pl_color_space mix_csp = target->color;
         frame_csp.hdr = mix_csp.hdr;
         if (!pl_color_space_equal(&frame_csp, &mix_csp)) {
             pl_shader_set_alpha(sh, &frame_repr, PL_ALPHA_INDEPENDENT);
@@ -3990,6 +3993,12 @@ inter_pass_error:
             .alpha = comps >= 4 ? PL_ALPHA_PREMULTIPLIED : PL_ALPHA_NONE,
         },
     };
+
+    // Re-encode to target transfer, this will in practice delinearize only.
+    if (!pl_color_space_equal(&mix_csp, &pass.img.color)) {
+        pl_shader_set_alpha(sh, &pass.img.repr, PL_ALPHA_INDEPENDENT);
+        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(mix_csp, pass.img.color));
+    }
 
     if (!pass_output_target(&pass))
         goto fallback;
