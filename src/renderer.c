@@ -29,6 +29,7 @@ struct cached_frame {
     uint64_t signature;
     uint64_t params_hash; // for detecting `pl_render_params` changes
     struct pl_color_space color;
+    struct pl_color_repr repr;
     struct pl_icc_profile profile;
     pl_rect2df crop;
     pl_tex tex;
@@ -3873,6 +3874,7 @@ retry:
             f->params_hash = par_info.hash;
             f->crop = img->crop;
             f->color = inter_pass.img.color;
+            f->repr = inter_pass.img.repr;
             f->comps = inter_pass.img.comps;
             f->profile = target->profile;
             // fall through
@@ -3944,18 +3946,20 @@ inter_pass_error:
 
         GLSL("color = textureLod("$", "$", 0.0); \n", tex, pos);
 
-        // Note: This ignores differences in ICC profile, which we decide to
-        // just simply not care about. Doing that properly would require
-        // converting between different image profiles, and the headache of
-        // finagling that state is just not worth it because this is an
-        // exceptionally unlikely hypothetical.
-        //
-        // This also ignores differences in HDR metadata, which we deliberately
-        // ignore because it causes aggressive shader recompilation.
+        // Usually a no-op. Handles mixed-colorspace frames when
+        // preserve_mixing_cache spans target changes. ICC diffs ignored
+        struct pl_color_repr frame_repr = frames[i].repr;
         struct pl_color_space frame_csp = frames[i].color;
+        // Ignore differences in HDR metadata, which may cause shader or lut
+        // recompilation. Note that when preserve_mixing_cache is false, frames
+        // will be always re-rendered with the target's HDR metadata.
         struct pl_color_space mix_csp = target->color;
-        frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
-        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(frame_csp, mix_csp));
+        frame_csp.hdr = mix_csp.hdr;
+        if (!pl_color_space_equal(&frame_csp, &mix_csp)) {
+            pl_shader_set_alpha(sh, &frame_repr, PL_ALPHA_INDEPENDENT);
+            pl_shader_color_map_ex(sh, NULL, pl_color_map_args(frame_csp, mix_csp));
+        }
+        pl_shader_set_alpha(sh, &frame_repr, PL_ALPHA_PREMULTIPLIED);
 
         float weight = weights[i] / wsum;
         GLSL("mix_color += vec4("$") * color; \n", SH_FLOAT_DYN(weight));
