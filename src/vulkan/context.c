@@ -209,6 +209,12 @@ static const struct vk_ext vk_device_extensions[] = {
     }, {
         .name = VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME,
 #endif
+    }, {
+        .name = VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
+        .funs = (const struct vk_fun[]) {
+            PL_VK_DEV_FUN(GetDeviceImageMemoryRequirements),
+            {0}
+        },
     },
 };
 
@@ -243,6 +249,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
 #ifdef VK_KHR_internally_synchronized_queues
     VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME,
 #endif
+    VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -436,6 +443,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(FreeCommandBuffers),
     PL_VK_DEV_FUN(FreeMemory),
     PL_VK_DEV_FUN(GetBufferMemoryRequirements),
+    PL_VK_DEV_FUN(GetDeviceImageMemoryRequirements),
     PL_VK_DEV_FUN(GetDeviceQueue2),
     PL_VK_DEV_FUN(GetImageMemoryRequirements2),
     PL_VK_DEV_FUN(GetImageSubresourceLayout),
