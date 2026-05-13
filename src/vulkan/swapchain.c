@@ -782,19 +782,6 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->cur_width = sinfo.imageExtent.width;
     p->cur_height = sinfo.imageExtent.height;
 
-    bool use_deferred_alloc = p->has_swapchain_maintenance1;
-
-    // NVIDIA's drivers have a bug where using deferred memory allocation
-    // causes crashes in the driver. It's unclear why exactly it happens, but
-    // the issue is consistent across Windows and Linux drivers.
-    // See for more info <https://github.com/mpv-player/mpv/issues/17318>,
-    // <https://github.com/mpv-player/mpv/issues/17543>
-    if (vk->props.vendorID == VK_VENDOR_ID_NVIDIA)
-        use_deferred_alloc = false;
-
-    if (use_deferred_alloc)
-        sinfo.flags |= VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_KHR;
-
     PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
              sinfo.imageExtent.width,
              sinfo.imageExtent.height);
