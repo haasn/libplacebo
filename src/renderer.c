@@ -2031,10 +2031,12 @@ static bool pass_scale_main(struct pass_state *pass)
     if (params->disable_linear_scaling || fbofmt->component_depth[0] < 16)
         use_sigmoid = use_linear = false;
 
-    // Avoid sigmoidization for HDR content because it clips to [0,1], and
-    // linearization because it causes very nasty ringing artefacts.
-    if (pl_color_space_is_hdr(&img->color))
-        use_sigmoid = use_linear = false;
+    // Avoid sigmoidization for HDR content because it clips to [0,1]
+    if (pl_color_space_is_hdr(&img->color)) {
+        use_sigmoid = false;
+        if (fbofmt->type != PL_FMT_FLOAT)
+            use_linear = false; // linear HDR needs out-of-range signals
+    }
 
     if (!(use_linear || use_sigmoid) && img->color.transfer == PL_COLOR_TRC_LINEAR) {
         img->color.transfer = image->color.transfer;
