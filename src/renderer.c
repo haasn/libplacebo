@@ -3926,8 +3926,12 @@ inter_pass_error:
 
     GLSL("vec4 color;                   \n"
          "// pl_render_image_mix        \n"
-         "{                             \n"
-         "vec4 mix_color = vec4(0.0);   \n");
+         "{                             \n");
+
+    // With a single frame there is nothing to mix
+    bool mixing = fidx > 1;
+    if (mixing)
+        GLSL("vec4 mix_color = vec4(0.0); \n");
 
     int comps = 0;
     for (int i = 0; i < fidx; i++) {
@@ -3961,13 +3965,16 @@ inter_pass_error:
         }
         pl_shader_set_alpha(sh, &frame_repr, PL_ALPHA_PREMULTIPLIED);
 
-        float weight = weights[i] / wsum;
-        GLSL("mix_color += vec4("$") * color; \n", SH_FLOAT_DYN(weight));
+        if (mixing) {
+            float weight = weights[i] / wsum;
+            GLSL("mix_color += vec4("$") * color; \n", SH_FLOAT_DYN(weight));
+        }
         comps = PL_MAX(comps, frames[i].comps);
     }
 
-    GLSL("color = mix_color; \n"
-         "}                  \n");
+    if (mixing)
+        GLSL("color = mix_color; \n");
+    GLSL("} \n");
 
     // Dispatch this to the destination
     pass.img = (struct img) {
