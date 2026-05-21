@@ -431,8 +431,13 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         goto error;
 
     // Query all device properties
+    VkPhysicalDeviceDriverProperties driver_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+    };
+
     VkPhysicalDevicePCIBusInfoPropertiesEXT pci_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT,
+        .pNext = &driver_props,
     };
 
     VkPhysicalDeviceIDPropertiesKHR id_props = {
@@ -537,7 +542,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .max_buffer_texels  = PL_MIN(limits.maxTexelBufferElements, max_size),
         .align_host_ptr     = host_props.minImportedHostPointerAlignment,
         .host_cached        = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_CACHED_BIT),
-        .host_ptr_slow      = props.properties.vendorID == VK_VENDOR_ID_NVIDIA,
+        .host_ptr_slow      = driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY,
         // pl_tex
         .max_tex_1d_dim     = limits.maxImageDimension1D,
         .max_tex_2d_dim     = limits.maxImageDimension2D,
