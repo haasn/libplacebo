@@ -46,14 +46,6 @@
 #define PL_VK_LOAD_FUN(inst, name, get_addr) \
     PL_VK_FUN(name) = (PFN_vk##name) get_addr(inst, "vk" #name);
 
-#ifndef VK_VENDOR_ID_NVIDIA
-#define VK_VENDOR_ID_NVIDIA 0x10DE
-#endif
-
-#ifndef VK_VENDOR_ID_APPLE
-#define VK_VENDOR_ID_APPLE 0x106B
-#endif
-
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     pl_mutex lock;
