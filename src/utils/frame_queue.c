@@ -1043,6 +1043,9 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
         ret = nearest(p, out_mix, params);
     }
 
+    if (ret == PL_QUEUE_ERR)
+        PL_ERR(p, "Failed updating frame queue for target PTS %f!", params->pts);
+
     pl_cond_signal(&p->wakeup);
     pl_mutex_unlock(&p->lock_weak);
     pl_mutex_unlock(&p->lock_strong);
