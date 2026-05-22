@@ -760,7 +760,7 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
 
     // Can't oversample with only a single frame, fall back to point sampling
     if (p->queue.num < 2 || p->queue.elem[0]->pts > params->pts) {
-        if (point(p, mix, params) != PL_QUEUE_OK)
+        if (point(p, mix, params) == PL_QUEUE_ERR)
             return PL_QUEUE_ERR;
         return ret;
     }
