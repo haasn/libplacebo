@@ -53,9 +53,9 @@ int main()
     REQUIRE_CMP(*(int *) data->value, =, pl_render_default_params.tile_size, "d");
     REQUIRE_STREQ(data->text, "32");
 
-    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=oversample,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203,contrast_recovery=0.30000001192092896,dither=yes";
+    const char *hq_opts = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=oversample,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203,black_percentile=0.5,black_maxadvance=4.900000095367432,contrast_recovery=0.30000001192092896,dither=yes";
     // fallback can produce different precision
-    const char *hq_opts2 = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=oversample,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,contrast_recovery=0.30000001192092896,dither=yes";
+    const char *hq_opts2 = "upscaler=ewa_lanczossharp,downscaler=hermite,frame_mixer=oversample,deband=yes,sigmoid=yes,peak_detect=yes,peak_percentile=99.99500274658203125,black_percentile=0.4999,black_maxadvance=4.89999,contrast_recovery=0.30000001192092896,dither=yes";
 
     pl_options_reset(test, &pl_render_high_quality_params);
     const char *opts = pl_options_save(test);

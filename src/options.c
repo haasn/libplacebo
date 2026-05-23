@@ -958,9 +958,12 @@ const struct pl_opt_t pl_option_list[] = {
                {"high_quality", &pl_peak_detect_high_quality_params})),
     OPT_FLOAT("peak_smoothing_period", "Peak detection smoothing coefficient", peak_detect_params.smoothing_period, .max = 1000.0),
     OPT_FLOAT("scene_threshold_low", "Scene change threshold low", peak_detect_params.scene_threshold_low, .max = 100.0),
+    OPT_FLOAT("scene_threshold_avg", "Scene change threshold avg", peak_detect_params.scene_threshold_avg, .max = 100.0),
     OPT_FLOAT("scene_threshold_high", "Scene change threshold high", peak_detect_params.scene_threshold_high, .max = 100.0),
     OPT_FLOAT("minimum_peak", "Minimum detected peak", peak_detect_params.minimum_peak, .max = 100.0, .deprecated = true),
-    OPT_FLOAT("peak_percentile", "Peak detection percentile", peak_detect_params.percentile, .max = 100.0),
+    OPT_FLOAT("peak_percentile", "Black detection percentile", peak_detect_params.percentile, .max = 100.0),
+    OPT_FLOAT("black_percentile", "Black detection percentile", peak_detect_params.black_percentile, .max = 100.0),
+    OPT_FLOAT("black_maxadvance", "Black detection maximum Advance in percent PQ", peak_detect_params.black_maxadvance, .max = 100.0),
     OPT_FLOAT("black_cutoff", "Peak detection black cutoff", peak_detect_params.black_cutoff, .max = 100.0),
     OPT_BOOL("allow_delayed_peak", "Allow delayed peak detection", peak_detect_params.allow_delayed),
 

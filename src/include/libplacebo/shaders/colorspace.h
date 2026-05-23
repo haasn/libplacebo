@@ -120,6 +120,7 @@ struct pl_peak_detect_params {
     //
     // Setting either one of these to 0.0 disables this logic.
     float scene_threshold_low;
+    float scene_threshold_avg;
     float scene_threshold_high;
 
     // Which percentile of the input image brightness histogram to consider as
@@ -132,7 +133,8 @@ struct pl_peak_detect_params {
     // A recommended value is 99.995%, which is very conservative and should
     // cause no major issues in typical content.
     float percentile;
-
+    float black_percentile;
+    float black_maxadvance;
     // Black cutoff strength. To prevent unnatural pixel shimmer and excessive
     // darkness in mostly black scenes, as well as avoid black bars from
     // affecting the content, (smoothly) cut off any value below this (PQ%)
@@ -155,11 +157,15 @@ struct pl_peak_detect_params {
     .scene_threshold_low    = 1.0f,     \
     .scene_threshold_high   = 3.0f,     \
     .percentile             = 100.0f,   \
+    .black_percentile       = 1.0f,     \
+    .black_maxadvance       = 7.0f,     \
     .black_cutoff           = 1.0f,
 
 #define PL_PEAK_DETECT_HQ_DEFAULTS      \
     PL_PEAK_DETECT_DEFAULTS             \
-    .percentile             = 99.995f,
+    .percentile             = 99.995f,  \
+    .black_percentile       = 0.5f,     \
+    .black_maxadvance       = 4.9f,
 
 #define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_peak_detect_params pl_peak_detect_default_params;
