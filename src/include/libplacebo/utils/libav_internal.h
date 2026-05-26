@@ -365,6 +365,36 @@ PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
         if (!out->scene_max[2])
             out->scene_max[2] = scene_max_hist;
 
+        // ST 2094-40 8.5.4 defines the constraints on the histogram values in
+        // metadata. Specifically the 5% (V1) and 10% (V2) values are not part of
+        // the CDF in app_ver=1. They must be initialized to V1=0.00000, V2=0.00255.
+        // Otherwise, they are reserved, as per 2094-50, and defined as follows:
+        // V1 = Nit99y: scene luminance at 99.99% of the frame
+        // V2 = Dp100f: percentage of pixels <= 100 nits
+        // <https://www.youtube.com/watch?v=n7kOr3vsU50&t=1763s>
+        // V1 is exactly what we use and need for tone-mapping, so plug that in.
+        if (data->dhp->application_version == 1 && n == 9 &&
+            pars->distribution_maxrgb[1].percentage == 5 &&
+            pars->distribution_maxrgb[2].percentage == 10)
+        {
+            const float v1 = av_q2d(pars->distribution_maxrgb[1].percentile);
+            // Reject the V1=0 sentinel. With some small value, values below are
+            // insignificant anyway.
+            if (v1 > 1e-6f) {
+                // V1 is 99.99% of the linearized luminance value for each frame.
+                const float y99_nits = 10000 * v1;
+                out->max_pq_y = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, y99_nits);
+                // There is no scene_avg, but we can infer it by rescaling the
+                // RGB average value, should be good enough approximation.
+                float max = FFMAX3(out->scene_max[0], out->scene_max[1], out->scene_max[2]);
+                if (max > 0 && out->scene_avg) {
+                    const float coef = y99_nits / max;
+                    out->avg_pq_y = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ,
+                                                   coef * out->scene_avg);
+                }
+            }
+        }
+
         if (pars->tone_mapping_flag == 1) {
             out->ootf.target_luma = av_q2d(data->dhp->targeted_system_display_maximum_luminance);
             out->ootf.knee_x = av_q2d(pars->knee_point_x);
