@@ -25,9 +25,11 @@
 
 #include <libplacebo/utils/dolbyvision.h>
 
+#include <libavutil/common.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_drm.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/macros.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
 #include <libavformat/version.h>
@@ -1089,10 +1091,6 @@ struct pl_avframe_priv {
     pl_tex planar; // for planar vulkan textures
 };
 
-#define COMP_MAX(x, y) ((x) > (y) ? (x) : (y))
-#define COMP_MIN(x, y) ((x) < (y) ? (x) : (y))
-#define COMP_ABS(x) ((x) < 0 ? -(x) : (x))
-
 static void pl_map_hwframe_bit_encoding(struct pl_bit_encoding *out_bits,
                                         enum AVPixelFormat pix_fmt)
 {
@@ -1103,12 +1101,12 @@ static void pl_map_hwframe_bit_encoding(struct pl_bit_encoding *out_bits,
         return;
 
     // Calculate bit encoding from all components (excluding alpha)
-    for (int c = 0; c < COMP_MIN(desc->nb_components, 3); c++) {
+    for (int c = 0; c < FFMIN(desc->nb_components, 3); c++) {
         const AVComponentDescriptor *comp = &desc->comp[c];
         struct pl_bit_encoding cbits = {
-            .sample_depth = comp->depth + COMP_ABS(comp->shift),
+            .sample_depth = comp->depth + FFABS(comp->shift),
             .color_depth  = comp->depth,
-            .bit_shift    = COMP_MAX(comp->shift, 0),
+            .bit_shift    = FFMAX(comp->shift, 0),
         };
 
         if (bits.sample_depth && !pl_bit_encoding_equal(&bits, &cbits)) {
@@ -1122,10 +1120,6 @@ static void pl_map_hwframe_bit_encoding(struct pl_bit_encoding *out_bits,
     if (is_supported)
         *out_bits = bits;
 }
-
-#undef COMP_MAX
-#undef COMP_MIN
-#undef COMP_ABS
 
 static void pl_fix_hwframe_sample_depth(struct pl_frame *out)
 {
