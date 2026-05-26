@@ -345,7 +345,6 @@ PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
     }
 
     if (data->dhp && data->dhp->application_version < 2) {
-        float hist_max = 0;
         const AVHDRPlusColorTransformParams *pars = &data->dhp->params[0];
         assert(data->dhp->num_windows > 0);
         out->scene_max[0] = 10000 * av_q2d(pars->maxscl[0]);
@@ -353,22 +352,18 @@ PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
         out->scene_max[2] = 10000 * av_q2d(pars->maxscl[2]);
         out->scene_avg = 10000 * av_q2d(pars->average_maxrgb);
 
-        // Calculate largest value from histogram to use as fallback for clips
-        // with missing MaxSCL information. Note that this may end up picking
-        // the "reserved" value at the 5% percentile, which in practice appears
-        // to track the brightest pixel in the scene.
-        for (int i = 0; i < pars->num_distribution_maxrgb_percentiles; i++) {
-            float hist_val = av_q2d(pars->distribution_maxrgb[i].percentile);
-            if (hist_val > hist_max)
-                hist_max = hist_val;
-        }
-        hist_max *= 10000;
+        // ST 2094-40 B.3: when MaxSCL is missing, the fallback is
+        // DistributionMaxRGBPercentiles[Ω], the last element of maxrgb dist.
+        uint8_t n = pars->num_distribution_maxrgb_percentiles;
+        float scene_max_hist = n > 0
+            ? 10000 * av_q2d(pars->distribution_maxrgb[n - 1].percentile)
+            : 0;
         if (!out->scene_max[0])
-            out->scene_max[0] = hist_max;
+            out->scene_max[0] = scene_max_hist;
         if (!out->scene_max[1])
-            out->scene_max[1] = hist_max;
+            out->scene_max[1] = scene_max_hist;
         if (!out->scene_max[2])
-            out->scene_max[2] = hist_max;
+            out->scene_max[2] = scene_max_hist;
 
         if (pars->tone_mapping_flag == 1) {
             out->ootf.target_luma = av_q2d(data->dhp->targeted_system_display_maximum_luminance);
