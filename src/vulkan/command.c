@@ -276,8 +276,9 @@ struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
         // Special case: this is a pure layout transition (with no command),
         // in this case we need to ensure that we still emit some sort of
         // synchronization scope or else the layers complain
-        if (stage == VK_PIPELINE_STAGE_2_NONE) {
+        if (stage == VK_PIPELINE_STAGE_2_NONE && is_write) {
             last.stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+            last.access = VK_ACCESS_2_MEMORY_WRITE_BIT;
         }
     }
 
