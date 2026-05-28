@@ -90,7 +90,6 @@ struct vk_ctx {
     void (*lock_queue)(void *queue_ctx, uint32_t qf, uint32_t idx);
     void (*unlock_queue)(void *queue_ctx, uint32_t qf, uint32_t idx);
     void *queue_ctx;
-    VkDeviceQueueCreateFlags queue_flags;
 
     // Pending commands. These are shared for the entire mpvk_ctx to ensure
     // submission and callbacks are FIFO

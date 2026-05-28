@@ -323,7 +323,8 @@ struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
 }
 
 struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
-                                     VkQueueFamilyProperties props)
+                                     VkQueueFamilyProperties props,
+                                     VkDeviceQueueCreateFlags flags)
 {
     struct vk_cmdpool *pool = pl_alloc_ptr(NULL, pool);
     *pool = (struct vk_cmdpool) {
@@ -349,7 +350,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
     for (int n = 0; n < qnum; n++) {
         VkDeviceQueueInfo2 qinfo = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
-            .flags = vk->queue_flags,
+            .flags = flags,
             .queueFamilyIndex = qf,
             .queueIndex       = n,
         };

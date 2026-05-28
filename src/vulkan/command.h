@@ -115,7 +115,8 @@ struct vk_cmdpool {
 // Set up a vk_cmdpool corresponding to a queue family. `qnum` may be less than
 // `props.queueCount`, to restrict the number of queues in this queue family.
 struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
-                                     VkQueueFamilyProperties props);
+                                     VkQueueFamilyProperties props,
+                                     VkDeviceQueueCreateFlags flags);
 
 void vk_cmdpool_destroy(struct vk_cmdpool *pool);
 

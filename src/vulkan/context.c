@@ -1348,9 +1348,10 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         goto error;
     }
 
+    VkDeviceQueueCreateFlags qflags = 0;
 #ifdef VK_KHR_internally_synchronized_queues
     if (has_synchronized_queues(&vk->features))
-        vk->queue_flags |= VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
+        qflags |= VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
 #endif
 
     // Enable all queues at device creation time, to maximize compatibility
@@ -1363,7 +1364,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
             continue;
         PL_ARRAY_APPEND(tmp, qinfos, (VkDeviceQueueCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .flags = vk->queue_flags,
+            .flags = qflags,
             .queueFamilyIndex = i,
             .queueCount = qfs[i].queueCount,
             .pQueuePriorities = pl_calloc(tmp, qfs[i].queueCount, sizeof(float)),
@@ -1409,7 +1410,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
             qnum = qmax;
         }
 
-        struct vk_cmdpool *pool = vk_cmdpool_create(vk, i, qnum, qfs[i]);
+        struct vk_cmdpool *pool = vk_cmdpool_create(vk, i, qnum, qfs[i], qflags);
         if (!pool)
             goto error;
         PL_ARRAY_APPEND(vk->alloc, vk->pools, pool);
@@ -1779,7 +1780,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
             }
         }
 
-        *pool = vk_cmdpool_create(vk, qf, qinfos[i].info->count, qfs[qf]);
+        *pool = vk_cmdpool_create(vk, qf, qinfos[i].info->count, qfs[qf], 0); // FIXME
         if (!*pool)
             goto error;
         PL_ARRAY_APPEND(vk->alloc, vk->pools, *pool);
