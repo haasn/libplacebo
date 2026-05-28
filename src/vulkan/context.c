@@ -1503,6 +1503,7 @@ static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version,
         queues[i] = (struct pl_vulkan_queue) {
             .index = vk->pools.elem[i]->qf,
             .count = vk->pools.elem[i]->num_queues,
+            .flags = vk->pools.elem[i]->flags,
         };
 
         if (vk->pools.elem[i] == vk->pool_graphics)
@@ -1780,7 +1781,8 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
             }
         }
 
-        *pool = vk_cmdpool_create(vk, qf, qinfos[i].info->count, qfs[qf], 0); // FIXME
+        *pool = vk_cmdpool_create(vk, qf, qinfos[i].info->count, qfs[qf],
+                                  qinfos[i].info->flags);
         if (!*pool)
             goto error;
         PL_ARRAY_APPEND(vk->alloc, vk->pools, *pool);

@@ -330,6 +330,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
     *pool = (struct vk_cmdpool) {
         .vk         = vk,
         .props      = props,
+        .flags      = flags,
         .qf         = qf,
         .queues     = pl_calloc(pool, qnum, sizeof(VkQueue)),
         .sync       = pl_calloc(pool, qnum, sizeof(pl_vulkan_sem)),

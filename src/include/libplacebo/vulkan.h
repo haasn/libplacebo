@@ -104,6 +104,7 @@ PL_API void pl_vk_inst_destroy(pl_vk_inst *inst);
 struct pl_vulkan_queue {
     uint32_t index; // Queue family index
     uint32_t count; // Queue family count
+    VkDeviceQueueCreateFlags flags; // Queue family flags
 };
 
 // Structure representing the actual vulkan device and associated GPU instance

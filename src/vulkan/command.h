@@ -101,6 +101,7 @@ struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
 struct vk_cmdpool {
     struct vk_ctx *vk;
     VkQueueFamilyProperties props;
+    VkDeviceQueueCreateFlags flags;
     int qf; // queue family index
     VkCommandPool pool;
     pl_vulkan_sem *sync;
