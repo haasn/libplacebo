@@ -2357,7 +2357,7 @@ static pl_tex pass_blur(struct pass_state *pass, pl_tex src_tex, int comps,
     float offset = radius / sqrtf(powf(4, passes) - 1.0f);
     if (offset < a_min && passes > 2)
         offset = radius / sqrtf(powf(4, --passes) - 1.0f);
-    if (offset > a_max)
+    if (offset > a_max && passes < MAX_BLUR_PASSES)
         offset = radius / sqrtf(powf(4, ++passes) - 1.0f);
 
     int w = src_tex->params.w;
