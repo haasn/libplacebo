@@ -901,7 +901,7 @@ static bool try_host_xfer(pl_gpu gpu, pl_tex tex, bool upload)
     const PL_ARRAY(VkImageLayout) *layouts = upload ? (void *) &p->host_ul_layouts
                                                     : (void *) src_layouts;
 
-    if (!(tex_vk->usage_flags & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) |
+    if (!(tex_vk->usage_flags & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) ||
         !layouts->num || tex->params.format->emulated)
         return false;
 
