@@ -457,7 +457,7 @@ static VkResult vk_queue_submit2(struct vk_ctx *vk, VkQueue queue,
 
     for (int i = 0; i < num_deps; i++) {
         deps[i] = info2->pWaitSemaphoreInfos[i].semaphore;
-        masks[i] = info2->pWaitSemaphoreInfos[i].stageMask;
+        masks[i] = lower_stage2(info2->pWaitSemaphoreInfos[i].stageMask);
         depvals[i] = info2->pWaitSemaphoreInfos[i].value;
     }
     for (int i = 0; i < num_sigs; i++) {
