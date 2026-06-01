@@ -61,7 +61,7 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
                 goto error;
             }
             if (size <= 0 || size > 1024) {
-                pl_err(log, "Invalid 3DLUT size: %dx%d%x", size, size, size);
+                pl_err(log, "Invalid 3DLUT size: %dx%dx%d", size, size, size);
                 goto error;
             }
 
