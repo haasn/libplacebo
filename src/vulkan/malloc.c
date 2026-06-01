@@ -654,12 +654,12 @@ void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice)
     }
 
     pl_mutex_lock(&slab->lock);
+    pl_assert(slab->used >= slice->size);
 
     int page_idx = slice->offset / slab->pagesize;
     slab->spacemap |= 0x1LLU << page_idx;
     slab->used -= slice->size;
     slab->age = ma->age;
-    pl_assert(slab->used >= 0);
 
     pl_mutex_unlock(&slab->lock);
 
