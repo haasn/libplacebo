@@ -377,14 +377,15 @@ int pl_cache_load_ex(pl_cache cache,
             goto error;
         }
 
-        if (entry.size > SIZE_MAX) {
+        const uint64_t aligned_size = PAD_ALIGN(entry.size);
+        if (aligned_size < entry.size || aligned_size > SIZE_MAX) {
             PL_WARN(p, "Cache object size %"PRIu64" overflows SIZE_MAX.. "
                     "suspect broken file, ignoring rest", entry.size);
             goto error;
         }
 
-        void *buf = pl_alloc(NULL, PAD_ALIGN(entry.size));
-        if (!read(priv, PAD_ALIGN(entry.size), buf)) {
+        void *buf = pl_alloc(NULL, aligned_size);
+        if (!read(priv, aligned_size, buf)) {
             PL_WARN(p, "Cache seems truncated, missing objects.. ignoring rest");
             pl_free(buf);
             goto error;
