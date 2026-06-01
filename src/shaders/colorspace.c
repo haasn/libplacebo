@@ -1262,7 +1262,8 @@ retry_ssbo:
     const uint slice = wg_idx % ${const uint: SLICES};                          \
     const uint hist_base = slice * ${const uint: HIST_BINS};                    \
     const vec4 color_orig = color;                                              \
-    $wg_sum = $wg_max = $wg_black = 0u;                                         \
+    if (local_idx == 0u)                                                        \
+        $wg_sum = $wg_max = $wg_black = 0u;                                     \
     @if (use_histogram) {                                                       \
         for (uint i = local_idx; i < ${const uint: HIST_BINS}; i += wg_size)    \
             $wg_hist[i] = 0u;                                                   \
