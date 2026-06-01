@@ -669,7 +669,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
                 if (s >= knee)
                     break;
                 for (int c = 0; c < 3; c++)
-                    data[r * 3 + c] = (s * data[r * 3 + c] + (knee - s) * s) >> 12;
+                    data[r * 4 + c] = (s * data[r * 4 + c] + (knee - s) * s) >> 12;
             }
         }
     }
