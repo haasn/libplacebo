@@ -108,7 +108,7 @@ static IDXGIAdapter *get_adapter(pl_d3d11 d3d11, LUID adapter_luid)
         PL_FATAL(ctx, "Failed to load dxgi.dll");
         goto error;
     }
-    pCreateDXGIFactory1(&IID_IDXGIFactory1, (void **) &factory);
+    D3D(pCreateDXGIFactory1(&IID_IDXGIFactory1, (void **) &factory));
 
     for (int i = 0;; i++) {
         hr = IDXGIFactory1_EnumAdapters1(factory, i, &adapter1);
