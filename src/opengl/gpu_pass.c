@@ -634,14 +634,15 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         };
         GLenum mode = map_prim[pass->params.vertex_type];
 
+        static const GLenum index_fmts[PL_INDEX_FORMAT_COUNT] = {
+            [PL_INDEX_UINT16] = GL_UNSIGNED_SHORT,
+            [PL_INDEX_UINT32] = GL_UNSIGNED_INT,
+        };
+        const GLenum index_fmt = index_fmts[params->index_fmt];
+
         gl_timer_begin(gpu, params->timer);
 
         if (params->index_data) {
-
-            static const GLenum index_fmts[PL_INDEX_FORMAT_COUNT] = {
-                [PL_INDEX_UINT16] = GL_UNSIGNED_SHORT,
-                [PL_INDEX_UINT32] = GL_UNSIGNED_INT,
-            };
 
             // Upload indices to temporary buffer object
             if (!pass_gl->index_buffer)
@@ -649,8 +650,7 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, pass_gl->index_buffer);
             gl->BufferData(GL_ELEMENT_ARRAY_BUFFER, pl_index_buf_size(params),
                            params->index_data, GL_STREAM_DRAW);
-            gl->DrawElements(mode, params->vertex_count,
-                             index_fmts[params->index_fmt], 0);
+            gl->DrawElements(mode, params->vertex_count, index_fmt, 0);
             gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
         } else if (params->index_buf) {
@@ -658,7 +658,7 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             // The pointer argument becomes the index buffer offset
             struct pl_buf_gl *index_gl = PL_PRIV(params->index_buf);
             gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_gl->buffer);
-            gl->DrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT,
+            gl->DrawElements(mode, params->vertex_count, index_fmt,
                              (void *) params->index_offset);
             gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
