@@ -884,11 +884,11 @@ static bool vk_sw_start_frame(pl_swapchain sw,
         return false;
     }
 
-    VkSemaphore sem_in = p->current->sems_in.elem[p->current->idx_sems_in];
-    p->current->idx_sems_in = (p->current->idx_sems_in + 1) % p->current->sems_in.num;
-    PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
-
     for (int attempts = 0; attempts < 2; attempts++) {
+        VkSemaphore sem_in = p->current->sems_in.elem[p->current->idx_sems_in];
+        p->current->idx_sems_in = (p->current->idx_sems_in + 1) % p->current->sems_in.num;
+        PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
+
         uint32_t imgidx = 0;
         VkResult res = vk->AcquireNextImageKHR(vk->dev, p->current->swapchain, UINT64_MAX,
                                                sem_in, VK_NULL_HANDLE, &imgidx);
