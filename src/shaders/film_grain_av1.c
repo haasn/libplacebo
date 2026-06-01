@@ -587,8 +587,19 @@ static inline bool av1_grain_data_eq(const struct pl_film_grain_data *da,
 static void fill_grain_lut(void *data, const struct sh_lut_params *params)
 {
     struct grain_obj_av1 *obj = params->priv;
-    size_t entries = params->width * params->height * params->comps;
-    memcpy(data, obj->grain, entries * sizeof(float));
+    const int comps = params->comps;
+    size_t entries = params->width * params->height;
+    float *out = data;
+
+    if (params->comps == 1) { /* common case */
+        memcpy(out, obj->grain, entries * sizeof(float));
+    } else {
+        for (int c = 0; c < comps; c++) {
+            const float *grain = &obj->grain[c][0][0];
+            for (size_t i = 0; i < entries; i++)
+                out[i * comps + c] = grain[i];
+        }
+    }
 }
 
 bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
