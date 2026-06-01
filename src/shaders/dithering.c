@@ -468,11 +468,10 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
 
     GLSL(// Add the error previously propagated into current pixel, and clear
          // it in the ring buffer.
-         "uint err_u32 = err_rgb8[idx] + %uu;                                   \n"
+         "uint err_u32 = atomicExchange(err_rgb8[idx], 0u) + %uu;               \n"
          "pix = pix * %d.0 + vec3(int((err_u32 >> %d) & 0xFFu) - 128,           \n"
          "                        int((err_u32 >> %d) & 0xFFu) - 128,           \n"
          "                        int( err_u32        & 0xFFu) - 128) / %d.0;   \n"
-         "err_rgb8[idx] = 0u;                                                   \n"
          // Write the dithered pixel.
          "vec3 dithered = round(pix);                                           \n"
          "imageStore("$", ivec2(x, y), vec4(dithered / %d.0, pix_orig.a));      \n"
