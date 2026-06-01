@@ -86,9 +86,6 @@ struct vk_slab {
 // combination of malloc parameters. This shouldn't actually be that many in
 // practice, because some combinations simply never occur, and others will
 // generally be the same for the same objects.
-//
-// Note: `vk_pool` addresses are not immutable, so we mustn't expose any
-// dangling references to a `vk_pool` from e.g. `vk_memslice.priv = vk_slab`.
 struct vk_pool {
     struct vk_malloc_params params;   // allocation params (with some fields nulled)
     PL_ARRAY(struct vk_slab *) slabs; // array of slabs, unsorted
@@ -103,7 +100,7 @@ struct vk_malloc {
     VkPhysicalDeviceMemoryProperties props;
     size_t maximum_page_size;
     size_t max_mapped_vram; // maximum allocation size from host-visible VRAM
-    PL_ARRAY(struct vk_pool) pools;
+    PL_ARRAY(struct vk_pool *) pools;
     uint64_t age;
 };
 
@@ -154,7 +151,7 @@ void vk_malloc_print_stats(struct vk_malloc *ma, enum pl_log_level lev)
 
     pl_mutex_lock(&ma->lock);
     for (int i = 0; i < ma->pools.num; i++) {
-        struct vk_pool *pool = &ma->pools.elem[i];
+        struct vk_pool *pool = ma->pools.elem[i];
         const struct vk_malloc_params *par = &pool->params;
 
         PL_MSG(vk, lev, "Memory pool %d:", i);
@@ -594,7 +591,7 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
 
     vk_malloc_print_stats(ma, PL_LOG_DEBUG);
     for (int i = 0; i < ma->pools.num; i++)
-        pool_uninit(ma->vk, &ma->pools.elem[i]);
+        pool_uninit(ma->vk, ma->pools.elem[i]);
 
     pl_mutex_destroy(&ma->lock);
     pl_free_ptr(ma_ptr);
@@ -608,7 +605,7 @@ void vk_malloc_garbage_collect(struct vk_malloc *ma)
     ma->age++;
 
     for (int i = 0; i < ma->pools.num; i++) {
-        struct vk_pool *pool = &ma->pools.elem[i];
+        struct vk_pool *pool = ma->pools.elem[i];
         for (int n = 0; n < pool->slabs.num; n++) {
             struct vk_slab *slab = pool->slabs.elem[n];
             pl_mutex_lock(&slab->lock);
@@ -694,18 +691,19 @@ static struct vk_pool *find_pool(struct vk_malloc *ma,
     fixed.shared_mem = (struct pl_shared_mem) {0};
 
     for (int i = 0; i < ma->pools.num; i++) {
-        if (pool_params_eq(&ma->pools.elem[i].params, &fixed))
-            return &ma->pools.elem[i];
+        if (pool_params_eq(&ma->pools.elem[i]->params, &fixed))
+            return ma->pools.elem[i];
     }
 
     // Not found => add it
-    PL_ARRAY_GROW(ma, ma->pools);
-    size_t idx = ma->pools.num++;
-    ma->pools.elem[idx] = (struct vk_pool) {
+    struct vk_pool *pool = pl_alloc_ptr(ma, pool);
+    *pool = (struct vk_pool) {
         .params = fixed,
-        .index = idx,
+        .index = ma->pools.num,
     };
-    return &ma->pools.elem[idx];
+
+    PL_ARRAY_APPEND(ma, ma->pools, pool);
+    return pool;
 }
 
 // Returns a suitable memory page from the pool. A new slab will be allocated
