@@ -116,7 +116,7 @@ static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *par
     struct pl_tone_map_params fixed = *params;
     pl_tone_map_params_infer(&fixed);
 
-    const struct pl_tone_map_function *fun = params->function;
+    const struct pl_tone_map_function *fun = fixed.function;
     fixed.input_scaling = fun->scaling;
     fixed.output_scaling = fun->scaling;
     fixed.input_min  = pl_hdr_rescale(params->input_scaling,  fun->scaling, fixed.input_min);
