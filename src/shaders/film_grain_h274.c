@@ -156,7 +156,10 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         group_sum = sh_fresh(sh, "group_sum");
         shmem_req += sizeof(int);
         GLSLH("shared int "$"; \n", group_sum);
-        GLSL($" = 0; barrier(); \n", group_sum);
+        GLSL("if (gl_LocalInvocationIndex == 0u) \n"
+             "    "$" = 0;                       \n"
+             "barrier();                         \n",
+             group_sum);
     }
 
     if (!sh_try_compute(sh, 8, 8, false, shmem_req)) {
