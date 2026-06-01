@@ -31,6 +31,8 @@ void *pl_realloc(void *parent, void *ptr, size_t size);
 
 static inline void *pl_calloc(void *parent, size_t count, size_t size)
 {
+    if (count && size > SIZE_MAX / count)
+        return NULL;
     return pl_zalloc(parent, count * size);
 }
 
