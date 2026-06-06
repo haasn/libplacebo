@@ -800,6 +800,19 @@ const struct pl_filter_config pl_filter_ewa_lanczossharp = {
     .recommended = PL_FILTER_UPSCALING,
 };
 
+const struct pl_filter_config pl_filter_ewa_lanczosradius = {
+    .name        = "ewa_lanczosradius",
+    .description = "Sharpened Jinc, radius 3",
+    .kernel      = &pl_filter_function_jinc,
+    .window      = &pl_filter_function_jinc,
+    .radius      = 3.0,
+    // Similar to above, but sharpened to fit the third zero crossing
+    // at a radius of exactly 3
+    .blur        = 0.92640757661460680516125,
+    .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+};
+
 const struct pl_filter_config pl_filter_ewa_lanczos4sharpest = {
     .name        = "ewa_lanczos4sharpest",
     .description = "Sharpened Jinc-AR, 4 taps",
@@ -913,6 +926,33 @@ const struct pl_filter_config pl_filter_robidouxsharp = {
     .allowed     = PL_FILTER_ALL,
 };
 
+const struct pl_filter_config pl_filter_ewa_hermite = {
+    .name        = "ewa_hermite",
+    .description = "EWA Hermite",
+    .kernel      = &pl_filter_function_cubic,
+    .params      = {0.0, 0.0},
+    .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+};
+
+const struct pl_filter_config pl_filter_ewa_mitchell = {
+    .name        = "ewa_mitchell",
+    .description = "EWA Mitchell-Netravali",
+    .kernel      = &pl_filter_function_cubic,
+    .params      = {1/3.0, 1/3.0},
+    .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+};
+
+const struct pl_filter_config pl_filter_ewa_catmull_rom = {
+    .name        = "ewa_catmull_rom",
+    .description = "EWA Catmull-Rom",
+    .kernel      = &pl_filter_function_cubic,
+    .params      = {0.0, 0.5},
+    .polar       = true,
+    .allowed     = PL_FILTER_SCALING,
+};
+
 const struct pl_filter_config pl_filter_ewa_robidoux = {
     .name        = "ewa_robidoux",
     .description = "EWA Robidoux",
@@ -952,6 +992,7 @@ const struct pl_filter_config * const pl_filter_configs[] = {
     &pl_filter_lanczos,
     &pl_filter_ewa_lanczos,
     &pl_filter_ewa_lanczossharp,
+    &pl_filter_ewa_lanczosradius,
     &pl_filter_ewa_lanczos4sharpest,
     &pl_filter_bicubic,
     &filter_cubic, // pseudo-alias (frame mixing only)
@@ -969,6 +1010,9 @@ const struct pl_filter_config * const pl_filter_configs[] = {
     &pl_filter_catmull_rom,
     &pl_filter_robidoux,
     &pl_filter_robidouxsharp,
+    &pl_filter_ewa_hermite,
+    &pl_filter_ewa_mitchell,
+    &pl_filter_ewa_catmull_rom,
     &pl_filter_ewa_robidoux,
     &pl_filter_ewa_robidouxsharp,
 
