@@ -12,6 +12,7 @@
 #include <libplacebo/renderer.h>
 #include <libplacebo/shaders/lut.h>
 #include <libplacebo/utils/upload.h>
+#include <string.h>
 
 // Static configuration, done in the file to keep things simple
 static const char *icc_profile = ""; // path to ICC profile
@@ -184,13 +185,26 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
 
 int main(int argc, char **argv)
 {
-    if (argc < 2 || argc > 3) {
-        fprintf(stderr, "Usage: %s <image> [<overlay>]\n", argv[0]);
-        return 255;
+    const char *file = NULL, *overlay = NULL, *impl = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-w")) {
+            if (++i >= argc) {
+                fprintf(stderr, "error: -w requires an argument\n");
+                return 255;
+            }
+            impl = argv[i];
+        } else if (!file) {
+            file = argv[i];
+        } else if (!overlay) {
+            overlay = argv[i];
+        }
     }
 
-    const char *file = argv[1];
-    const char *overlay = argc > 2 ? argv[2] : NULL;
+    if (!file) {
+        fprintf(stderr, "Usage: %s <image> [<overlay>] [-w <impl>]\n", argv[0]);
+        return 255;
+    }
     logger = pl_log_create(PL_API_VER, pl_log_params(
         .log_cb = pl_log_color,
         .log_level = PL_LOG_INFO,
@@ -210,6 +224,7 @@ int main(int argc, char **argv)
         .title = "SDL2_image demo",
         .width = img->w,
         .height = img->h,
+        .forced_impl = impl,
     });
     if (!win)
         uninit(1);
