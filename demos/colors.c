@@ -35,6 +35,7 @@ int main(int argc, char **argv)
         .width = 640,
         .height = 480,
         .alpha = true,
+        .forced_impl = argc > 1 ? argv[1] : NULL,
     });
     if (!win)
         uninit(1);
