@@ -554,7 +554,7 @@ static void spline(float *lut, const struct pl_tone_map_params *params)
     float src_pivot, dst_pivot;
     st2094_pick_knee(&src_pivot, &dst_pivot, params);
 
-    // Solve for linear knee (Pa = 0)
+    // Solve for linear knee (Pk = 0)
     float slope = (dst_pivot - params->output_min) /
                   (src_pivot - params->input_min);
 
@@ -574,33 +574,23 @@ static void spline(float *lut, const struct pl_tone_map_params *params)
     const float out_min = params->output_min - dst_pivot;
     const float out_max = params->output_max - dst_pivot;
 
-    // Solve P of order 2 for:
-    //  P(in_min) = out_min
-    //  P'(0.0) = slope
-    //  P(0.0) = 0.0
-    const float Pa = (out_min - slope * in_min) / (in_min * in_min);
-    const float Pb = slope;
-
-    // Solve Q of order 3 for:
-    //  Q(in_max) = out_max
-    //  Q''(in_max) = 0.0
-    //  Q(0.0) = 0.0
-    //  Q'(0.0) = slope
-    const float t = 2 * in_max * in_max;
-    const float Qa = (slope * in_max - out_max) / (in_max * t);
-    const float Qb = -3 * (slope * in_max - out_max) / t;
-    const float Qc = slope;
+    // Solve hyperbolic segments P (toe) and Q (shoulder) for:
+    //  P(0.0) = 0.0, P'(0.0) = slope, P(in_min) = out_min
+    //  Q(0.0) = 0.0, Q'(0.0) = slope, Q(in_max) = out_max
+    // with P(x) = slope * x / (1 + Pk * x), and Q analogously.
+    const float Pk = (slope * in_min - out_min) / (out_min * in_min);
+    const float Qk = (slope * in_max - out_max) / (out_max * in_max);
 
     FOREACH_LUT(lut, x) {
         x -= src_pivot;
-        x = x > 0 ? ((Qa * x + Qb) * x + Qc) * x : (Pa * x + Pb) * x;
+        x = slope * x / (1.0f + (x > 0 ? Qk : Pk) * x);
         x += dst_pivot;
     }
 }
 
 const struct pl_tone_map_function pl_tone_map_spline = {
     .name = "spline",
-    .description = "Single-pivot polynomial spline",
+    .description = "Single-pivot hyperbolic spline",
     .param_desc = "Contrast",
     .param_min = 0.00f,
     .param_def = 0.50f,
