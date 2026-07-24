@@ -1076,8 +1076,8 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     float off;                                                                  \
     ${vecType: comps} c;                                                        \
     /* Mark the accumulators as `precise` to avoid accumulating the error. */   \
-    precise float wsum = 0.0;                                                   \
-    precise ${vecType: comps} ca = ${vecType: comps}(0.0);                      \
+    PRECISE float wsum = 0.0;                                                   \
+    PRECISE ${vecType: comps} ca = ${vecType: comps}(0.0);                      \
     @if (use_ar) {                                                              \
         ${vecType: comps} hi = ${vecType: comps}(0.0);                          \
         ${vecType: comps} lo = ${vecType: comps}(1e9);                          \

@@ -398,9 +398,13 @@ static void generate_shaders(pl_dispatch dp,
         ADD(pre, "precision highp int; \n");
     }
 
-    // Define `precise` as no-op on GLSL where it wouldn't be available.
-    if (gpu->glsl.gles ? gpu->glsl.version < 320 : gpu->glsl.version < 400)
-        ADD(pre, "#define precise \n");
+    // The `precise` qualifier requires GLSL 4.00 / GLSL ES 3.20. On older
+    // GLSL ES versions, `precise` is a reserved keyword that cannot even be
+    // used as a macro name, so expand it through a macro with a safe name.
+    if (gpu->glsl.gles ? gpu->glsl.version >= 320 : gpu->glsl.version >= 400)
+        ADD(pre, "#define PRECISE precise \n");
+    else
+        ADD(pre, "#define PRECISE \n");
 
     // textureLod() doesn't work on external/rect samplers, simply disable
     // LOD sampling in this case. We don't currently support mipmaps anyway.
