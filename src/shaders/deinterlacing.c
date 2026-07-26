@@ -150,37 +150,44 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         // or may not produce suboptimal results on higher-bit-depth content.
         static const float spatial_bias = 1 / 255.0f;
 
+        // The integer reference implementation resolves equal scores with a
+        // strict `<`, always keeping the earlier predictor. Subtract half of a
+        // 16 bit LSB from the comparisons to break ties deterministically in
+        // the same way. This allows us to output same output as integer impl.
+        static const float tie_eps = 0.5f / 65535.0f;
+
         // Calculate spatial prediction
         ident_t spatial_pred = sh_fresh(sh, "spatial_predictor");
         GLSLH("float "$"(float a, float b, float c, float d, float e, float f, float g, \n"
               "          float h, float i, float j, float k, float l, float m, float n) \n"
               "{                                                                        \n"
+              "    const float eps = %f;                                                \n"
               "    float spatial_pred = (d + k) / 2.0;                                  \n"
               "    float spatial_score = abs(c - j) + abs(d - k) + abs(e - l) - %f;     \n"
 
               "    float score = abs(b - k) + abs(c - l) + abs(d - m);                  \n"
-              "    if (score < spatial_score) {                                         \n"
+              "    if (score < spatial_score - eps) {                                   \n"
               "        spatial_pred = (c + l) / 2.0;                                    \n"
               "        spatial_score = score;                                           \n"
               "        score = abs(a - l) + abs(b - m) + abs(c - n);                    \n"
-              "        if (score < spatial_score) {                                     \n"
+              "        if (score < spatial_score - eps) {                               \n"
               "          spatial_pred = (b + m) / 2.0;                                  \n"
               "          spatial_score = score;                                         \n"
               "        }                                                                \n"
               "    }                                                                    \n"
               "    score = abs(d - i) + abs(e - j) + abs(f - k);                        \n"
-              "    if (score < spatial_score) {                                         \n"
+              "    if (score < spatial_score - eps) {                                   \n"
               "        spatial_pred = (e + j) / 2.0;                                    \n"
               "        spatial_score = score;                                           \n"
               "        score = abs(e - h) + abs(f - i) + abs(g - j);                    \n"
-              "        if (score < spatial_score) {                                     \n"
+              "        if (score < spatial_score - eps) {                               \n"
               "          spatial_pred = (f + i) / 2.0;                                  \n"
               "          spatial_score = score;                                         \n"
               "        }                                                                \n"
               "    }                                                                    \n"
               "    return spatial_pred;                                                 \n"
               "}                                                                        \n",
-              spatial_pred, spatial_bias);
+              spatial_pred, tie_eps, spatial_bias);
 
         GLSL("T a = GET("$", -3, -1); \n"
              "T b = GET("$", -2, -1); \n"
@@ -316,9 +323,9 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
             all += lf[0] * (c + e) - lf[1] * (cur[0] + cur[3]);                 \
                                                                                 \
             @if (num_comps > 1)                                                 \
-            ${bvecType: comp_mask} mask = greaterThan(abs(c - e), tdiff0);      \
+            ${bvecType: comp_mask} mask = greaterThan(abs(c - e), tdiff0 + (0.5 / 65535.0)); \
             @else                                                               \
-            bool mask = abs(c - e) > tdiff0;                                    \
+            bool mask = abs(c - e) > tdiff0 + (0.5 / 65535.0);                  \
                                                                                 \
             T interpol = mix(single, all, mask);                                \
             interpol = clamp(interpol, d - diff, d + diff);                     \
