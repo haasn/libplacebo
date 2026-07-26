@@ -112,10 +112,14 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
     if (!intra_only && src->next.top && src->next.top != src->cur.top) {
         pl_assert(src->next.top->params.w == texparams->w);
         pl_assert(src->next.top->params.h == texparams->h);
-        next = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
-                        PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
-        if (!next)
-            return;
+        if (src->next.top == src->prev.top) {
+            next = prev; // don't bind the same texture twice
+        } else {
+            next = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
+                           PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
+            if (!next)
+                return;
+        }
     }
 
     ident_t prev2 = src->field == first_field ? prev : cur;
