@@ -53,12 +53,19 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
     if (!cur)
         return;
 
-    GLSL("#define GET(TEX, X, Y)                              \\\n"
-         "    (textureLod(TEX, pos + pt * vec2(X, Y), 0.0).%s)  \n"
+    ident_t refl = sh_fresh(sh, "refl");
+    GLSLH("float "$"(float py, float cy) {                        \n"
+          "    return py < 0.0 || py > 1.0 ? 2.0 * cy - py : py;  \n"
+          "}                                                      \n",
+          refl);
+
+    GLSL("#define GET(TEX, X, Y)                                    \\\n"
+         "    (textureLod(TEX, vec2(pos.x + pt.x * float(X),        \\\n"
+         "        "$"(pos.y + pt.y * float(Y), pos.y)), 0.0).%s)      \n"
          "vec2 pos = "$";                                       \n"
          "vec2 pt  = "$";                                       \n"
          "T res;                                                \n",
-         swiz, pos, pt);
+         refl, swiz, pos, pt);
 
     if (src->field == PL_FIELD_NONE) {
         GLSL("res = GET("$", 0, 0); \n", cur);
