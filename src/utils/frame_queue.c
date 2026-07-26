@@ -304,8 +304,11 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     // Update FPS estimates if possible/reasonable
     default_estimate(&p->fps, src->first_field ? src->duration / 2 : src->duration);
     if (p->queue.num) {
-        double last_pts = p->queue.elem[p->queue.num - 1]->pts;
+        struct entry *last = p->queue.elem[p->queue.num - 1];
+        double last_pts = last->pts;
         float delta = src->pts - last_pts;
+        if (src->first_field != PL_FIELD_NONE && last->defer_second_field)
+            delta /= 2;
         if (delta <= 0.0f) {
             PL_DEBUG(p, "Non monotonically increasing PTS %f -> %f", last_pts, src->pts);
         } else if (p->fps.estimate && delta > 10.0 * p->fps.estimate) {
