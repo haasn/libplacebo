@@ -138,8 +138,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         break;
 
     case PL_DEINTERLACE_BOB:
-        GLSL("res = GET("$", 0, %d); \n", cur,
-             src->field == PL_FIELD_TOP ? -1 : 1);
+        GLSL("res = (GET("$", 0, -1) + GET("$", 0, 1)) / 2.0; \n", cur, cur);
         break;
 
     case PL_DEINTERLACE_YADIF: {
