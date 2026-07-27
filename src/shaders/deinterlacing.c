@@ -92,7 +92,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         // half of our thread group will be mostly idle at any point in time.
         sh_try_compute(sh, bw, 1, true, 0);
     } else{
-        // Try using a compute shader with a 2D block size for 
+        // Try using a compute shader with a 2D block size for
         // cache locality between threads in the non-intra-only case
         const int bw2d = bw >= 64 ? 8 : 4;
         const int bh2d = bw >= 64 ? 8 : 8;
