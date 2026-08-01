@@ -1001,6 +1001,7 @@ const struct pl_opt_t pl_option_list[] = {
              {"hdr10",     PL_HDR_METADATA_HDR10},
              {"hdr10plus", PL_HDR_METADATA_HDR10PLUS},
              {"cie_y",     PL_HDR_METADATA_CIE_Y})),
+    OPT_FLOAT("mastering_clip", "Mastering peak soft clip strength", color_map_params.mastering_clip, .max = 1.0),
     OPT_FLOAT("film_strength", "Film response strength", color_map_params.film_strength, .max = 2.0),
     OPT_INT("tone_lut_size", "Tone mapping LUT size", color_map_params.lut_size, .max = 4096),
     OPT_FLOAT("contrast_recovery", "HDR contrast recovery strength", color_map_params.contrast_recovery, .max = 2.0),

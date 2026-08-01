@@ -2067,6 +2067,41 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         goto done;
     }
 
+    // Mastering-peak soft clip: reproduce the as-mastered appearance by
+    // folding per-channel excursions above the mastering display's peak
+    // back toward it.
+    float mclip = PL_CLAMP(params->mastering_clip, 0.0f, 1.0f);
+    const float master_nits = args->src.hdr.max_luma;
+    if (mclip > 0.0f && master_nits > 0.0f && master_nits < 9999.0f &&
+        obj && obj->peak.max_y_pq > 0.0f)
+    {
+        // Trust the mastering peak only while the measured scene luminance
+        // stays below it; badly mastered content with wrong metadata would
+        // otherwise be clipped. The trust fades out continuously as the
+        // measurement exceeds the peak, and the measurement is already
+        // temporally smoothed, so a scene brightening past the peak (or a
+        // fade-in ending above it) cannot toggle the clip on and off.
+        const float measured =
+            pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, obj->peak.max_y_pq);
+        mclip *= 1.0f - pl_smoothstep(1.1f, 1.4f, measured / master_nits);
+    } else {
+        mclip = 0.0f;
+    }
+    if (mclip > 1e-3f) {
+        const float knee = 0.95f; // fraction of the peak where rolloff starts
+        const float m_norm = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, master_nits);
+        #pragma GLSL /* mastering-peak soft clip */                             \
+        {                                                                       \
+        vec3 mcn = color.rgb * ${dynamic float: 1.0f / m_norm};                 \
+        vec3 mct = max(mcn - vec3(${float: knee}), 0.0) *                       \
+                   ${float: 1.0f / (1.0f - knee)};                              \
+        mcn = min(mcn, vec3(${float: knee})) +                                  \
+              ${float: 1.0f - knee} * mct / (1.0 + mct);                        \
+        color.rgb = mix(color.rgb, ${dynamic float: m_norm} * mcn,              \
+                        ${dynamic float: mclip});                               \
+        }
+    }
+
     // Full path: convert input from normalized RGB to IPT
     ident_t rgb2lms_i = SH_MAT3(rgb2lms);
     ipt_convert(sh, rgb2lms_i, lms2ipt, true);

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '374': 'add pl_color_map_params.mastering_clip',
       '373': 'add pl_color_map_params.film_strength',
       '372': 'add pl_color_repr_limits',
       '371': 'input frame.hdr.max_luma is now respecte when frame has ICC profile',
