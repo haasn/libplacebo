@@ -995,6 +995,11 @@ enum {
     PQ_BITS     = 14,
     PQ_MAX      = (1 << PQ_BITS) - 1,
 
+    // Fixed-point bits for the linear-light scene average accumulator.
+    // 16 bits is safe for frames up to 16K x 8K with 16x16 workgroups.
+    LIN_BITS    = 16,
+    LIN_MAX     = (1 << LIN_BITS) - 1,
+
     // How many bits to use for the histogram. We bias the histogram down
     // by half the PQ range (~90 nits), effectively clumping the SDR part
     // of the image into a single histogram bin.
@@ -1014,6 +1019,8 @@ struct peak_buf_data {
     unsigned frame_wg_active[SLICES];// number of active (nonzero) work groups
     unsigned frame_sum_pq[SLICES];   // sum of PQ Y values over all WGs (PQ_BITS)
     unsigned frame_max_pq[SLICES];   // maximum PQ Y value among these WGs (PQ_BITS)
+    unsigned frame_sum_lin[SLICES];  // sum of linear maxRGB means (LIN_BITS)
+    unsigned frame_max_rgb[SLICES];  // maximum linear maxRGB (LIN_BITS)
     unsigned frame_hist[SLICES][HIST_BINS]; // always allocated, conditionally used
 };
 
@@ -1037,6 +1044,8 @@ static const struct pl_buffer_var peak_buf_vars[] = {
     VAR(frame_wg_active),
     VAR(frame_sum_pq),
     VAR(frame_max_pq),
+    VAR(frame_sum_lin),
+    VAR(frame_max_rgb),
     VAR(frame_hist),
 #undef VAR
 };
@@ -1060,6 +1069,12 @@ struct sh_color_map_obj {
         pl_buf readback;                        // readback buffer (fallback)
         float avg_pq;                           // current (smoothed) values
         float max_pq;
+        float scene_avg_pq;                     // scene average light level
+                                                // (mean of linear maxRGB),
+                                                // stored as PQ of the mean
+        float scene_max_pq;                     // scene peak light level in PQ
+                                                // (maximum of maxRGB), in PQ
+        float max_y_pq;                         // maximum PQ luminance
     } peak;
 };
 
@@ -1093,12 +1108,9 @@ static inline float iir_coeff(float rate)
     return 1.0f - expf(-1.0f / rate);
 }
 
-static float measure_peak(const struct peak_buf_data *data, float percentile)
+static float measure_peak(const struct peak_buf_data *data, float percentile,
+                          float frame_max)
 {
-    unsigned frame_max_pq = data->frame_max_pq[0];
-    for (int k = 1; k < SLICES; k++)
-        frame_max_pq = PL_MAX(frame_max_pq, data->frame_max_pq[k]);
-    const float frame_max = (float) frame_max_pq / PQ_MAX;
     if (percentile <= 0 || percentile >= 100)
         return frame_max;
     unsigned total_pixels = 0;
@@ -1132,7 +1144,7 @@ static float measure_peak(const struct peak_buf_data *data, float percentile)
         const float pq_low  = (float) HIST_PQ(i)     / PQ_MAX;
         float pq_high       = (float) HIST_PQ(i + 1) / PQ_MAX;
         if (count_high > total_pixels) // special case for last histogram bin
-            pq_high = frame_max;
+            pq_high = fmaxf(frame_max, pq_low);
 
         // Position of `target_pixel` inside this bin, assumes pixels are
         // equidistributed inside a histogram bin
@@ -1182,25 +1194,41 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         return;
     }
 
-    uint64_t frame_sum_pq = 0u, frame_wg_count = 0u, frame_wg_active = 0u;
+    uint64_t frame_sum_pq = 0u, frame_sum_lin = 0u,
+             frame_wg_count = 0u, frame_wg_active = 0u;
+    unsigned frame_max_rgb = 0u;
     for (int k = 0; k < SLICES; k++) {
         frame_sum_pq    += data.frame_sum_pq[k];
+        frame_sum_lin   += data.frame_sum_lin[k];
+        frame_max_rgb    = PL_MAX(frame_max_rgb, data.frame_max_rgb[k]);
         frame_wg_count  += data.frame_wg_count[k];
         frame_wg_active += data.frame_wg_active[k];
     }
-    float avg_pq, max_pq;
+    float avg_pq, max_pq, scene_avg_pq, scene_max_pq, max_y_pq;
     if (frame_wg_active) {
+        unsigned frame_max_y = data.frame_max_pq[0];
+        for (int k = 1; k < SLICES; k++)
+            frame_max_y = PL_MAX(frame_max_y, data.frame_max_pq[k]);
+        max_y_pq = (float) frame_max_y / PQ_MAX;
+        scene_avg_pq = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, 10000.0f *
+                                      frame_sum_lin / (frame_wg_active * (float) LIN_MAX));
         avg_pq = (float) frame_sum_pq / (frame_wg_active * PQ_MAX);
-        max_pq = measure_peak(&data, params->percentile);
+        max_pq = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, 10000.0f *
+                                frame_max_rgb / (float) LIN_MAX);
+        max_pq = measure_peak(&data, params->percentile, max_pq);
+        scene_max_pq = max_pq;
     } else {
         // Solid black frame
-        avg_pq = max_pq = PL_COLOR_HDR_BLACK;
+        avg_pq = max_pq = scene_avg_pq = scene_max_pq = max_y_pq = PL_COLOR_HDR_BLACK;
     }
 
     if (!obj->peak.avg_pq) {
         // Set the initial value accordingly if it contains no data
         obj->peak.avg_pq = avg_pq;
         obj->peak.max_pq = max_pq;
+        obj->peak.scene_avg_pq = scene_avg_pq;
+        obj->peak.scene_max_pq = scene_max_pq;
+        obj->peak.max_y_pq = max_y_pq;
     } else {
         // Ignore small deviations from existing peak (rounding error)
         static const float epsilon = 1.0f / PQ_MAX;
@@ -1208,12 +1236,21 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
             avg_pq = obj->peak.avg_pq;
         if (fabsf(max_pq - obj->peak.max_pq) < epsilon)
             max_pq = obj->peak.max_pq;
+        if (fabsf(scene_avg_pq - obj->peak.scene_avg_pq) < epsilon)
+            scene_avg_pq = obj->peak.scene_avg_pq;
+        if (fabsf(scene_max_pq - obj->peak.scene_max_pq) < epsilon)
+            scene_max_pq = obj->peak.scene_max_pq;
+        if (fabsf(max_y_pq - obj->peak.max_y_pq) < epsilon)
+            max_y_pq = obj->peak.max_y_pq;
     }
 
     // Use an IIR low-pass filter to smooth out the detected values
     const float coeff = iir_coeff(params->smoothing_period);
     obj->peak.avg_pq += coeff * (avg_pq - obj->peak.avg_pq);
     obj->peak.max_pq += coeff * (max_pq - obj->peak.max_pq);
+    obj->peak.scene_avg_pq += coeff * (scene_avg_pq - obj->peak.scene_avg_pq);
+    obj->peak.scene_max_pq += coeff * (scene_max_pq - obj->peak.scene_max_pq);
+    obj->peak.max_y_pq += coeff * (max_y_pq - obj->peak.max_y_pq);
 
     // Scene change hysteresis
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
@@ -1225,6 +1262,11 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         const float mix_coeff = pl_smoothstep(thresh_low, thresh_high, delta);
         obj->peak.avg_pq = PL_MIX(obj->peak.avg_pq, avg_pq, mix_coeff);
         obj->peak.max_pq = PL_MIX(obj->peak.max_pq, max_pq, mix_coeff);
+        obj->peak.scene_avg_pq = PL_MIX(obj->peak.scene_avg_pq, scene_avg_pq,
+                                        mix_coeff);
+        obj->peak.scene_max_pq = PL_MIX(obj->peak.scene_max_pq, scene_max_pq,
+                                        mix_coeff);
+        obj->peak.max_y_pq = PL_MIX(obj->peak.max_y_pq, max_y_pq, mix_coeff);
     }
 }
 
@@ -1245,7 +1287,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     }
 
     const bool use_histogram = params->percentile > 0 && params->percentile < 100;
-    size_t shmem_req = 3 * sizeof(uint32_t);
+    size_t shmem_req = 5 * sizeof(uint32_t);
     if (use_histogram)
         shmem_req += sizeof(uint32_t[HIST_BINS]);
 
@@ -1322,8 +1364,11 @@ retry_ssbo:
     ident_t wg_sum   = sh_fresh(sh, "wg_sum"),
             wg_max   = sh_fresh(sh, "wg_max"),
             wg_black = sh_fresh(sh, "wg_black"),
+            wg_lin   = sh_fresh(sh, "wg_lin"),
+            wg_rgb   = sh_fresh(sh, "wg_rgb"),
             wg_hist  = NULL_IDENT;
-    GLSLH("shared uint "$", "$", "$"; \n", wg_sum, wg_max, wg_black);
+    GLSLH("shared uint "$", "$", "$", "$", "$"; \n",
+          wg_sum, wg_max, wg_black, wg_lin, wg_rgb);
     if (use_histogram) {
         wg_hist = sh_fresh(sh, "wg_hist");
         GLSLH("shared uint "$"[%u]; \n", wg_hist, HIST_BINS);
@@ -1339,7 +1384,7 @@ retry_ssbo:
     const uint hist_base = slice * ${const uint: HIST_BINS};                    \
     const vec4 color_orig = color;                                              \
     if (local_idx == 0u)                                                        \
-        $wg_sum = $wg_max = $wg_black = 0u;                                     \
+        $wg_sum = $wg_max = $wg_black = $wg_lin = $wg_rgb = 0u;                 \
     @if (use_histogram) {                                                       \
         for (uint i = local_idx; i < ${const uint: HIST_BINS}; i += wg_size)    \
             $wg_hist[i] = 0u;                                                   \
@@ -1355,6 +1400,9 @@ retry_ssbo:
 #pragma GLSL /* Measure luminance as N-bit PQ */                                \
     float luma = dot(${sh_luma_coeffs(sh, &csp)}, color.rgb);                   \
     luma *= ${const float: PL_COLOR_SDR_WHITE / 10000.0};                       \
+    float mrgb = clamp(${const float: PL_COLOR_SDR_WHITE / 10000.0} *           \
+        max(color.r, max(color.g, color.b)), 0.0, 1.0);                         \
+    uint m_lin = uint(${const float: LIN_MAX} * mrgb);                          \
     luma = pow(clamp(luma, 0.0, 1.0), ${const float: PQ_M1});                   \
     luma = (${const float: PQ_C1} + ${const float: PQ_C2} * luma) /             \
            (1.0 + ${const float: PQ_C3} * luma);                                \
@@ -1365,9 +1413,16 @@ retry_ssbo:
                                                                                 \
     /* Update the work group's shared atomics */                                \
     @if (use_histogram) {                                                       \
-        int bin = int(y_pq) >> ${const int: PQ_BITS - HIST_BITS};               \
+        float mpq = pow(mrgb, ${const float: PQ_M1});                           \
+        mpq = (${const float: PQ_C1} + ${const float: PQ_C2} * mpq) /           \
+              (1.0 + ${const float: PQ_C3} * mpq);                              \
+        mpq = pow(mpq, ${const float: PQ_M2});                                  \
+        int bin = int(${const float: PQ_MAX} * mpq) >>                          \
+                  ${const int: PQ_BITS - HIST_BITS};                            \
         bin -= ${const int: HIST_BIAS};                                         \
         bin = clamp(bin, 0, ${const int: HIST_BINS - 1});                       \
+        @if (cutoff)                                                            \
+            bin = y_pq == 0u ? 0 : bin;                                         \
         @if (has_subgroups) {                                                   \
             /* Optimize for the very common case of identical histogram bins */ \
             if (subgroupAllEqual(bin)) {                                        \
@@ -1384,17 +1439,23 @@ retry_ssbo:
     @if (has_subgroups) {                                                       \
         uint group_sum = subgroupAdd(y_pq);                                     \
         uint group_max = subgroupMax(y_pq);                                     \
+        uint group_lin = subgroupAdd(m_lin);                                    \
+        uint group_rgb = subgroupMax(m_lin);                                    \
         @if (cutoff)                                                            \
             uvec4 b = subgroupBallot(y_pq == 0u);                               \
         if (subgroupElect()) {                                                  \
             atomicAdd($wg_sum, group_sum);                                      \
             atomicMax($wg_max, group_max);                                      \
+            atomicAdd($wg_lin, group_lin);                                      \
+            atomicMax($wg_rgb, group_rgb);                                      \
             @if (cutoff)                                                        \
                 atomicAdd($wg_black, subgroupBallotBitCount(b));                \
         }                                                                       \
     @} else {                                                                   \
         atomicAdd($wg_sum, y_pq);                                               \
         atomicMax($wg_max, y_pq);                                               \
+        atomicAdd($wg_lin, m_lin);                                              \
+        atomicMax($wg_rgb, m_lin);                                              \
         @if (cutoff) {                                                          \
             if (y_pq == 0u)                                                     \
                 atomicAdd($wg_black, 1u);                                       \
@@ -1419,7 +1480,9 @@ retry_ssbo:
         atomicAdd(frame_wg_active[slice], min(num, 1u));                        \
         if (num > 0u) {                                                         \
             atomicAdd(frame_sum_pq[slice], $wg_sum / num);                      \
+            atomicAdd(frame_sum_lin[slice], $wg_lin / num);                     \
             atomicMax(frame_max_pq[slice], $wg_max);                            \
+            atomicMax(frame_max_rgb[slice], $wg_rgb);                           \
         }                                                                       \
     }                                                                           \
     color = color_orig;                                                         \
@@ -1439,8 +1502,19 @@ bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
     if (!obj->peak.avg_pq)
         return false;
 
-    out->max_pq_y = obj->peak.max_pq;
-    out->avg_pq_y = obj->peak.avg_pq;
+    const float scene_avg = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS,
+                                           obj->peak.scene_avg_pq);
+    const float scene_max = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS,
+                                           obj->peak.scene_max_pq);
+    // peak.max_y_pq is not percentile-bounded, so fallback to maxRGB in case
+    // it has some bogus value, it should be strictly <= maxRGB.
+    // TODO: Resolve this maxRGB vs maxY discrepancy, DV L1 metadata is based on
+    // maxRGB, not maxY. HDR10+ though is maxY. Our API exposes maxY.
+    out->max_pq_y  = PL_MIN(obj->peak.max_y_pq, obj->peak.max_pq);
+    out->avg_pq_y  = obj->peak.avg_pq;
+    out->scene_avg = scene_avg;
+    for (int i = 0; i < PL_ARRAY_SIZE(out->scene_max); i++)
+        out->scene_max[i] = scene_max;
     return true;
 }
 
