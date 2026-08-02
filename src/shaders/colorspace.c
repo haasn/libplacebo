@@ -1730,6 +1730,55 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
          lut);
 }
 
+static void ipt_convert(pl_shader sh, ident_t rgb2lms, ident_t lms2ipt,
+                        bool declare)
+{
+    const char *v = declare ? "vec3 " : "";
+    GLSL("%s""lms = "$" * color.rgb;                \n"
+         "%s""lmspq = %f * lms;                     \n"
+         "lmspq = pow(max(lmspq, 0.0), vec3(%f));   \n"
+         "lmspq = (vec3(%f) + %f * lmspq)           \n"
+         "        / (vec3(1.0) + %f * lmspq);       \n"
+         "lmspq = pow(lmspq, vec3(%f));             \n"
+         "%s""ipt = "$" * lmspq;                    \n",
+         v, rgb2lms,
+         v, PL_COLOR_SDR_WHITE / 10000,
+         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
+         v, lms2ipt);
+}
+
+static void sample_feature_map(pl_shader sh, pl_tex feature_map)
+{
+    ident_t pos, pt;
+    ident_t lowres = sh_bind(sh, feature_map, PL_TEX_ADDRESS_CLAMP,
+                             PL_TEX_SAMPLE_LINEAR, "feature_map",
+                             NULL, &pos, &pt);
+    GLSL("vec2 lpos  = "$";                                 \n"
+         "vec2 lpt   = "$";                                 \n"
+         "vec2 lsize = vec2(textureSize("$", 0));           \n"
+         "vec2 frac  = fract(lpos * lsize + vec2(0.5));     \n"
+         "vec2 frac2 = frac * frac;                         \n"
+         "vec2 inv   = vec2(1.0) - frac;                    \n"
+         "vec2 inv2  = inv * inv;                           \n"
+         "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
+         "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
+         "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
+         "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
+         "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
+         "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
+         "h.xy -= vec2(2.0);                                \n"
+         "vec4 p = lpos.xyxy + lpt.xyxy * h;                \n"
+         "float l00 = textureLod("$", p.xy, 0.0).r;         \n"
+         "float l01 = textureLod("$", p.xw, 0.0).r;         \n"
+         "float l0 = mix(l01, l00, g.y);                    \n"
+         "float l10 = textureLod("$", p.zy, 0.0).r;         \n"
+         "float l11 = textureLod("$", p.zw, 0.0).r;         \n"
+         "float l1 = mix(l11, l10, g.y);                    \n"
+         "float luma = mix(l1, l0, g.x);                    \n",
+         pos, pt, lowres,
+         lowres, lowres, lowres, lowres);
+}
+
 static void fill_tone_lut(void *data, const struct sh_lut_params *params)
 {
     const struct pl_tone_map_params *lut_params = params->priv;
@@ -1834,6 +1883,16 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         // fixes clipping if the metadata is under-reported, which is actually
         // quite common for Dolby Vision content.
         tone.input_max = PL_MAX(tone.input_max, tone.output_max);
+
+        // The curve must cover the tone mapping metric's actual range, not
+        // just the luminance range. Chromatic content carries channel values
+        // far above its CIE Y.
+        const float scene_max = PL_MAX(src.hdr.scene_max[0],
+                PL_MAX(src.hdr.scene_max[1], src.hdr.scene_max[2]));
+        if (scene_max > 0) {
+            tone.input_max = PL_MAX(tone.input_max,
+                pl_hdr_rescale(PL_HDR_NITS, tone.input_scaling, scene_max));
+        }
     }
 
     const int *lut3d_size_def = pl_color_map_default_params.lut3d_size;
@@ -1950,18 +2009,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     }
 
     // Full path: convert input from normalized RGB to IPT
-    GLSL("vec3 lms = "$" * color.rgb;               \n"
-         "vec3 lmspq = %f * lms;                    \n"
-         "lmspq = pow(max(lmspq, 0.0), vec3(%f));   \n"
-         "lmspq = (vec3(%f) + %f * lmspq)           \n"
-         "        / (vec3(1.0) + %f * lmspq);       \n"
-         "lmspq = pow(lmspq, vec3(%f));             \n"
-         "vec3 ipt = "$" * lmspq;                   \n"
-         "float i_orig = ipt.x;                     \n",
-         SH_MAT3(rgb2lms),
-         PL_COLOR_SDR_WHITE / 10000,
-         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
-         lms2ipt);
+    ident_t rgb2lms_i = SH_MAT3(rgb2lms);
+    ipt_convert(sh, rgb2lms_i, lms2ipt, true);
 
     if (params->show_clipping) {
         const float eps = 1e-6f;
@@ -2038,59 +2087,94 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         }
 
         bool need_recovery = tone.input_max >= tone.output_max;
-        if (need_recovery && params->contrast_recovery && args->feature_map) {
-            ident_t pos, pt;
-            ident_t lowres = sh_bind(sh, args->feature_map, PL_TEX_ADDRESS_CLAMP,
-                                     PL_TEX_SAMPLE_LINEAR, "feature_map",
-                                     NULL, &pos, &pt);
+        // Tone application in the cone (LMS) stage of the IPT model. The
+        // curve is evaluated per cone channel, and the resulting cone
+        // ratios are blended between the source's (chromaticity
+        // preserving) and the converged result (the film response, which
+        // whitens compressed emissive gradients along perceptually
+        // plausible paths) by `film_strength`. Below the knee the curve
+        // is linear, so both endpoints coincide and the application is
+        // exact regardless of strength.
+        const bool use_cr = need_recovery && params->contrast_recovery &&
+                            args->feature_map;
+        if (use_cr)
+            sample_feature_map(sh, args->feature_map);
 
-            // Obtain HF detail map from bicubic interpolation of LF features
-            GLSL("vec2 lpos  = "$";                                 \n"
-                 "vec2 lpt   = "$";                                 \n"
-                 "vec2 lsize = vec2(textureSize("$", 0));           \n"
-                 "vec2 frac  = fract(lpos * lsize + vec2(0.5));     \n"
-                 "vec2 frac2 = frac * frac;                         \n"
-                 "vec2 inv   = vec2(1.0) - frac;                    \n"
-                 "vec2 inv2  = inv * inv;                           \n"
-                 "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
-                 "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
-                 "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
-                 "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
-                 "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
-                 "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
-                 "h.xy -= vec2(2.0);                                \n"
-                 "vec4 p = lpos.xyxy + lpt.xyxy * h;                \n"
-                 "float l00 = textureLod("$", p.xy, 0.0).r;         \n"
-                 "float l01 = textureLod("$", p.xw, 0.0).r;         \n"
-                 "float l0 = mix(l01, l00, g.y);                    \n"
-                 "float l10 = textureLod("$", p.zy, 0.0).r;         \n"
-                 "float l11 = textureLod("$", p.zw, 0.0).r;         \n"
-                 "float l1 = mix(l11, l10, g.y);                    \n"
-                 "float luma = mix(l1, l0, g.x);                    \n"
-                 // Mix low-resolution tone mapped image with high-resolution
-                 // tone mapped image according to desired strength.
-                 "float highres = clamp(ipt.x, 0.0, 1.0);           \n"
-                 "float lowres = clamp(luma, 0.0, 1.0);             \n"
-                 "float detail = highres - lowres;                  \n"
-                 "float base = tone_map(highres);                   \n"
-                 "float sharp = tone_map(lowres) + detail;          \n"
-                 "ipt.x = clamp(mix(base, sharp, "$"), "$", "$");   \n",
-                 pos, pt, lowres,
-                 lowres, lowres, lowres, lowres,
-                 SH_FLOAT(params->contrast_recovery),
-                 SH_FLOAT(tone.output_min), SH_FLOAT_DYN(tone.output_max));
+        const struct pl_tone_map_constants *tc = &tone.constants;
+        float knee = tone.input_avg ? tone.input_avg
+                   : PL_MIX(tone.input_min, tone.input_max, tc->knee_default);
+        knee = PL_CLAMP(knee,
+            PL_MIX(tone.input_min, tone.input_max, tc->knee_minimum),
+            PL_MIX(tone.input_min, tone.input_max, tc->knee_maximum));
+        const float flare_nits =
+            pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, tone.output_min);
+        const float flare_frac = flare_nits / 10000.0f;
+        const float knee_in  = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS,
+                                              knee) / 10000.0f;
+        const float knee_out = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS,
+            pl_tone_map_sample(knee, &tone)) / 10000.0f;
+        const float knee_gain = fmaxf(knee_out - flare_frac, 1e-9f) /
+                                fmaxf(knee_in, 1e-9f);
+        const float film_str = PL_CLAMP(params->film_strength, 0.0f, 2.0f);
+        const pl_matrix3x3 lms2rgb_src =
+            pl_ipt_lms2rgb(pl_raw_primaries_get(src.primaries));
 
-        } else {
+#pragma GLSL /* tone mapping */                                             \
+        @if (use_cr) {                                                      \
+            /* Detail-preserving recovery: shift down to the low-frequency  \
+             * level, tone map there, re-add the detail. */                 \
+            float tm_d = clamp(ipt.x, 0.0, 1.0) -                           \
+                         clamp(luma, 0.0, 1.0);                             \
+            vec3 tm_lo = clamp(lmspq - vec3(tm_d), 0.0, 1.0);               \
+            vec3 tm_o = mix(vec3(tone_map(lmspq.x), tone_map(lmspq.y),      \
+                                 tone_map(lmspq.z)),                        \
+                            vec3(tone_map(tm_lo.x), tone_map(tm_lo.y),      \
+                                 tone_map(tm_lo.z)) + (lmspq - tm_lo),      \
+                            ${float: params->contrast_recovery});           \
+            tm_o = clamp(tm_o, ${dynamic float: tone.output_min},           \
+                         ${dynamic float: tone.output_max});                \
+        @} else {                                                           \
+            vec3 tm_o = vec3(tone_map(lmspq.x), tone_map(lmspq.y),          \
+                             tone_map(lmspq.z));                            \
+        @}                                                                  \
+        tm_o = pow(tm_o, vec3(1.0 / ${const float: PQ_M2}));                \
+        tm_o = pow(max(tm_o - ${const float: PQ_C1}, 0.0) /                 \
+                   (${const float: PQ_C2} - ${const float: PQ_C3} * tm_o),  \
+                   vec3(1.0 / ${const float: PQ_M1}));                      \
+        /* Chromaticity-preserving endpoint: the maximum RGB channel's      \
+         * gain, so the output channel range is bounded by the curve for    \
+         * any hue */                                                       \
+        float tm_lx = clamp(${const float: PL_COLOR_SDR_WHITE / 10000.0} *  \
+                            max(color.r, max(color.g, color.b)), 0.0, 1.0); \
+        float tm_vx = pow(tm_lx, ${const float: PQ_M1});                    \
+        tm_vx = (${const float: PQ_C1} + ${const float: PQ_C2} * tm_vx) /   \
+                (1.0 + ${const float: PQ_C3} * tm_vx);                      \
+        float tm_ox = tone_map(pow(tm_vx, ${const float: PQ_M2}));          \
+        tm_ox = pow(tm_ox, 1.0 / ${const float: PQ_M2});                    \
+        tm_ox = pow(max(tm_ox - ${const float: PQ_C1}, 0.0) /               \
+                    (${const float: PQ_C2} - ${const float: PQ_C3} * tm_ox),\
+                    1.0 / ${const float: PQ_M1});                           \
+        float tm_fl = ${dynamic float: flare_frac};                         \
+        float tm_ga = max(tm_ox - tm_fl, 0.0) / max(tm_lx, 1e-9);           \
+        /* The film response weight, per cone channel: proportional to the  \
+         * cone's own source ratio, ramping to the full response as the     \
+         * shoulder attenuation deepens. */                                 \
+        float tm_u = tm_lx > ${dynamic float: knee_in}                      \
+            ? clamp(1.0 - tm_ga * ${dynamic float: 1.0f / knee_gain}, 0.0, 1.0) \
+            : 0.0;                                                          \
+        tm_u *= tm_u;                                                       \
+        vec3 tm_s = clamp(lms * (1.0 /                                      \
+                          max(max(lms.x, max(lms.y, lms.z)), 1e-9)),        \
+                          0.0, 1.0);                                        \
+        vec3 tm_w = ${const float: film_str} * mix(tm_s, vec3(1.0), tm_u);  \
+        vec3 tm_r = mix(max(lms, 0.0) * (tm_ga *                            \
+                               ${const float: PL_COLOR_SDR_WHITE / 10000.0}),\
+                        tm_o - vec3(tm_fl), tm_w);                          \
+        float tm_e = ${const float: 10000.0f / PL_COLOR_SDR_WHITE};       \
+        color.rgb = tm_e * (${SH_MAT3(lms2rgb_src)} *                       \
+                            (vec3(tm_fl) + tm_r));
 
-            GLSL("ipt.x = tone_map(ipt.x); \n");
-        }
-
-        // Avoid raising saturation excessively when raising brightness, and
-        // also desaturate when reducing brightness greatly to account for the
-        // reduction in gamut volume.
-        GLSL("vec2 hull = vec2(i_orig, ipt.x);                  \n"
-             "hull = ((hull - 6.0) * hull + 9.0) * hull;        \n"
-             "ipt.yz *= min(i_orig / ipt.x, hull.y / hull.x);   \n");
+        ipt_convert(sh, rgb2lms_i, lms2ipt, false);
     }
 
     if (need_gamut_map) {
