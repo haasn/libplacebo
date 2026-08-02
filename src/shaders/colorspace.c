@@ -1054,6 +1054,7 @@ struct sh_color_map_obj {
     // Tone map state
     struct {
         struct pl_tone_map_params params;
+        float exposure;                     // last dynamic-target exposure
         pl_shader_obj lut;
     } tone;
 
@@ -1895,6 +1896,63 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         }
     }
 
+    // Physical output floor: under an active dynamic target the curve maps
+    // into a virtual range, and the display black adaptation must keep
+    // referring to the display's real range.
+    const float out_min_phys = tone.output_min;
+    float dt_exposure = 1.0f;
+
+    float scene_avg = src.hdr.scene_avg;
+    if (!(scene_avg > 0) && src.hdr.avg_pq_y > 0)
+        scene_avg = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, src.hdr.avg_pq_y);
+
+    // Tone map into a virtual target T between the display peak P and the
+    // source peak S, and apply the remaining P/T factor as a pure exposure
+    // change in the gain. An exposure change scales the entire image
+    // linearly: trading some average brightness buys headroom for the tone
+    // mapping and the highlights, which gives far better results than
+    // compressing e.g. a 10000 nits source directly into a 203 nits target.
+    if (obj && scene_avg > 0 && !params->inverse_tone_mapping &&
+        tone.input_max > tone.output_max + 1e-4f)
+    {
+        // Smooth maximum of the display peak and a fixed perceptual (PQ)
+        // distance below the scene average: scenes that fit the display
+        // render statically, and only content whose average genuinely
+        // exceeds the display trades brightness for headroom, bounding how
+        // far a bright scene may drift from its native brightness.
+        const float dt_dim = 0.09f, dt_soft = 0.04f;
+        const float p_pq = tone.output_max;
+        const float s_pq = tone.input_max;
+        const float p_nits = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, p_pq);
+        const float f_pq = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, scene_avg);
+        const float dt_u = p_pq;
+        const float dt_v = f_pq - dt_dim;
+        const float t_pq =
+            PL_CLAMP(0.5f * (dt_u + dt_v) +
+                     hypotf(0.5f * (dt_u - dt_v), dt_soft),
+                     p_pq, s_pq);
+        if (t_pq > p_pq + 1e-4f && t_pq < s_pq - 1e-4f) {
+            const float t_nits = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, t_pq);
+            dt_exposure = p_nits / t_nits;
+            tone.output_max = t_pq;
+
+            // Keep the black-point compensation inside the virtual curve,
+            // with the floor pre-divided by the exposure so it lands on the
+            // display black after the exposure applies. The curve then
+            // redistributes shadow range perceptually.
+            tone.output_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ,
+                pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, out_min_phys) /
+                dt_exposure);
+
+            if (fabsf(dt_exposure - obj->tone.exposure) > 1e-3f) {
+                PL_DEBUG(sh, "Dynamic tone map target: %.0f nits "
+                         "(display %.0f nits, exposure %.3fx, "
+                         "scene avg %.1f nits)",
+                         t_nits, p_nits, dt_exposure, scene_avg);
+            }
+        }
+    }
+
     const int *lut3d_size_def = pl_color_map_default_params.lut3d_size;
     struct pl_gamut_map_params gamut = {
         .function        = PL_DEF(params->gamut_mapping, &pl_gamut_map_clip),
@@ -1978,7 +2036,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         can_fast = true;
     }
 
-    bool need_tone_map = !pl_tone_map_params_noop(&tone);
+    bool need_tone_map = !pl_tone_map_params_noop(&tone) ||
+                         dt_exposure != 1.0f;
     bool need_gamut_map = !pl_gamut_map_params_noop(&gamut);
 
     if (!args->prelinearized)
@@ -2054,7 +2113,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
                  SH_FLOAT_DYN(gain / scale),
                  SH_FLOAT_DYN(-gain / scale * tone.input_min),
                  SH_FLOAT_DYN(tone.output_max - tone.output_min),
-                 SH_FLOAT(tone.output_min));
+                 SH_FLOAT_DYN(tone.output_min));
 
             GLSL("#define tone_map(x) ("$"(x)) \n", linfun);
 
@@ -2074,6 +2133,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
                 .priv       = &tone,
             ));
             obj->tone.params = tone;
+            obj->tone.exposure = dt_exposure;
             if (!lut) {
                 SH_FAIL(sh, "Failed generating tone-mapping LUT!");
                 return;
@@ -2170,7 +2230,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         vec3 tm_r = mix(max(lms, 0.0) * (tm_ga *                            \
                                ${const float: PL_COLOR_SDR_WHITE / 10000.0}),\
                         tm_o - vec3(tm_fl), tm_w);                          \
-        float tm_e = ${const float: 10000.0f / PL_COLOR_SDR_WHITE};       \
+        float tm_e = ${dynamic float: dt_exposure * 10000.0f / PL_COLOR_SDR_WHITE}; \
         color.rgb = tm_e * (${SH_MAT3(lms2rgb_src)} *                       \
                             (vec3(tm_fl) + tm_r));
 
