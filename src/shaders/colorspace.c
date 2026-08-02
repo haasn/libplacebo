@@ -1819,7 +1819,18 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     struct pl_color_space src = args->src, dst = args->dst;
     struct sh_color_map_obj *obj = NULL;
     if (args->state) {
-        pl_get_detected_hdr_metadata(*args->state, &src.hdr);
+        // Authored dynamic metadata takes precedence over the measurement,
+        // which only fills in what the source did not provide
+        struct pl_hdr_metadata detected = {0};
+        if (pl_get_detected_hdr_metadata(*args->state, &detected)) {
+            src.hdr.max_pq_y  = PL_DEF(src.hdr.max_pq_y,  detected.max_pq_y);
+            src.hdr.avg_pq_y  = PL_DEF(src.hdr.avg_pq_y,  detected.avg_pq_y);
+            src.hdr.scene_avg = PL_DEF(src.hdr.scene_avg, detected.scene_avg);
+            for (int i = 0; i < PL_ARRAY_SIZE(src.hdr.scene_max); i++) {
+                src.hdr.scene_max[i] = PL_DEF(src.hdr.scene_max[i],
+                                              detected.scene_max[i]);
+            }
+        }
         obj = SH_OBJ(sh, args->state, PL_SHADER_OBJ_COLOR_MAP, struct sh_color_map_obj,
                      sh_color_map_uninit);
         if (!obj)

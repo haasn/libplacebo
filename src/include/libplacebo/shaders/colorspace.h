@@ -207,7 +207,7 @@ PL_API bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
                                   const struct pl_peak_detect_params *params);
 
 // After dispatching the above shader, this function can be used to retrieve
-// the detected dynamic HDR10+ metadata parameters. The other fields of
+// the detected dynamic HDR metadata parameters. The other fields of
 // `metadata` are not written to. Returns whether or not any values were
 // written. If not, the values are left untouched, so this can be used to
 // safely update `pl_hdr_metadata` values in-place. This function may or may
