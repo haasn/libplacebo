@@ -259,6 +259,14 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
     float tuning = 1.0f - pl_smoothstep(max_knee, def_knee, target) *
                           pl_smoothstep(min_knee, def_knee, target);
     float adaptation = PL_MIX(params->constants.knee_adaptation, 1.0f, tuning);
+
+    // Brightness matching is only meaningful where the source knee is
+    // displayable: below the output floor the anchor is unreachable, and
+    // mixing towards it drags the knee into the black-point region,
+    // crushing the shadows. Fade to pure relative adaptation there.
+    adaptation = PL_MIX(1.0f, adaptation,
+                        pl_smoothstep(dst_min, dst_knee_min, src_knee));
+
     float dst_knee = PL_MIX(src_knee, adapted, adaptation);
     dst_knee = fclampf(dst_knee, dst_knee_min, dst_knee_max);
 
