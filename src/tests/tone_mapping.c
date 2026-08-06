@@ -88,13 +88,13 @@ int main()
     // Test some gamut mapping methods
     for (int i = 0; i < pl_num_gamut_map_functions; i++) {
         static const float min_rgb = 0.1f, max_rgb = PL_COLOR_SDR_WHITE;
-        struct pl_gamut_map_params gamut = {
+        struct pl_gamut_map_params gamut = *pl_gamut_map_params(
             .function     = pl_gamut_map_functions[i],
             .input_gamut  = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020),
             .output_gamut = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709),
             .min_luma     = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, min_rgb),
             .max_luma     = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, max_rgb),
-        };
+        );
 
         printf("Testing gamut-mapping function %s\n", gamut.function->name);
 
@@ -113,7 +113,7 @@ int main()
     }
 
     enum { LUT3D_SIZE = 65 }; // for benchmarking
-    struct pl_gamut_map_params perceptual = {
+    struct pl_gamut_map_params perceptual = *pl_gamut_map_params(
         .function     = &pl_gamut_map_perceptual,
         .input_gamut  = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020),
         .output_gamut = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709),
@@ -126,7 +126,7 @@ int main()
         // Set strength to maximum, because otherwise the saturation mapping
         // code will not fully apply, invalidating the following test
         .constants.perceptual_strength = 1.0f,
-    };
+    );
 
     // Test that primaries round-trip for perceptual gamut mapping
     const pl_matrix3x3 rgb2lms_src = pl_ipt_rgb2lms(&perceptual.input_gamut);
