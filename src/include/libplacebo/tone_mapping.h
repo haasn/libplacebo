@@ -99,6 +99,12 @@ struct pl_tone_map_constants {
     // contrast than the input.
     float spline_contrast; // [0,1.5]
 
+    // Shoulder hardness for the spline function. At 0.0 the curve starts to
+    // roll off right at the knee. Higher values keep it linear for longer
+    // above the knee, which preserves the brightness of midtones and
+    // highlights at the cost of gradation near the peak.
+    float spline_shoulder; // [0,1]
+
     // For the reinhard function, this specifies the local contrast coefficient
     // at the display peak. Essentially, a value of 0.5 implies that the
     // reference white will be about half as bright as when clipping. (0,1)
@@ -122,6 +128,7 @@ struct pl_tone_map_constants {
     .slope_tuning      = 1.5f, \
     .slope_offset      = 0.2f, \
     .spline_contrast   = 0.5f, \
+    .spline_shoulder   = 0.15f,\
     .reinhard_contrast = 0.5f, \
     .linear_knee       = 0.3f, \
     .exposure          = 1.0f,

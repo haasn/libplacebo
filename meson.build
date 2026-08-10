@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '400': 'add pl_tone_map_constants.spline_shoulder',
       '399': 'add pl_opengl_swapchain_params.recreate_surface',
       '398': 'remove pl_motion_global_buf_vars and its accessors',
       '397': 'replace pl_motion_estimate_input.estimate_global and estimate_quality by features',

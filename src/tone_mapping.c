@@ -33,6 +33,7 @@ static void fix_constants(struct pl_tone_map_constants *c)
     c->slope_tuning      = fclampf(c->slope_tuning, 0.0f, 10.0f);
     c->slope_offset      = fclampf(c->slope_offset, 0.0f, 1.0f);
     c->spline_contrast   = fclampf(c->spline_contrast, 0.0f, 1.5f);
+    c->spline_shoulder   = fclampf(c->spline_shoulder, 0.0f, 1.0f);
     c->reinhard_contrast = fclampf(c->reinhard_contrast, eps, 1.0f - eps);
     c->linear_knee       = fclampf(c->linear_knee, eps, 1.0f - eps);
     c->exposure          = fclampf(c->exposure, eps, 10.0f);
@@ -577,16 +578,30 @@ static void spline(float *lut, const struct pl_tone_map_params *params)
     const float out_min = params->output_min - dst_pivot;
     const float out_max = params->output_max - dst_pivot;
 
+    // Where the range above the knee is compressed, the curve stays linear
+    // up to a second pivot (xu, yu). It takes at most 90% of the output
+    // range above the knee, which leaves the shoulder a slope above zero at
+    // the peak.
+    const float linear = 0.9f * params->constants.spline_shoulder;
+    const float xu = slope * in_max > out_max ? linear * out_max / slope : 0.0f;
+    const float yu = slope * xu;
+
     // Solve hyperbolic segments P (toe) and Q (shoulder) for:
     //  P(0.0) = 0.0, P'(0.0) = slope, P(in_min) = out_min
-    //  Q(0.0) = 0.0, Q'(0.0) = slope, Q(in_max) = out_max
-    // with P(x) = slope * x / (1 + Pk * x), and Q analogously.
+    //  Q(xu)  = yu,  Q'(xu)  = slope, Q(in_max) = out_max
+    // with P(x) = slope * x / (1 + Pk * x), and Q analogously around xu.
     const float Pk = (slope * in_min - out_min) / (out_min * in_min);
-    const float Qk = (slope * in_max - out_max) / (out_max * in_max);
+    const float Qk = (slope * (in_max - xu) - (out_max - yu)) /
+                     ((out_max - yu) * (in_max - xu));
 
     FOREACH_LUT(lut, x) {
         x -= src_pivot;
-        x = slope * x / (1.0f + (x > 0 ? Qk : Pk) * x);
+        if (x > xu)
+            x = yu + slope * (x - xu) / (1.0f + Qk * (x - xu));
+        else if (x > 0)
+            x *= slope;
+        else
+            x = slope * x / (1.0f + Pk * x);
         x += dst_pivot;
     }
 }

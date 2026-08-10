@@ -1134,6 +1134,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("slope_tuning", "Spline slope tuning strength", color_map_params.tone_constants.slope_tuning, .max = 10.0f),
     OPT_FLOAT("slope_offset", "Spline slope tuning offset", color_map_params.tone_constants.slope_offset, .max = 1.0f),
     OPT_FLOAT("spline_contrast", "Spline slope contrast", color_map_params.tone_constants.spline_contrast, .max = 1.5f),
+    OPT_FLOAT("spline_shoulder", "Spline shoulder hardness", color_map_params.tone_constants.spline_shoulder, .max = 1.0f),
     OPT_FLOAT("reinhard_contrast", "Reinhard contrast", color_map_params.tone_constants.reinhard_contrast, .max = 1.0f),
     OPT_FLOAT("linear_knee", "Tone mapping linear knee point", color_map_params.tone_constants.linear_knee, .max = 1.0f),
     OPT_FLOAT("exposure", "Tone mapping linear exposure", color_map_params.tone_constants.exposure, .max = 10.0f),

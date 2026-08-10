@@ -564,6 +564,13 @@ to `linear`), preserving highlights at the cost of losing midtone contrast.
 Values above `1.0` are possible, resulting in an output with more contrast than
 the input. Defaults to `0.5`.
 
+#### `spline_shoulder=<0.0..1.0>`
+
+Shoulder hardness for the `spline` function. At `0.0` the curve starts to roll
+off right at the knee. Higher values keep it linear for longer above the knee,
+which preserves the brightness of midtones and highlights at the cost of
+gradation near the peak. Defaults to `0.15`.
+
 #### `reinhard_contrast=<0.0..1.0>`
 
 For the `reinhard` function, this specifies the local contrast coefficient at
