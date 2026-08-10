@@ -715,6 +715,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_property_float(nk, "Spline slope tuning", 0.0, &tc->slope_tuning, 10.0, 0.05, 0.001);
                 nk_property_float(nk, "Spline slope offset", 0.0, &tc->slope_offset, 1.0, 0.05, 0.001);
                 nk_property_float(nk, "Spline contrast", 0.0, &tc->spline_contrast, 1.5, 0.05, 0.001);
+                nk_property_float(nk, "Spline shoulder", 0.0, &tc->spline_shoulder, 1.0, 0.05, 0.001);
                 nk_property_float(nk, "Reinhard contrast", 0.0, &tc->reinhard_contrast, 1.0, 0.05, 0.001);
                 nk_property_float(nk, "Linear knee point", 0.0, &tc->linear_knee, 1.0, 0.05, 0.001);
                 nk_property_float(nk, "Linear exposure", 0.0, &tc->exposure, 10.0, 0.05, 0.001);
