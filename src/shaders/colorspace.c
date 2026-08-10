@@ -1705,10 +1705,20 @@ static ident_t rect_pos(pl_shader sh, pl_rect2df rc)
 }
 
 static void visualize_tone_map(pl_shader sh, pl_rect2df rc, float alpha,
-                               const struct pl_tone_map_params *params)
+                               const struct pl_tone_map_params *params,
+                               float exposure)
 {
     pl_assert(params->input_scaling  == PL_HDR_PQ);
     pl_assert(params->output_scaling == PL_HDR_PQ);
+
+    // The exposure of the dynamic target applies after the curve, which maps
+    // into a virtual range. Draw both as the display receives them.
+    const float out_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, exposure *
+        pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, params->output_min));
+    const float out_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, exposure *
+        pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, params->output_max));
+    ident_t pq_eotf = sh_pq_eotf(sh, 1);
+    ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 1);
 
     GLSL("// Visualize tone mapping                 \n"
          "{                                         \n"
@@ -1723,7 +1733,7 @@ static void visualize_tone_map(pl_shader sh, pl_rect2df rc, float alpha,
          "float ymax = "$";                         \n"
          "float alpha = 0.8 * "$";                  \n"
          "vec3 viz = color.rgb;                     \n"
-         "float vv = tone_map(pos.x);               \n"
+         "float vv = "$"("$" * "$"(tone_map(pos.x))); \n"
          // Color based on region
          "if (pos.x < xmin || pos.x > xmax) {       \n" // outside source
          "} else if (pos.y < ymin || pos.y > ymax) {\n" // outside target
@@ -1760,9 +1770,10 @@ static void visualize_tone_map(pl_shader sh, pl_rect2df rc, float alpha,
          SH_FLOAT_DYN(params->input_min),
          SH_FLOAT_DYN(params->input_max),
          SH_FLOAT_DYN(params->input_avg),
-         SH_FLOAT(params->output_min),
-         SH_FLOAT_DYN(params->output_max),
-         SH_FLOAT_DYN(alpha));
+         SH_FLOAT_DYN(out_min),
+         SH_FLOAT_DYN(out_max),
+         SH_FLOAT_DYN(alpha),
+         pq_eotf_inv, SH_FLOAT_DYN(exposure), pq_eotf);
 }
 
 static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
@@ -2490,7 +2501,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     if (need_tone_map) {
         if (params->visualize_lut) {
             float alpha = need_gamut_map ? powf(cosf(params->visualize_theta), 5.0f) : 1.0f;
-            visualize_tone_map(sh, params->visualize_rect, alpha, &tone);
+            visualize_tone_map(sh, params->visualize_rect, alpha, &tone, dt_exposure);
         }
         GLSL("#undef tone_map \n");
     }
