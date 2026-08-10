@@ -114,7 +114,7 @@ struct pl_tone_map_constants {
 };
 
 #define PL_TONE_MAP_CONSTANTS  \
-    .knee_adaptation   = 0.4f, \
+    .knee_adaptation   = 0.3f, \
     .knee_minimum      = 0.1f, \
     .knee_maximum      = 0.8f, \
     .knee_default      = 0.4f, \

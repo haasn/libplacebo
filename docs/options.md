@@ -527,7 +527,7 @@ average brightness to the (scaled) target average, while a value of `0.0` never
 modifies scene brightness.
 
 Affects all methods that use the ST2094 knee point determination (currently
-`spline`, `st2094-40` and `st2094-10`). Defaults to `0.4`.
+`spline`, `st2094-40` and `st2094-10`). Defaults to `0.3`.
 
 #### `knee_minimum=<0.0..0.5>`, `knee_maximum=<0.5..1.0>`
 
