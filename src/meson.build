@@ -135,6 +135,7 @@ tests = [
   'cache.c',
   'colorspace.c',
   'common.c',
+  'compositor.c',
   'dither.c',
   'dummy.c',
   'lut.c',
