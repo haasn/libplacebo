@@ -279,6 +279,11 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
 #define SH_OBJ(sh, ptr, type, t, uninit) \
     ((t*) sh_require_obj(sh, ptr, type, sizeof(t), uninit))
 
+// Like sh_require_obj() but just allocates a bare shader object
+void *sh_alloc_obj(pl_gpu gpu, pl_shader_obj *ptr,
+                   enum pl_shader_obj_type type, size_t priv_size,
+                   void (*uninit)(pl_gpu gpu, void *priv));
+
 // Initializes a PRNG. The resulting string will directly evaluate to a
 // pseudorandom, uniformly distributed vec3 from [0.0,1.0]. Since this
 // algorithm works by mutating a state variable, if the user wants to use the
