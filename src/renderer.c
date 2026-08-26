@@ -3055,21 +3055,22 @@ static bool pass_output_target(struct pass_state *pass)
             rr->prev_dither = applied_dither;
         }
 
-        const char *comps = params->blend_params ? "rgb" : "rgba";
-        const int num_comps = params->blend_params ? 3 : 4;
-        const int bit_shift = target->repr.bits.bit_shift;
+        enum pl_fmt_type type = plane->texture->params.format->type;
         const int sample_depth = PL_DEF(target->repr.bits.sample_depth,
                                         target->repr.bits.color_depth);
-        // Snap MSB-aligned formats (e.g. P010) to the sample grid, so the unused
-        // low bits are zero instead of carrying sub-LSB error.
-        if (bit_shift > 0 && bit_shift < sample_depth) {
-            const float grid = ((1ull << sample_depth) - 1) /
-                               (float) (1ull << bit_shift);
+
+        if (sample_depth && type != PL_FMT_FLOAT) {
+            const char *comps = params->blend_params ? "rgb" : "rgba";
+            const int bit_shift = target->repr.bits.bit_shift;
+
+            // Snap MSB-aligned formats (e.g. P010) to the sample grid, so the unused
+            // low bits are zero instead of carrying sub-LSB error. Note that
+            // SNORM normalizes to [-1, 1], so we subtract one bit
+            const bool snorm = plane->texture->params.format->type == PL_FMT_SNORM;
+            const float grid = ((1ull << (sample_depth - snorm)) - 1) /
+                                (float) (1ull << bit_shift);
             GLSL("color.%s = round(color.%s * "$") * "$"; \n",
                  comps, comps, SH_FLOAT(grid / scale), SH_FLOAT(1.0f / grid));
-        } else {
-            GLSL("color.%s *= vec%d(1.0 / "$"); \n",
-                 comps, num_comps, SH_FLOAT(scale));
         }
 
         swizzle_color(sh, plane->components, plane->component_mapping,
