@@ -92,7 +92,7 @@ class Macro(object):
                 if more_lines:
                     continue # stay in macro
                 else:
-                    yield macro.render_call()
+                    yield macro.render_call() + '\n'
                     yield '#line {}\n'.format(linenr + 1)
                     macros.append(macro)
                     macro = None
