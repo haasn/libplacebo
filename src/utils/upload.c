@@ -177,6 +177,9 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             num = i+1;
     }
 
+    pl_fmt best = NULL;
+    int best_map[4] = { -1, -1, -1, -1 };
+
     for (int n = 0; n < gpu->num_formats; n++) {
         pl_fmt fmt = gpu->formats[n];
         if (fmt->opaque || fmt->num_components < num)
@@ -187,6 +190,7 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             continue;
 
         int idx = 0;
+        int map[4] = { -1, -1, -1, -1 };
 
         // Try mapping all pl_plane_data components to texture components
         for (int i = 0; i < num; i++) {
@@ -200,7 +204,7 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             int size = data->component_size[i];
             if (size && (idx >= 4 || fmt->host_bits[idx] != size))
                 goto next_fmt;
-            out_map[idx++] = data->component_map[i];
+            map[idx++] = data->component_map[i];
         }
 
         // Reject misaligned formats, check this last to only log such errors
@@ -214,12 +218,19 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             continue;
         }
 
-        return fmt;
+        // Pick the format with the highest usable precision. This prefers
+        // formats like r16 over e.g. rx10, which would otherwise silently
+        // lose precision on >10-bit sources.
+        if (!best || fmt->component_depth[0] > best->component_depth[0]) {
+            best = fmt;
+            memcpy(best_map, map, sizeof(map));
+        }
 
 next_fmt: ; // acts as `continue`
     }
 
-    return NULL;
+    memcpy(out_map, best_map, sizeof(best_map));
+    return best;
 }
 
 bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
