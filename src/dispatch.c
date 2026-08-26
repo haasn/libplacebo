@@ -1232,6 +1232,12 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         goto error;
     }
 
+    if (tpars->format->type == PL_FMT_UINT || tpars->format->type == PL_FMT_SINT) {
+        PL_ERR(dp, "Trying to dispatch a shader using an integer target "
+               "texture. This is not supported by pl_dispatch.\n");
+        goto error;
+    }
+
     const struct pl_gpu_limits *limits = &dp->gpu->limits;
     bool can_compute = tpars->storable;
     if (can_compute && params->blend_params)
@@ -1492,6 +1498,12 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     if (pl_tex_params_dimension(*tpars) != 2 || !tpars->renderable) {
         PL_ERR(dp, "Trying to dispatch a shader using an invalid target "
                "texture. The target must be a renderable 2D texture.");
+        goto error;
+    }
+
+    if (tpars->format->type == PL_FMT_UINT || tpars->format->type == PL_FMT_SINT) {
+        PL_ERR(dp, "Trying to dispatch a shader using an integer target "
+               "texture. This is not supported by pl_dispatch.\n");
         goto error;
     }
 
