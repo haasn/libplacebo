@@ -176,8 +176,13 @@ void pl_color_repr_merge(struct pl_color_repr *orig, const struct pl_color_repr 
 
 enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr)
 {
-    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+    switch (repr->sys) {
+    case PL_COLOR_SYSTEM_DOLBYVISION:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return PL_COLOR_LEVELS_FULL;
+    default: break;
+    }
 
     if (repr->levels)
         return repr->levels;
@@ -1824,11 +1829,13 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     }
 
     pl_transform3x3 out = { .mat = m };
-    int bit_depth = PL_DEF(repr->bits.sample_depth,
-                    PL_DEF(repr->bits.color_depth, 8));
+    int tex_bits = PL_DEF(repr->bits.sample_depth, repr->bits.color_depth);
+    int col_bits = PL_DEF(repr->bits.color_depth,  repr->bits.sample_depth);
+    if (!tex_bits)
+        tex_bits = col_bits = 8;
 
     double ymax, ymin, cmax, cmid;
-    double scale = (1LL << bit_depth) / ((1LL << bit_depth) - 1.0);
+    double scale = (1LL << tex_bits) / ((1LL << tex_bits) - 1.0);
 
     switch (pl_color_levels_guess(repr)) {
     case PL_COLOR_LEVELS_LIMITED: {
@@ -1856,11 +1863,11 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     if (repr->sys == PL_COLOR_SYSTEM_YCGCO_RE || repr->sys == PL_COLOR_SYSTEM_YCGCO_RO) {
         int additional_bits = repr->sys == PL_COLOR_SYSTEM_YCGCO_RE ? 2 : 1;
-        double max_y = (1LL << (bit_depth - additional_bits)) - 1;
-        double max_c = (1LL << (bit_depth)) - 1;
+        double max_y = (1LL << (col_bits - additional_bits)) - 1;
+        double max_c = (1LL << col_bits) - 1;
         ymul = cmul = max_c / max_y;
         ymin = 0;
-        cmid = (1 << (bit_depth - 1)) / max_c;
+        cmid = (1LL << (col_bits - 1)) / max_c;
     }
 
     double mul[3]   = { ymul, ymul, ymul };
