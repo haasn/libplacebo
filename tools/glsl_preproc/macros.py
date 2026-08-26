@@ -14,6 +14,8 @@ PATTERN_PRAGMA  = re.compile(flags=re.VERBOSE, pattern=r'''
 (?P<rest>.*)$                   # rest of line (pragma body)
 ''')
 
+PATTERN_INCLUDE = re.compile(r'\s*\#\s*include\s')
+
 # Represents a single #pragma macro
 class Macro(object):
     PRAGMAS = {
@@ -62,11 +64,20 @@ class Macro(object):
     def render_fun(self):
         return FUNCTION_TEMPLATE.render(macro=self, Var=Var)
 
+    def render_proto(self):
+        return 'static __attribute__((__unused__)) size_t {}_fn(void *, pl_str *, const uint8_t *);\n'.format(self.name)
+
     # yields output lines
     @staticmethod
     def process_file(lines, filename, strip=False):
         macro = None
         macros = []
+        out = []
+
+        # The prototypes have to be visible at file scope before the first use,
+        # so hoist them just past the include block.
+        proto_idx = 0
+        proto_line = 1
 
         quoted = filename.replace('\\', '\\\\').replace('"', '\\"')
         yield f'#line 1 "{quoted}"\n'
@@ -94,12 +105,23 @@ class Macro(object):
                 if more_lines:
                     continue # stay in macro
                 else:
-                    yield macro.render_call() + '\n'
-                    yield '#line {}\n'.format(linenr + 1)
+                    out.append(macro.render_call() + '\n')
+                    out.append('#line {}\n'.format(linenr + 1))
                     macros.append(macro)
                     macro = None
             else:
-                yield line_orig
+                out.append(line_orig)
+                if not macros and re.match(PATTERN_INCLUDE, line):
+                    proto_idx = len(out)
+                    proto_line = linenr + 1
+
+        if macros:
+            protos = ['\n// Auto-generated template function prototypes:\n']
+            protos += [m.render_proto() for m in macros]
+            protos.append('#line {}\n'.format(proto_line))
+            out[proto_idx:proto_idx] = protos
+
+        yield from out
 
         if macros:
             yield '\n// Auto-generated template functions:'
