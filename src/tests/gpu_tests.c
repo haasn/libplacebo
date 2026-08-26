@@ -1832,6 +1832,7 @@ static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *par
 
 static void pl_ycbcr_tests(pl_gpu gpu)
 {
+    const int depth = 16;
     struct pl_plane_data data[3];
     for (int i = 0; i < 3; i++) {
         const int sub = i > 0 ? 1 : 0;
@@ -1842,7 +1843,7 @@ static void pl_ycbcr_tests(pl_gpu gpu)
             .type = PL_FMT_UNORM,
             .width = width,
             .height = height,
-            .component_size = {16},
+            .component_size = {depth},
             .component_map = {i},
             .pixel_stride = sizeof(uint16_t),
             .row_stride = PL_ALIGN2(width * sizeof(uint16_t),
@@ -1947,7 +1948,12 @@ static void pl_ycbcr_tests(pl_gpu gpu)
                 size_t off = y * data[i].row_stride + x * data[i].pixel_stride;
                 uint16_t *src_pixel = (uint16_t *) &src_buffer[i][off];
                 uint16_t *dst_pixel = (uint16_t *) &dst_buffer[off];
-                int diff = abs((int) *src_pixel - (int) *dst_pixel);
+                // Test that the dst_pixel is correctly clamped to the
+                // legal signal range
+                const uint16_t min_val = 16 << (depth - 8);
+                const uint16_t max_val = (i ? 240 : 235) << (depth - 8);
+                uint16_t src_clamped = PL_CLAMP(*src_pixel, min_val, max_val);
+                int diff = abs((int) src_clamped - (int) *dst_pixel);
                 REQUIRE_CMP(diff, <=, 150, "d"); // a little over 0.2%
             }
         }
