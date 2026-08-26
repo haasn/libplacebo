@@ -220,6 +220,48 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
     return scale;
 }
 
+void pl_color_repr_limits(const struct pl_color_repr *repr,
+                          float out_min[4], float out_max[4])
+{
+    const struct pl_bit_encoding *bits = &repr->bits;
+    int tex_bits = PL_DEF(bits->sample_depth, bits->color_depth);
+    int col_bits = PL_DEF(bits->color_depth,  bits->sample_depth);
+    if (!tex_bits)
+        tex_bits = col_bits = 8;
+
+    const float max_value = ((1LL << col_bits) - 1) << bits->bit_shift;
+    float ymin, ymax, cmin, cmax;
+    if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_LIMITED) {
+        const int shift = col_bits + bits->bit_shift - 8;
+        ymin = cmin = 16 << shift;
+        ymax = 235 << shift;
+        cmax = 240 << shift;
+    } else {
+        ymin = cmin = 0;
+        ymax = cmax = max_value;
+    }
+
+    if (repr->sys == PL_COLOR_SYSTEM_YCGCO_RE || repr->sys == PL_COLOR_SYSTEM_YCGCO_RO) {
+        const int additional_bits = repr->sys == PL_COLOR_SYSTEM_YCGCO_RE ? 2 : 1;
+        const int max_y = (1LL << (col_bits - additional_bits)) - 1;
+        const int mid_c =  1LL << (col_bits - 1);
+        ymin = 0;
+        ymax = max_y << bits->bit_shift;
+        cmin = (mid_c - max_y) << bits->bit_shift;
+        cmax = (mid_c + max_y) << bits->bit_shift;
+    }
+
+    const float scale = 1.0f / ((1LL << tex_bits) - 1.0f);
+    for (int i = 0; i < 3; i++) {
+        out_min[i] = scale * (i ? cmin : ymin);
+        out_max[i] = scale * (i ? cmax : ymax);
+    }
+
+    // Alpha is always full range
+    out_min[3] = 0.0f;
+    out_max[3] = scale * max_value;
+}
+
 bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
 {
     switch (prim) {

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '372': 'add pl_color_repr_limits',
       '371': 'input frame.hdr.max_luma is now respecte when frame has ICC profile',
       '370': 'deprecate pl_avdovi_metadata_supported and pl_avframe_params.map_dovi_force',
       '369': 'add pl_color_decode_args.enhancement_layer',

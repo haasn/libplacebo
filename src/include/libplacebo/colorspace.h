@@ -209,6 +209,12 @@ PL_API void pl_color_repr_merge(struct pl_color_repr *orig,
 // depth will both be inferred as 8 bits for the purposes of this conversion.
 PL_API float pl_color_repr_normalize(struct pl_color_repr *repr);
 
+// Compute the stored value limits for the given color representation,
+// including the effects of the bit encoding scheme. This can be used to
+// compute a hard bound on the stored texel values
+PL_API void pl_color_repr_limits(const struct pl_color_repr *repr,
+                                 float out_min[4], float out_max[4]);
+
 // Guesses the best color levels based on the specified color levels and
 // falling back to using the color system instead. YCbCr-like systems are
 // assumed to be TV range, otherwise this defaults to PC range.
