@@ -1852,7 +1852,9 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         ymax = 1.0;
         ymin = 0.0;
         cmax = 1.0;
-        cmid = 128 / 256. * scale; // *not* exactly 0.5
+
+        double cscale = (1LL << col_bits) / ((1LL << col_bits) - 1.0);
+        cmid = 128 / 256. * cscale; // *not* exactly 0.5
         break;
     default:
         pl_unreachable();

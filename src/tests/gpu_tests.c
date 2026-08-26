@@ -1593,12 +1593,16 @@ error:
     pl_tex_destroy(gpu, &fbo);
 }
 
-// Verify that MSB-aligned output (e.g. P010) encodes the same value as the
-// LSB-aligned equivalent (e.g. yuv420p10), with zero padding bits.
+// Tests for the bit encoding logic, in both directions:
+//  - encoding MSB-aligned output (e.g. P010) must produce the same value as
+//    the LSB-aligned equivalent (e.g. yuv420p10), with zero padding bits
+//  - decoding must survive a mismatch between the sample depth and the color
+//    depth, for any way of padding the color samples into the texture
 static void pl_render_bits_tests(pl_gpu gpu)
 {
     pl_renderer rr = NULL;
-    pl_tex src_tex = NULL, lsb_tex = NULL, msb_tex = NULL;
+    pl_dispatch dp = NULL;
+    pl_tex src_tex = NULL, lsb_tex = NULL, msb_tex = NULL, fbo_tex = NULL;
     printf("pl_render_bits_tests:\n");
 
     // Need a true 16-bit UNORM render target we can read back bit-exactly
@@ -1705,11 +1709,120 @@ static void pl_render_bits_tests(pl_gpu gpu)
         }
     }
 
+    // The decode path has to survive a mismatch between the sample depth and
+    // the color depth: neutral chroma must stay an exact grayscale, and the
+    // nominal luma range must keep mapping onto exactly [0, 1], no matter how
+    // the color samples are padded into the texture.
+    pl_fmt f32 = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 32, 32,
+                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE);
+    if (!f32 || !(fmt->caps & PL_FMT_CAP_SAMPLEABLE)) {
+        printf("- no suitable f32 fmt, skipping decode tests\n");
+        goto error;
+    }
+
+    dp = pl_dispatch_create(gpu->log, gpu);
+    REQUIRE(dp);
+
+    // Luma test points, as a fraction of the nominal luma range
+    static const float points[] = { 0.0, 0.25, 0.5, 0.75, 1.0 };
+    enum { num_points = PL_ARRAY_SIZE(points) };
+
+    pl_tex_destroy(gpu, &src_tex);
+    src_tex = pl_tex_create(gpu, pl_tex_params(
+        .w = num_points, .h = 1, .format = fmt,
+        .sampleable = true, .host_writable = true,
+    ));
+
+    fbo_tex = pl_tex_create(gpu, pl_tex_params(
+        .w = num_points, .h = 1, .format = f32,
+        .renderable = true, .host_readable = true,
+    ));
+    if (!fbo_tex)
+        goto error;
+
+    static const struct { int color_depth, bit_shift; } encodings[] = {
+        { 16, 0 }, // control: no padding at all
+        { 12, 0 }, // 12-bit LSB-aligned
+        { 12, 4 }, // 12-bit MSB-aligned (e.g. xyz12)
+        { 10, 0 }, // 10-bit LSB-aligned
+        {  8, 0 }, //  8-bit reference
+    };
+
+    for (int e = 0; e < PL_ARRAY_SIZE(encodings); e++) {
+        const int col = encodings[e].color_depth;
+        const int shift = encodings[e].bit_shift;
+
+        for (int l = 0; l < 2; l++) {
+            const enum pl_color_levels levels = l ? PL_COLOR_LEVELS_FULL
+                                                  : PL_COLOR_LEVELS_LIMITED;
+            struct pl_color_repr repr = {
+                .sys    = PL_COLOR_SYSTEM_BT_709,
+                .levels = levels,
+                .bits   = {
+                    .sample_depth = 16,
+                    .color_depth  = col,
+                    .bit_shift    = shift,
+                },
+            };
+
+            // Nominal luma range and neutral chroma point, at `col` bits
+            const int ylo = levels == PL_COLOR_LEVELS_LIMITED ?  16 << (col - 8) : 0;
+            const int yhi = levels == PL_COLOR_LEVELS_LIMITED ? 235 << (col - 8)
+                                                              : (1 << col) - 1;
+            const int neutral = 1 << (col - 1);
+
+            uint16_t data[num_points][4];
+            float expected[num_points];
+            for (int i = 0; i < num_points; i++) {
+                // Derive the expectation from the rounded code, not from the
+                // fraction, so that the test pins the exact mapping
+                const int luma = roundf(ylo + points[i] * (yhi - ylo));
+                expected[i] = (float) (luma - ylo) / (yhi - ylo);
+                data[i][0] = luma    << shift;
+                data[i][1] = neutral << shift;
+                data[i][2] = neutral << shift;
+                data[i][3] = 0xFFFF;
+            }
+
+            REQUIRE(pl_tex_upload(gpu, pl_tex_transfer_params(
+                .tex = src_tex,
+                .ptr = data,
+            )));
+
+            pl_shader sh = pl_dispatch_begin(dp);
+            pl_shader_sample_direct(sh, pl_sample_src( .tex = src_tex ));
+            pl_shader_decode_color_ex(sh, pl_color_decode_args( .repr = &repr ));
+            REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
+                .shader = &sh,
+                .target = fbo_tex,
+            )));
+
+            float out[num_points][4];
+            REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
+                .tex = fbo_tex,
+                .ptr = out,
+            )));
+
+            printf("- %s range, color_depth=%d bit_shift=%d\n",
+                   levels == PL_COLOR_LEVELS_FULL ? "full" : "limited",
+                   col, shift);
+
+            for (int i = 0; i < num_points; i++) {
+                const float r = out[i][0], g = out[i][1], b = out[i][2];
+                REQUIRE_FEQ(g, expected[i], 1e-6);
+                REQUIRE_FEQ(r, g, 1e-6);
+                REQUIRE_FEQ(r, b, 1e-6);
+            }
+        }
+    }
+
 error:
+    pl_dispatch_destroy(&dp);
     pl_renderer_destroy(&rr);
     pl_tex_destroy(gpu, &src_tex);
     pl_tex_destroy(gpu, &lsb_tex);
     pl_tex_destroy(gpu, &msb_tex);
+    pl_tex_destroy(gpu, &fbo_tex);
 }
 
 static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *params)
