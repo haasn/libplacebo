@@ -269,11 +269,23 @@ static const VkPhysicalDeviceInternallySynchronizedQueuesFeaturesKHR synchronize
 };
 #endif
 
-static const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+static const VkPhysicalDeviceVideoMaintenance2FeaturesKHR video_maintenance2 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR,
 #ifdef VK_KHR_internally_synchronized_queues
     .pNext = (void *) &synchronized_queues,
 #endif
+    .videoMaintenance2 = true,
+};
+
+static const VkPhysicalDeviceVideoMaintenance1FeaturesKHR video_maintenance1 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR,
+    .pNext = (void *) &video_maintenance2,
+    .videoMaintenance1 = true,
+};
+
+static const VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+    .pNext = (void *) &video_maintenance1,
     .swapchainMaintenance1 = true,
 };
 
