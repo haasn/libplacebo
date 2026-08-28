@@ -922,9 +922,11 @@ static bool try_host_xfer(pl_gpu gpu, pl_tex tex, bool upload)
     if (vk_tex_poll(gpu, tex, 0) || tex_vk->ext_deps.num)
         return false;
 
-    for (int i = 0; i < layouts->num; i++) {
-        if (tex_vk->layout == layouts->elem[i])
-            return true;
+    if (tex_vk->layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+        for (int i = 0; i < layouts->num; i++) {
+            if (tex_vk->layout == layouts->elem[i])
+                return true;
+        }
     }
 
     // Check if old layout transition is supported. The implementation must
