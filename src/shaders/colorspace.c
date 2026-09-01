@@ -641,9 +641,8 @@ static ident_t sh_luma_coeffs(pl_shader sh, const struct pl_color_space *csp)
     pl_matrix3x3 rgb2xyz;
     rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
 
-    // FIXME: Cannot use `const vec3` due to glslang bug #2025
     ident_t coeffs = sh_fresh(sh, "luma_coeffs");
-    GLSLH("#define "$" vec3("$", "$", "$") \n", coeffs,
+    GLSLH("const vec3 "$" = vec3("$", "$", "$"); \n", coeffs,
           SH_FLOAT(rgb2xyz.m[1][0]), // RGB->Y vector
           SH_FLOAT(rgb2xyz.m[1][1]),
           SH_FLOAT(rgb2xyz.m[1][2]));
