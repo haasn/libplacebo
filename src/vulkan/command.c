@@ -19,19 +19,23 @@
 #include "utils.h"
 
 // returns VK_SUCCESS (completed), VK_TIMEOUT (not yet completed) or an error
-static VkResult vk_cmd_poll(struct vk_cmd *cmd, uint64_t timeout)
+static VkResult vk_sync_poll(struct vk_ctx *vk, VkFence fence,
+                             pl_vulkan_sem sync, uint64_t timeout)
 {
-    struct vk_ctx *vk = cmd->pool->vk;
-
-    if (cmd->fence)
-        return vk->WaitForFences(vk->dev, 1, &cmd->fence, VK_TRUE, timeout);
+    if (fence)
+        return vk->WaitForFences(vk->dev, 1, &fence, VK_TRUE, timeout);
 
     return vk->WaitSemaphores(vk->dev, &(VkSemaphoreWaitInfo) {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
-        .pSemaphores = &cmd->sync.sem,
-        .pValues = &cmd->sync.value,
+        .pSemaphores = &sync.sem,
+        .pValues = &sync.value,
     }, timeout);
+}
+
+static VkResult vk_cmd_poll(struct vk_cmd *cmd, uint64_t timeout)
+{
+    return vk_sync_poll(cmd->pool->vk, cmd->fence, cmd->sync, timeout);
 }
 
 static void flush_callbacks(struct vk_ctx *vk)
@@ -567,11 +571,14 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
     while (vk->cmds_pending.num) {
         struct vk_cmd *cmd = vk->cmds_pending.elem[0];
         struct vk_cmdpool *pool = cmd->pool;
+        pl_vulkan_sem sync = cmd->sync;
+        VkFence fence = cmd->fence;
         pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
-        if (vk_cmd_poll(cmd, timeout) == VK_TIMEOUT)
+        if (vk_sync_poll(vk, fence, sync, timeout) == VK_TIMEOUT)
             return ret;
         pl_mutex_lock(&vk->lock);
-        if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd)
+        if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd ||
+            cmd->sync.value != sync.value)
             continue; // another thread modified this state while blocking
 
         PL_TRACE(vk, "VkSemaphore signalled: 0x%"PRIx64" = %"PRIu64,
