@@ -265,9 +265,14 @@ struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
             // for the previous write
         } else if (last.sync.sem) {
             // Image barrier still needs to depend on this stage for implicit
-            // ordering guarantees to apply properly
-            vk_cmd_dep(cmd, stage, last.sync);
-            last.stage = stage;
+            // ordering guarantees to apply properly. A synchronization point
+            // without any access stage of its own has to wait for all
+            // commands instead, a wait limited to no stage orders nothing
+            VkPipelineStageFlags2 wait_stage = stage;
+            if (wait_stage == VK_PIPELINE_STAGE_2_NONE)
+                wait_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+            vk_cmd_dep(cmd, wait_stage, last.sync);
+            last.stage = wait_stage;
         }
 
         // Last access is on different queue, so no pipeline barrier needed
