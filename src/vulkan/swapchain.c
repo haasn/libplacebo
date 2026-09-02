@@ -975,7 +975,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
         return false;
     }
 
-    struct vk_cmd *cmd = pl_vk_steal_cmd(gpu);
+    struct vk_cmd *cmd = CMD_BEGIN(GRAPHICS);
     if (!cmd) {
         pl_mutex_unlock(&p->lock);
         return false;
@@ -983,13 +983,13 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
 
     pl_rc_ref(&p->frames_in_flight);
     vk_cmd_callback(cmd, VK_CB_FUNC(present_cb), p, NULL);
-    if (!vk_cmd_submit(&cmd)) {
+    int qidx = cmd->qindex;
+    if (!CMD_SUBMIT(&cmd)) {
         pl_mutex_unlock(&p->lock);
         return false;
     }
 
     struct vk_cmdpool *pool = vk->pool_graphics;
-    int qidx = pool->idx_queues;
     VkQueue queue = pool->queues[qidx];
 
     vk_rotate_queues(p->vk);
