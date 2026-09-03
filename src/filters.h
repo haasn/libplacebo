@@ -33,6 +33,7 @@ static inline float pl_filter_radius_bound(const struct pl_filter_config *c)
     {"lanczos",             &pl_filter_lanczos,     "Lanczos"},                 \
     {"ewa_lanczos",         &pl_filter_ewa_lanczos, "Jinc (EWA Lanczos)"},      \
     {"ewa_lanczossharp",    &pl_filter_ewa_lanczossharp,     "Sharpened Jinc"}, \
+    {"ewa_lanczosradius",   &pl_filter_ewa_lanczosradius,    "Sharpened Jinc, radius 3"}, \
     {"ewa_lanczos4sharpest",&pl_filter_ewa_lanczos4sharpest, "Sharpened Jinc-AR, 4 taps"},\
     {"gaussian",            &pl_filter_gaussian,    "Gaussian"},                \
     {"spline16",            &pl_filter_spline16,    "Spline (2 taps)"},         \
@@ -50,6 +51,9 @@ static inline float pl_filter_radius_bound(const struct pl_filter_config *c)
     {"catmull_rom",         &pl_filter_catmull_rom, "Catmull-Rom"},             \
     {"robidoux",            &pl_filter_robidoux,          "Robidoux"},          \
     {"robidouxsharp",       &pl_filter_robidouxsharp,     "RobidouxSharp"},     \
+    {"ewa_hermite",         &pl_filter_ewa_hermite,       "EWA Hermite"},       \
+    {"ewa_mitchell",        &pl_filter_ewa_mitchell,      "EWA Mitchell"},      \
+    {"ewa_catmull_rom",     &pl_filter_ewa_catmull_rom,   "EWA Catmull-Rom"},   \
     {"ewa_robidoux",        &pl_filter_ewa_robidoux,      "EWA Robidoux"},      \
     {"ewa_robidouxsharp",   &pl_filter_ewa_robidouxsharp, "EWA RobidouxSharp"}, \
                                                                                 \
