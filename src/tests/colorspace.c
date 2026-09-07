@@ -398,6 +398,26 @@ int main()
     REQUIRE(pl_primaries_compatible(bt2020, dcip3));
     REQUIRE(pl_primaries_compatible(bt709, dcip3));
 
+    for (enum pl_color_primaries p = 0; p < PL_COLOR_PRIM_COUNT; p++)
+        REQUIRE(pl_primaries_valid(pl_raw_primaries_get(p)));
+    struct pl_raw_primaries bad = {0};
+    REQUIRE(!pl_primaries_valid(&bad));
+    bad = *bt2020;
+    bad.white = bad.blue; // white point on a vertex
+    REQUIRE(!pl_primaries_valid(&bad));
+    bad = *bt2020;
+    bad.white.x = (bad.red.x + bad.green.x) / 2; // white point on an edge
+    bad.white.y = (bad.red.y + bad.green.y) / 2;
+    REQUIRE(!pl_primaries_valid(&bad));
+    bad = *bt2020;
+    bad.white.x = 0.1f; // white point outside the triangle
+    bad.white.y = 0.9f;
+    REQUIRE(!pl_primaries_valid(&bad));
+    bad = *bt2020;
+    bad.blue.x = (bad.red.x + bad.green.x) / 2; // collinear primaries
+    bad.blue.y = (bad.red.y + bad.green.y) / 2;
+    REQUIRE(!pl_primaries_valid(&bad));
+
     struct pl_raw_primaries bt709_2020 = pl_primaries_clip(bt709, bt2020);
     struct pl_raw_primaries bt2020_709 = pl_primaries_clip(bt2020, bt709);
     REQUIRE(pl_raw_primaries_similar(&bt709_2020, bt709));

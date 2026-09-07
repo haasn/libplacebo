@@ -1683,11 +1683,15 @@ bool pl_primaries_superset(const struct pl_raw_primaries *a,
 
 bool pl_primaries_valid(const struct pl_raw_primaries *prim)
 {
-    // Test to see if the primaries form a valid triangle (nonzero area)
-    float area = (prim->blue.x - prim->green.x) * (prim->red.y  - prim->green.y)
-               - (prim->red.x  - prim->green.x) * (prim->blue.y - prim->green.y);
+    // The white point must lie strictly inside the triangle spanned by the
+    // primaries, otherwise the RGB<->XYZ matrix is singular. This also rejects
+    // a degenerate triangle, as the three signed areas sum to its area.
+    float d1 = test_point_line(prim->white, prim->red,   prim->green),
+          d2 = test_point_line(prim->white, prim->green, prim->blue),
+          d3 = test_point_line(prim->white, prim->blue,  prim->red);
 
-    return fabs(area) > 1e-6 && test_point_gamut(prim->white, prim);
+    return (d1 >  1e-6f && d2 >  1e-6f && d3 >  1e-6f) ||
+           (d1 < -1e-6f && d2 < -1e-6f && d3 < -1e-6f);
 }
 
 static inline float xy_dist2(struct pl_cie_xy a, struct pl_cie_xy b)
