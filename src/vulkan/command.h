@@ -57,6 +57,9 @@ struct vk_cmd {
     // "Callbacks" to fire once a command completes. These are used for
     // multiple purposes, ranging from resource deallocation to fencing.
     PL_ARRAY(struct vk_callback) callbacks;
+    // Number of threads currently waiting for this command to complete.
+    // Protected by vk->lock. A command is not reused while this is nonzero.
+    int waiters;
 };
 
 // Associate a callback with the completion of the current command. This

@@ -412,7 +412,15 @@ struct vk_cmd *vk_cmd_begin(struct vk_cmdpool *pool, pl_debug_tag debug_tag)
 
     struct vk_cmd *cmd = NULL;
     pl_mutex_lock(&vk->lock);
-    if (!PL_ARRAY_POP(pool->cmds, &cmd)) {
+    // Skip commands another thread is still waiting on.
+    for (int i = pool->cmds.num - 1; i >= 0; i--) {
+        if (!pool->cmds.elem[i]->waiters) {
+            cmd = pool->cmds.elem[i];
+            PL_ARRAY_REMOVE_AT(pool->cmds, i);
+            break;
+        }
+    }
+    if (!cmd) {
         cmd = vk_cmd_create(pool);
         if (!cmd) {
             pl_mutex_unlock(&vk->lock);
@@ -573,10 +581,13 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         struct vk_cmdpool *pool = cmd->pool;
         pl_vulkan_sem sync = cmd->sync;
         VkFence fence = cmd->fence;
+        cmd->waiters++;
         pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
-        if (vk_sync_poll(vk, fence, sync, timeout) == VK_TIMEOUT)
-            return ret;
+        VkResult res = vk_sync_poll(vk, fence, sync, timeout);
         pl_mutex_lock(&vk->lock);
+        cmd->waiters--;
+        if (res == VK_TIMEOUT)
+            break;
         if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd ||
             cmd->sync.value != sync.value)
             continue; // another thread modified this state while blocking
