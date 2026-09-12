@@ -30,12 +30,12 @@ struct pl_timer_t {
     VkQueryPool qpool; // even=start, odd=stop
     int index_write; // next index to write to
     int index_read; // next index to read from
-    uint64_t pending; // bitmask of queries that are still running
+    uint_fast8_t pending; // bitmask of queries that are still running
 };
 
-static inline uint64_t timer_bit(int index)
+static inline uint_fast8_t timer_bit(int index)
 {
-    return 1llu << (index / 2);
+    return 1u << (index / 2);
 }
 
 static void timer_destroy_cb(pl_gpu gpu, pl_timer timer)
