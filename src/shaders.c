@@ -931,32 +931,45 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
                      enum pl_shader_obj_type type, size_t priv_size,
                      void (*uninit)(pl_gpu gpu, void *priv))
 {
+    void *priv = sh_alloc_obj(SH_GPU(sh), ptr, type, priv_size, uninit);
+    if (!priv) {
+        sh->failed = true;
+        return NULL;
+    }
+
+    pl_shader_obj obj = *ptr;
+    PL_ARRAY_APPEND(sh, sh->obj, obj);
+    pl_rc_ref(&obj->rc);
+    return priv;
+}
+
+void *sh_alloc_obj(pl_gpu gpu, pl_shader_obj *ptr,
+                   enum pl_shader_obj_type type, size_t priv_size,
+                   void (*uninit)(pl_gpu gpu, void *priv))
+{
     if (!ptr)
         return NULL;
 
     pl_shader_obj obj = *ptr;
-    if (obj && obj->gpu != SH_GPU(sh)) {
-        SH_FAIL(sh, "Passed pl_shader_obj belongs to different GPU!");
+    if (obj && obj->gpu != gpu) {
+        PL_ERR(gpu, "Passed pl_shader_obj belongs to different GPU!");
         return NULL;
     }
 
     if (obj && obj->type != type) {
-        SH_FAIL(sh, "Passed pl_shader_obj of wrong type! Shader objects must "
-                "always be used with the same type of shader.");
+        PL_ERR(gpu, "Passed pl_shader_obj of wrong type! Shader objects must "
+               "always be used with the same type of shader.");
         return NULL;
     }
 
     if (!obj) {
         obj = pl_zalloc_ptr(NULL, obj);
         pl_rc_init(&obj->rc);
-        obj->gpu = SH_GPU(sh);
+        obj->gpu = gpu;
         obj->type = type;
         obj->priv = pl_zalloc(obj, priv_size);
         obj->uninit = uninit;
     }
-
-    PL_ARRAY_APPEND(sh, sh->obj, obj);
-    pl_rc_ref(&obj->rc);
 
     *ptr = obj;
     return obj->priv;

@@ -1074,7 +1074,10 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     vec2 base = pos - fcoord * pt - pt * vec2(${const float: N / 2 - 1});       \
     vec4 ws;                                                                    \
     float off;                                                                  \
-    ${vecType: comps} c, ca = ${vecType: comps}(0.0);                           \
+    ${vecType: comps} c;                                                        \
+    /* Mark the accumulators as `precise` to avoid accumulating the error. */   \
+    PRECISE float wsum = 0.0;                                                   \
+    PRECISE ${vecType: comps} ca = ${vecType: comps}(0.0);                      \
     @if (use_ar) {                                                              \
         ${vecType: comps} hi = ${vecType: comps}(0.0);                          \
         ${vecType: comps} lo = ${vecType: comps}(1e9);                          \
@@ -1094,7 +1097,10 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
             }                                                                   \
         @}                                                                      \
         ca += ws[n % 4u] * c;                                                   \
+        wsum += ws[n % 4u];                                                     \
     }                                                                           \
+    /* Renormalize by the actual sum of weights. */                             \
+    ca /= wsum;                                                                 \
     @if (use_ar)                                                                \
         ca = mix(ca, clamp(ca, lo, hi), ${float: cfg.antiring});                \
     color.${swizzle: comps} = ${float: scale} * ca;                             \

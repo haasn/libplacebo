@@ -88,7 +88,7 @@ int main()
             // Colorspace transformation steps
             case 'y': {
                 struct pl_color_repr repr = pl_color_repr_jpeg;
-                pl_shader_decode_color(sh, &repr, NULL);
+                pl_shader_decode_color_ex(sh, pl_color_decode_args( .repr = &repr ));
                 break;
             }
             case 'p':

@@ -176,8 +176,13 @@ void pl_color_repr_merge(struct pl_color_repr *orig, const struct pl_color_repr 
 
 enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr)
 {
-    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+    switch (repr->sys) {
+    case PL_COLOR_SYSTEM_DOLBYVISION:
+    case PL_COLOR_SYSTEM_YCGCO_RE:
+    case PL_COLOR_SYSTEM_YCGCO_RO:
         return PL_COLOR_LEVELS_FULL;
+    default: break;
+    }
 
     if (repr->levels)
         return repr->levels;
@@ -213,6 +218,48 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
 
     bits->color_depth = bits->sample_depth;
     return scale;
+}
+
+void pl_color_repr_limits(const struct pl_color_repr *repr,
+                          float out_min[4], float out_max[4])
+{
+    const struct pl_bit_encoding *bits = &repr->bits;
+    int tex_bits = PL_DEF(bits->sample_depth, bits->color_depth);
+    int col_bits = PL_DEF(bits->color_depth,  bits->sample_depth);
+    if (!tex_bits)
+        tex_bits = col_bits = 8;
+
+    const float max_value = ((1LL << col_bits) - 1) << bits->bit_shift;
+    float ymin, ymax, cmin, cmax;
+    if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_LIMITED) {
+        const int shift = col_bits + bits->bit_shift - 8;
+        ymin = cmin = 16 << shift;
+        ymax = 235 << shift;
+        cmax = 240 << shift;
+    } else {
+        ymin = cmin = 0;
+        ymax = cmax = max_value;
+    }
+
+    if (repr->sys == PL_COLOR_SYSTEM_YCGCO_RE || repr->sys == PL_COLOR_SYSTEM_YCGCO_RO) {
+        const int additional_bits = repr->sys == PL_COLOR_SYSTEM_YCGCO_RE ? 2 : 1;
+        const int max_y = (1LL << (col_bits - additional_bits)) - 1;
+        const int mid_c =  1LL << (col_bits - 1);
+        ymin = 0;
+        ymax = max_y << bits->bit_shift;
+        cmin = (mid_c - max_y) << bits->bit_shift;
+        cmax = (mid_c + max_y) << bits->bit_shift;
+    }
+
+    const float scale = 1.0f / ((1LL << tex_bits) - 1.0f);
+    for (int i = 0; i < 3; i++) {
+        out_min[i] = scale * (i ? cmin : ymin);
+        out_max[i] = scale * (i ? cmax : ymax);
+    }
+
+    // Alpha is always full range
+    out_min[3] = 0.0f;
+    out_max[3] = scale * max_value;
 }
 
 bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
@@ -576,6 +623,8 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         .out_max    = &csp_max,
     ));
 
+    csp_min = pl_signal_black(csp_min, PL_HDR_NORM);
+
     if (csp->transfer != PL_COLOR_TRC_SCRGB)
         MAP3(fmaxf(X, 0));
 
@@ -665,6 +714,8 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
         .out_min    = &csp_min,
         .out_max    = &csp_max,
     ));
+
+    csp_min = pl_signal_black(csp_min, PL_HDR_NORM);
 
     if (pl_color_space_is_black_scaled(csp) && csp->transfer != PL_COLOR_TRC_HLG)
         MAP3((X - csp_min) / (csp_max - csp_min));
@@ -948,6 +999,7 @@ void pl_color_space_infer_map(struct pl_color_space *src,
 {
     bool unknown_src_contrast = !src->hdr.min_luma;
     bool unknown_dst_contrast = !dst->hdr.min_luma;
+    bool unknown_src_luminance = !src->hdr.max_luma;
 
     infer_both_ref(dst, src);
 
@@ -965,6 +1017,14 @@ void pl_color_space_infer_map(struct pl_color_space *src,
     bool dst_is_sdr = !pl_color_space_is_hdr(dst);
     if (unknown_dst_contrast && src_is_sdr && dst_is_sdr)
         dst->hdr.min_luma = src->hdr.min_luma;
+
+    // If both src and dst are SDR, match luminance, this input is display-referred.
+    if (unknown_src_luminance && src_is_sdr && dst_is_sdr)
+        src->hdr.max_luma = dst->hdr.max_luma;
+
+    // If SDR source has luminance, use it for target.
+    if (!unknown_src_luminance && src_is_sdr && dst_is_sdr)
+        dst->hdr.max_luma = src->hdr.max_luma;
 
     // If the src is HLG and the output is HDR, tune the HLG peak to the output
     if (src->transfer == PL_COLOR_TRC_HLG && pl_color_space_is_hdr(dst))
@@ -1811,11 +1871,13 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     }
 
     pl_transform3x3 out = { .mat = m };
-    int bit_depth = PL_DEF(repr->bits.sample_depth,
-                    PL_DEF(repr->bits.color_depth, 8));
+    int tex_bits = PL_DEF(repr->bits.sample_depth, repr->bits.color_depth);
+    int col_bits = PL_DEF(repr->bits.color_depth,  repr->bits.sample_depth);
+    if (!tex_bits)
+        tex_bits = col_bits = 8;
 
     double ymax, ymin, cmax, cmid;
-    double scale = (1LL << bit_depth) / ((1LL << bit_depth) - 1.0);
+    double scale = (1LL << tex_bits) / ((1LL << tex_bits) - 1.0);
 
     switch (pl_color_levels_guess(repr)) {
     case PL_COLOR_LEVELS_LIMITED: {
@@ -1832,7 +1894,9 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         ymax = 1.0;
         ymin = 0.0;
         cmax = 1.0;
-        cmid = 128 / 256. * scale; // *not* exactly 0.5
+
+        double cscale = (1LL << col_bits) / ((1LL << col_bits) - 1.0);
+        cmid = 128 / 256. * cscale; // *not* exactly 0.5
         break;
     default:
         pl_unreachable();
@@ -1843,11 +1907,11 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     if (repr->sys == PL_COLOR_SYSTEM_YCGCO_RE || repr->sys == PL_COLOR_SYSTEM_YCGCO_RO) {
         int additional_bits = repr->sys == PL_COLOR_SYSTEM_YCGCO_RE ? 2 : 1;
-        double max_y = (1LL << (bit_depth - additional_bits)) - 1;
-        double max_c = (1LL << (bit_depth)) - 1;
+        double max_y = (1LL << (col_bits - additional_bits)) - 1;
+        double max_c = (1LL << col_bits) - 1;
         ymul = cmul = max_c / max_y;
         ymin = 0;
-        cmid = (1 << (bit_depth - 1)) / max_c;
+        cmid = (1LL << (col_bits - 1)) / max_c;
     }
 
     double mul[3]   = { ymul, ymul, ymul };

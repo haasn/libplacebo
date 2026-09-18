@@ -241,6 +241,15 @@ static inline void sh_describe(pl_shader sh, const char *desc)
 // the given size requirements. Errors and returns false otherwise.
 bool sh_require(pl_shader sh, enum pl_shader_sig insig, int w, int h);
 
+struct pl_dovi_metadata;
+
+// Add the NLQ-decoded enhancement-layer residual to the (already reshaped)
+// base layer. `el_signal` names a no-arg function (typically produced by
+// `sh_subpass`) returning a vec4 whose `.rgb` holds the EL signal at the current
+// output coordinate. No-op if `data` is NULL or `data->nlq_active` is false.
+void sh_dovi_compose_nlq(pl_shader sh, const struct pl_dovi_metadata *data,
+                         ident_t el_signal);
+
 // Shader resources
 
 enum pl_shader_obj_type {
@@ -269,6 +278,11 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
 
 #define SH_OBJ(sh, ptr, type, t, uninit) \
     ((t*) sh_require_obj(sh, ptr, type, sizeof(t), uninit))
+
+// Like sh_require_obj() but just allocates a bare shader object
+void *sh_alloc_obj(pl_gpu gpu, pl_shader_obj *ptr,
+                   enum pl_shader_obj_type type, size_t priv_size,
+                   void (*uninit)(pl_gpu gpu, void *priv));
 
 // Initializes a PRNG. The resulting string will directly evaluate to a
 // pseudorandom, uniformly distributed vec3 from [0.0,1.0]. Since this

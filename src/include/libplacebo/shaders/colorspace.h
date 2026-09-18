@@ -41,16 +41,38 @@ PL_API void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
 // automatically by `pl_shader_decode_color` for PL_COLOR_SYSTEM_DOLBYVISION.
 PL_API void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data);
 
+// Arguments for the `pl_shader_decode_color_ex` call.
+struct pl_color_decode_args {
+    // Input color representation. Mutated to reflect the decode. Required.
+    struct pl_color_repr *repr;
+
+    // Color adjustment parameters. If NULL, defaults to
+    // `&pl_color_adjustment_neutral`.
+    const struct pl_color_adjustment *color_adjustment;
+
+    // Optional sub-shader producing the enhancement-layer. The expected format
+    // and output of the shader depends on the EL being used, based on repr.
+    // Currently only Dolby Vision EL is supported.
+    pl_shader enhancement_layer;
+};
+
+#define pl_color_decode_args(...) (&(struct pl_color_decode_args) { __VA_ARGS__ })
+
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
-// "special" color systems (XYZ, BT.2020-C, etc.). If `params` is left as NULL,
-// it defaults to &pl_color_adjustment_neutral.
+// "special" color systems (XYZ, BT.2020-C, etc.). If `args->color_adjustment`
+// is left as NULL, it defaults to &pl_color_adjustment_neutral.
 //
 // Note: This function always returns PC-range RGB with independent alpha.
 // It mutates the pl_color_repr to reflect the change.
 //
 // Note: For DCDM XYZ decoding input is expected to be linear, use
 // `pl_shader_linearize` before calling this function.
+PL_API void pl_shader_decode_color_ex(pl_shader sh,
+                                      const struct pl_color_decode_args *args);
+
+// Backwards compatibility wrapper around `pl_shader_decode_color_ex`.
+PL_DEPRECATED_IN(v7.368)
 PL_API void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                                    const struct pl_color_adjustment *params);
 

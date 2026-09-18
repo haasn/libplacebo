@@ -169,6 +169,69 @@ int main()
     float pc10to16 = pl_color_repr_normalize(&pc_repr);
     REQUIRE_FEQ(pc10to16 * 1000/65535., 1000/1023., 1e-7);
 
+#define BITVALUES(N, a, b, c, d) {                              \
+    (a) / ((1LL << (N)) - 1.0f), (b) / ((1LL << (N)) - 1.0f),   \
+    (c) / ((1LL << (N)) - 1.0f), (d) / ((1LL << (N)) - 1.0f),   \
+}
+
+    // Test pl_color_repr_limits()
+    static const struct {
+        struct pl_color_repr repr;
+        float min[4], max[4];
+    } limit_tests[] = {
+        {
+            .repr.levels = PL_COLOR_LEVELS_LIMITED,
+            .min  = BITVALUES(8,  16,  16,  16,   0),
+            .max  = BITVALUES(8, 235, 240, 240, 255),
+        }, {
+            .repr.levels = PL_COLOR_LEVELS_LIMITED,
+            .repr.bits = { .color_depth = 10, .sample_depth = 16 },
+            .min  = BITVALUES(16,  64,  64,  64,    0),
+            .max  = BITVALUES(16, 940, 960, 960, 1023),
+        }, {
+            .repr.levels = PL_COLOR_LEVELS_LIMITED,
+            .repr.bits = { .color_depth = 10, .sample_depth = 16, .bit_shift = 6 },
+            .min  = BITVALUES(16,  4096,  4096,  4096,     0),
+            .max  = BITVALUES(16, 60160, 61440, 61440, 65472),
+        }, {
+            .repr.levels = PL_COLOR_LEVELS_LIMITED,
+            .repr.bits = { .color_depth = 16 },
+            .min  = BITVALUES(16,  4096,  4096,  4096,     0),
+            .max  = BITVALUES(16, 60160, 61440, 61440, 65535),
+        }, {
+            .repr.levels = PL_COLOR_LEVELS_FULL,
+            .repr.bits = { .color_depth = 10, .sample_depth = 16 },
+            .min  = BITVALUES(16,    0,    0,    0,    0),
+            .max  = BITVALUES(16, 1023, 1023, 1023, 1023),
+        }, {
+            .repr.sys  = PL_COLOR_SYSTEM_XYZ,
+            .repr.bits = { .sample_depth = 16, .color_depth = 12, .bit_shift = 4 },
+            .min  = BITVALUES(16,     0,     0,     0,     0),
+            .max  = BITVALUES(16, 65520, 65520, 65520, 65520),
+        }, {
+            .repr.sys  = PL_COLOR_SYSTEM_YCGCO_RE,
+            .repr.bits = { .color_depth = 10, .sample_depth = 16 },
+            .min  = BITVALUES(16,   0, 257, 257,    0),
+            .max  = BITVALUES(16, 255, 767, 767, 1023),
+        }, {
+            .repr.sys  = PL_COLOR_SYSTEM_YCGCO_RO,
+            .repr.bits = { .color_depth = 10, .sample_depth = 16 },
+            .min  = BITVALUES(16,   0,    1,    1,    0),
+            .max  = BITVALUES(16, 511, 1023, 1023, 1023),
+        },
+    };
+
+#undef BITVALUES
+
+    for (int i = 0; i < PL_ARRAY_SIZE(limit_tests); i++) {
+        float min[4], max[4];
+        pl_color_repr_limits(&limit_tests[i].repr, min, max);
+        for (int c = 0; c < 4; c++) {
+            REQUIRE_FEQ(min[c], limit_tests[i].min[c], 1e-6);
+            REQUIRE_FEQ(max[c], limit_tests[i].max[c], 1e-6);
+        }
+    }
+
     const struct pl_raw_primaries *bt709, *bt2020, *dcip3;
     bt709 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
     bt2020 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020);

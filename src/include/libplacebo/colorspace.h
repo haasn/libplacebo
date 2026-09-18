@@ -146,6 +146,24 @@ struct pl_dovi_metadata {
         float mmr_constant[8];
         float mmr_coeffs[8][3 /* order */][7];
     } comp[3];
+
+    // Non-linear inverse quantization (NLQ) parameters for FEL composition.
+    // Used only when an enhancement layer is used. Ignored for MEL and non-FEL
+    // profile 7 streams. When `nlq_active` is false the rest of these fields are
+    // unused and only BL-only reshape is performed.
+    //
+    // LINEAR_DZ dequantization:
+    //   residual = sign(el_centered) *
+    //              (|el_centered| * deadzone_slope + deadzone_threshold)
+    // The (2^eld - 1) factor is pre-folded into `deadzone_slope` and the
+    // -0.5*S half-pixel correction (from the spec's (2|rr|-1) rounding) is
+    // absorbed into `deadzone_threshold`.
+    bool nlq_active;
+    struct pl_dovi_nlq_data {
+        float offset;             // normalized to [0.0, 1.0] based on EL bit depth
+        float deadzone_slope;     // (2^el_bit_depth - 1) * S / 2^coef_log2_denom
+        float deadzone_threshold; // (T - S/2) / 2^coef_log2_denom
+    } nlq[3];
 };
 
 // Struct describing the underlying color system and representation. This
@@ -190,6 +208,12 @@ PL_API void pl_color_repr_merge(struct pl_color_repr *orig,
 // it has already been sampled by the GPU. If unknown, the color and sample
 // depth will both be inferred as 8 bits for the purposes of this conversion.
 PL_API float pl_color_repr_normalize(struct pl_color_repr *repr);
+
+// Compute the stored value limits for the given color representation,
+// including the effects of the bit encoding scheme. This can be used to
+// compute a hard bound on the stored texel values
+PL_API void pl_color_repr_limits(const struct pl_color_repr *repr,
+                                 float out_min[4], float out_max[4]);
 
 // Guesses the best color levels based on the specified color levels and
 // falling back to using the color system instead. YCbCr-like systems are

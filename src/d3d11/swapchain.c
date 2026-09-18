@@ -208,7 +208,7 @@ static bool set_swapchain_metadata(struct d3d11_ctx *ctx,
 {
     IDXGISwapChain4 *swapchain4 = NULL;
     bool ret = false;
-    bool is_hdr = pl_color_space_is_hdr(&csp_map->out_csp);
+    bool is_hdr = pl_color_transfer_is_hdr(csp_map->out_csp.transfer);
     DXGI_HDR_METADATA_HDR10 hdr10 = is_hdr ?
         set_hdr10_metadata(&csp_map->out_csp.hdr) : (DXGI_HDR_METADATA_HDR10){ 0 };
 
@@ -297,7 +297,7 @@ static void pick_colorspace(pl_swapchain sw, struct d3d11_csp_mapping *csp_map,
 
     // HDR10 output works only for DXGI_FORMAT_R10G10B10A2_UNORM, even though
     // it says csp is supported, the HDR pass-through makes only sense with rgb10a2.
-    if (pl_color_space_is_hdr(hint) &&
+    if (pl_color_transfer_is_hdr(hint->transfer) &&
         csp_map->d3d11_fmt == DXGI_FORMAT_R10G10B10A2_UNORM &&
         d3d11_csp_supported(ctx, swapchain3, DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020))
     {
@@ -360,7 +360,7 @@ static enum DXGI_FORMAT pick_format(pl_swapchain sw,
     if (use_16_bits && d3d11_format_supported(ctx, DXGI_FORMAT_R16G16B16A16_FLOAT))
         return DXGI_FORMAT_R16G16B16A16_FLOAT;
 
-    bool use_10_bits = pl_color_space_is_hdr(hint) ||
+    bool use_10_bits = pl_color_transfer_is_hdr(hint->transfer) ||
                        pl_color_primaries_is_wide_gamut(hint->primaries) ||
                        !p->params.disable_10bit_sdr;
     // If >2 alpha bits are requested, don't use rgb10a2, drop to rgba8 instead.

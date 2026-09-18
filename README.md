@@ -18,7 +18,7 @@ on both quality and performance. These include features such as the following:
   histogram, scene change detection, dynamic exposure control, perceptual gamut
   stretching, contrast recovery and more.
 - Native support for **Dolby Vision HDR**, including Profile 5 conversion to
-  HDR/PQ or SDR, reading DV side data, and reshaping. (BL only, currently)
+  HDR/PQ or SDR, reading DV side data, and reshaping.
 - A colorimetrically accurate **color management** engine with support for
   soft gamut mapping, ICC profiles, accurate ITU-R BT.1886 emulation, black
   point compensation, and custom 3DLUTs (.cube).

@@ -39,9 +39,15 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
             qf = cmd->pool->qf;
     }
 
+    // A barrier without any access of its own hands the image over to an
+    // external user (pl_vulkan_hold_ex), who may write to it. It has to be
+    // ordered after every previous read and write on every queue, so treat it
+    // as a write for the purpose of dependency tracking
+    bool is_sync = stage == VK_PIPELINE_STAGE_2_NONE;
     struct vk_sync_scope last;
     bool is_trans = layout != tex_vk->layout, is_xfer = qf != tex_vk->qf;
-    last = vk_sem_barrier(cmd, &tex_vk->sem, stage, access, is_trans || is_xfer);
+    last = vk_sem_barrier(cmd, &tex_vk->sem, stage, access,
+                          is_trans || is_xfer || is_sync);
 
     VkImageMemoryBarrier2 barr = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -66,15 +72,21 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         barr.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
+    // A synchronization point without any access stage of its own has to
+    // wait for all commands instead, a wait limited to no stage orders nothing
+    VkPipelineStageFlags2 wait_stage = stage;
+    if (wait_stage == VK_PIPELINE_STAGE_2_NONE)
+        wait_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
     if (tex_vk->ext_deps.num) {
         // We need to guarantee that all external dependencies are satisfied
         // before the barrier begins executing. The easiest way to ensure this
         // is to add the stage mask at which we wait for the external dependency
         // to the source stage mask of the image barrier.
-        barr.srcStageMask |= stage;
+        barr.srcStageMask |= wait_stage;
     }
 
-    if (last.access || is_trans || is_xfer) {
+    if (is_trans || is_xfer || (last.access && !is_sync)) {
         vk_cmd_barrier(cmd, &(VkDependencyInfo) {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .imageMemoryBarrierCount = 1,
@@ -87,7 +99,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     vk_cmd_callback(cmd, VK_CB_FUNC(vk_tex_deref), gpu, tex);
 
     for (int i = 0; i < tex_vk->ext_deps.num; i++)
-        vk_cmd_dep(cmd, stage, tex_vk->ext_deps.elem[i]);
+        vk_cmd_dep(cmd, wait_stage, tex_vk->ext_deps.elem[i]);
     tex_vk->ext_deps.num = 0;
 }
 

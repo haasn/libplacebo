@@ -29,11 +29,6 @@
 
 pl_gpu pl_gpu_create_vk(struct vk_ctx *vk);
 
-// This function takes the current graphics command and steals it from the
-// GPU, so the caller can do custom vk_cmd_ calls on it. The caller should
-// submit it as well.
-struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu);
-
 // Print memory usage statistics
 void pl_vk_print_heap(pl_gpu, enum pl_log_level);
 

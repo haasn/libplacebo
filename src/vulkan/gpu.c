@@ -772,25 +772,6 @@ static bool vk_gpu_is_failed(pl_gpu gpu)
     return vk->failed;
 }
 
-struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
-{
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-
-    pl_mutex_lock(&p->recording);
-    struct vk_cmd *cmd = p->cmd;
-    p->cmd = NULL;
-    pl_mutex_unlock(&p->recording);
-
-    struct vk_cmdpool *pool = vk->pool_graphics;
-    if (!cmd || cmd->pool != pool) {
-        vk_cmd_submit(&cmd);
-        cmd = vk_cmd_begin(pool, NULL);
-    }
-
-    return cmd;
-}
-
 void pl_vk_print_heap(pl_gpu gpu, enum pl_log_level lev)
 {
     struct pl_vk *p = PL_PRIV(gpu);

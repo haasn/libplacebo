@@ -103,6 +103,49 @@ static inline void reshape_poly(pl_shader sh)
 }
 #endif
 
+void sh_dovi_compose_nlq(pl_shader sh, const struct pl_dovi_metadata *data,
+                         ident_t el_signal)
+{
+#ifdef PL_HAVE_DOVI
+    if (!data || !data->nlq_active)
+        return;
+
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    float offset[3], slope[3], threshold[3];
+    for (int c = 0; c < 3; c++) {
+        offset[c] = data->nlq[c].offset;
+        slope[c] = data->nlq[c].deadzone_slope;
+        threshold[c] = data->nlq[c].deadzone_threshold;
+    }
+
+    ident_t off = sh_var(sh, (struct pl_shader_var) {
+        .var  = pl_var_vec3("nlq_offset"),
+        .data = offset,
+    });
+    ident_t slp = sh_var(sh, (struct pl_shader_var) {
+        .var  = pl_var_vec3("nlq_slope"),
+        .data = slope,
+    });
+    ident_t thr = sh_var(sh, (struct pl_shader_var) {
+        .var  = pl_var_vec3("nlq_threshold"),
+        .data = threshold,
+    });
+
+    // LINEAR_DZ dequantization. The (2^eld - 1) factor and the -0.5*S
+    // half-pixel correction are pre-folded into slope/threshold by
+    // pl_map_dovi_metadata, so the per-pixel form collapses to:
+    //   residual = sign(el_centered) * (|el_centered| * slope + threshold)
+    // sign(0) == 0 covers the spec's rr==0 carve-out exactly.
+#pragma GLSL /* sh_dovi_compose_nlq */                                  \
+    {                                                                   \
+    vec3 el_centered = $el_signal().rgb - $off;                         \
+    color.rgb += sign(el_centered) * (abs(el_centered) * $slp + $thr);  \
+    }
+#endif
+}
+
 void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
 {
 #ifdef PL_HAVE_DOVI
@@ -272,9 +315,12 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
 #endif
 }
 
-void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
-                            const struct pl_color_adjustment *params)
+void pl_shader_decode_color_ex(pl_shader sh,
+                               const struct pl_color_decode_args *args)
 {
+    struct pl_color_repr *repr = args->repr;
+    const struct pl_color_adjustment *params = args->color_adjustment;
+
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
@@ -290,6 +336,15 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 
     if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
         pl_shader_dovi_reshape(sh, repr->dovi);
+
+    // Dolby Vision FEL composition
+    if (args->enhancement_layer && repr->sys == PL_COLOR_SYSTEM_DOLBYVISION &&
+        repr->dovi && repr->dovi->nlq_active)
+    {
+        ident_t el = sh_subpass(sh, args->enhancement_layer);
+        if (el)
+            sh_dovi_compose_nlq(sh, repr->dovi, el);
+    }
 
     enum pl_color_system orig_sys = repr->sys;
     pl_transform3x3 tr = pl_color_repr_decode(repr, params);
@@ -459,6 +514,15 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     GLSL("}\n");
 }
 
+void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
+                            const struct pl_color_adjustment *params)
+{
+    pl_shader_decode_color_ex(sh, pl_color_decode_args(
+        .repr             = repr,
+        .color_adjustment = params,
+    ));
+}
+
 void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
@@ -577,9 +641,8 @@ static ident_t sh_luma_coeffs(pl_shader sh, const struct pl_color_space *csp)
     pl_matrix3x3 rgb2xyz;
     rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(csp->primaries));
 
-    // FIXME: Cannot use `const vec3` due to glslang bug #2025
     ident_t coeffs = sh_fresh(sh, "luma_coeffs");
-    GLSLH("#define "$" vec3("$", "$", "$") \n", coeffs,
+    GLSLH("const vec3 "$" = vec3("$", "$", "$"); \n", coeffs,
           SH_FLOAT(rgb2xyz.m[1][0]), // RGB->Y vector
           SH_FLOAT(rgb2xyz.m[1][1]),
           SH_FLOAT(rgb2xyz.m[1][2]));
@@ -602,6 +665,8 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         .out_min    = &csp_min,
         .out_max    = &csp_max,
     ));
+
+    csp_min = pl_signal_black(csp_min, PL_HDR_NORM);
 
     // Note that this clamp may technically violate the definition of
     // ITU-R BT.2100, which allows for sub-blacks and super-whites to be
@@ -736,6 +801,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         .out_max    = &csp_max,
     ));
 
+    csp_min = pl_signal_black(csp_min, PL_HDR_NORM);
+
     GLSL("// pl_shader_delinearize \n");
     if (pl_color_space_is_black_scaled(csp) &&
         csp->transfer != PL_COLOR_TRC_HLG &&
@@ -862,13 +929,19 @@ void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
     float offset = 1.0 / (1 + expf(slope * center));
     float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
 
+    // Use a logit transform with an offset bias. This is algebraically
+    // equivalent to the center-based form, but is more numerically stable and
+    // avoids the less robust log(1/x - 1).
     GLSL("// pl_shader_sigmoidize                                 \n"
+         "{                                                       \n"
          "color.rgb = clamp(color.rgb, 0.0, 1.0);                 \n"
-         "color.rgb = vec3("$") - vec3("$") *                     \n"
-         "    log(vec3(1.0) / (color.rgb * vec3("$") + vec3("$")) \n"
-         "        - vec3(1.0));                                   \n",
-         SH_FLOAT(center), SH_FLOAT(1.0 / slope),
-         SH_FLOAT(scale), SH_FLOAT(offset));
+         "vec3 sig = color.rgb * vec3("$") + vec3("$");           \n"
+         "color.rgb = (log(sig / (1.0 - sig))                     \n"
+         "             - log("$" / (1.0 - "$"))) * vec3("$");     \n"
+         "}                                                       \n",
+         SH_FLOAT(scale), SH_FLOAT(offset),
+         SH_FLOAT(offset), SH_FLOAT(offset),
+         SH_FLOAT(1.0 / slope));
 }
 
 void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
@@ -884,13 +957,16 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
     float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
 
     GLSL("// pl_shader_unsigmoidize                                 \n"
-         "color.rgb = clamp(color.rgb, 0.0, 1.0);                    \n"
-         "color.rgb = vec3("$") /                                    \n"
-         "    (vec3(1.0) + exp(vec3("$") * (vec3("$") - color.rgb))) \n"
-         "    - vec3("$");                                           \n",
-         SH_FLOAT(1.0 / scale),
-         SH_FLOAT(slope), SH_FLOAT(center),
-         SH_FLOAT(offset / scale));
+         "{                                                         \n"
+         "color.rgb = clamp(color.rgb, 0.0, 1.0);                   \n"
+         "float bias = log("$" / (1.0 - "$"));                      \n"
+         "color.rgb = (vec3(1.0) / (vec3(1.0) +                     \n"
+         "                exp(-(color.rgb * vec3("$") + bias)))     \n"
+         "             - 1.0 / (1.0 + exp(-bias))) * vec3("$");     \n"
+         "}                                                         \n",
+         SH_FLOAT(offset), SH_FLOAT(offset),
+         SH_FLOAT(slope),
+         SH_FLOAT(1.0 / scale));
 }
 
 const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DETECT_DEFAULTS };
@@ -1395,7 +1471,7 @@ void pl_shader_extract_features(pl_shader sh, struct pl_color_space csp)
          "        / (vec3(1.0) + %f * lms);         \n"
          "lms = pow(lms, vec3(%f));                 \n"
          "float I = dot(vec3(%f, %f, %f), lms);     \n"
-         "color = vec4(I, 0.0, 0.0, 1.0);           \n"
+         "color.rgb = vec3(I, 0.0, 0.0);            \n"
          "}                                         \n",
          PL_COLOR_SDR_WHITE / 10000,
          SH_MAT3(pl_ipt_rgb2lms(pl_raw_primaries_get(csp.primaries))),
@@ -1671,10 +1747,18 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     if (fabs(tone.input_min - tone.output_min) < 1e-6)
         tone.output_min = tone.input_min;
 
+    // Don't clamp/anchor the tone curve to the infinite-contrast sentinel,
+    // otherwise an active tone map re-lifts true black off zero.
+    tone.input_min  = pl_signal_black(tone.input_min,  tone.input_scaling);
+    tone.output_min = pl_signal_black(tone.output_min, tone.output_scaling);
+
     if (!params->inverse_tone_mapping) {
         // Never exceed the source unless requested, but still allow
-        // black point adaptation
-        tone.output_max = PL_MIN(tone.output_max, tone.input_max);
+        // black point adaptation. Adjust the input lumiance, such that the BPC
+        // is calculated correctly, for the output dynamic range. This also
+        // fixes clipping if the metadata is under-reported, which is actually
+        // quite common for Dolby Vision content.
+        tone.input_max = PL_MAX(tone.input_max, tone.output_max);
     }
 
     const int *lut3d_size_def = pl_color_map_default_params.lut3d_size;
@@ -1704,6 +1788,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .out_min    = &gamut.min_luma,
         .out_max    = &gamut.max_luma,
     ));
+
+    gamut.min_luma = pl_signal_black(gamut.min_luma, PL_HDR_PQ);
 
     // Clip the gamut mapping output to the input gamut if disabled
     if (!params->gamut_expansion && gamut.function->bidirectional) {

@@ -302,9 +302,8 @@ pkg.generate(
 tdep_static = declare_dependency(
     dependencies: build_deps,
     include_directories: [ inc, include_directories('.') ],
-    compile_args: '-DPL_STATIC'
-    # TODO: Define objects here once Meson 1.1.0 is ok to use
-    # objects: lib.extract_all_objects(recursive: false)
+    compile_args: '-DPL_STATIC',
+    objects: lib.extract_all_objects(recursive: false)
   )
 
 tdep_shared = declare_dependency(

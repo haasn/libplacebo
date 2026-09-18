@@ -94,7 +94,8 @@ enum pl_deinterlace_algorithm {
     // No-op deinterlacing, just sample the weaved frame un-touched.
     PL_DEINTERLACE_WEAVE = 0,
 
-    // Naive bob deinterlacing. Doubles the field lines vertically.
+    // Naive bob deinterlacing. Missing lines are averaged from their
+    // neighboring field lines.
     PL_DEINTERLACE_BOB,
 
     // "Yet another deinterlacing filter". Deinterlacer with temporal and

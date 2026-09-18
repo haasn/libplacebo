@@ -237,6 +237,10 @@ done: ;
     // Scale factor for dither rounding
     GLSL("const float scale = %llu.0; \n", (1LLU << new_depth) - 1);
 
+    // Don't let the dither pattern lift true black off zero. Clamp small noise
+    // near zero, which is likely produced by floating point inaccuracies.
+    GLSL("color = mix(color, vec4(0.0), lessThan(abs(color), vec4(1e-5))); \n");
+
     const float gamma = approx_gamma(params->transfer);
     if (gamma != 1.0f && new_depth <= 4) {
         GLSL("const float gamma = "$";                  \n"

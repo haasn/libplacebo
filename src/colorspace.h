@@ -19,6 +19,15 @@
 
 #include <libplacebo/colorspace.h>
 
+// PL_COLOR_HDR_BLACK is used as a sentinel for "infinite contrast", because a
+// nominal black point of exactly 0.0 instead signals "unspecified". This
+// function clips all values below PL_COLOR_HDR_BLACK as they are virtually all
+// absolute black as libplacebo is concerned.
+static inline float pl_signal_black(float min, enum pl_hdr_scaling scaling)
+{
+    return min <= pl_hdr_rescale(PL_HDR_NITS, scaling, PL_COLOR_HDR_BLACK) ? 0 : min;
+}
+
 // Common constants for SMPTE ST.2084 (PQ)
 static const float PQ_M1 = 2610./4096 * 1./4,
                    PQ_M2 = 2523./4096 * 128,

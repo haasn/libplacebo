@@ -16,11 +16,9 @@ foreach t : tests
   if gpu_tests.contains(t)
     sources += 'gpu_tests.c'
   endif
-  # TODO: Define objects in tdep_static once Meson 1.1.0 is ok to use
   ts += { 'test': t,
           'sources': sources,
-          'deps': deps,
-          'objects': lib.extract_all_objects(recursive: false) }
+          'deps': deps }
 endforeach
 
 dav1d = dependency('dav1d', required: false)
