@@ -2720,6 +2720,11 @@ static void translate_srgb_color(float out_color[3], const float in_color[3],
         break;
     }
 
+    // The colors are display-referred, so on SDR targets map sRGB white onto
+    // the target white, regardless of the target's absolute luminance
+    if (!pl_color_transfer_is_hdr(csp->transfer))
+        srgb.hdr.max_luma = csp->hdr.max_luma;
+
     memcpy(out_color, in_color, sizeof(float[3]));
     pl_color_linearize(&srgb, out_color);
     pl_matrix3x3 tr = pl_get_color_mapping_matrix(src_prim, dst_prim,
