@@ -828,11 +828,27 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
         out->repr.sys = PL_COLOR_SYSTEM_RGB;
         out->repr.levels = PL_COLOR_LEVELS_FULL; // libav* ignores levels for RGB
 
+        // AVCOL_PRI_SMPTE428 (H.273 value 10) tags the channels as CIE 1931
+        // XYZ tristimulus values rather than an RGB primary set, e.g. for
+        // scene-linear XYZ delivered in a float RGB pixel format.
+        if (frame->color_primaries == AVCOL_PRI_SMPTE428)
+            out->repr.sys = PL_COLOR_SYSTEM_XYZ;
+
     } else if (!pl_color_system_is_ycbcr_like(out->repr.sys)) {
         // libav* likes leaving this as UNKNOWN (or even RGB) for YCbCr frames,
         // which confuses libplacebo since we infer UNKNOWN as RGB. To get
         // around this, explicitly infer a suitable colorspace.
         out->repr.sys = pl_color_system_guess_ycbcr(frame->width, frame->height);
+    }
+
+    // For XYZ data, "XYZ primaries" say nothing about the RGB space the data
+    // is referenced to (which decides the white point), so don't carry over
+    // lavu's mapping of them to CIE 1931 RGB. Instead, leave the primaries
+    // unset for the renderer to infer. See `pl_frame.color`.
+    if (out->repr.sys == PL_COLOR_SYSTEM_XYZ &&
+        frame->color_primaries == AVCOL_PRI_SMPTE428)
+    {
+        out->color.primaries = PL_COLOR_PRIM_UNKNOWN;
     }
 
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_ICC_PROFILE))) {
