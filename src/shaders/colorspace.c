@@ -347,7 +347,10 @@ void pl_shader_decode_color_ex(pl_shader sh,
     }
 
     enum pl_color_system orig_sys = repr->sys;
-    pl_transform3x3 tr = pl_color_repr_decode(repr, params);
+    pl_transform3x3 tr = pl_color_repr_decode_ex(repr, pl_color_repr_decode_params(
+        .adjustment = params,
+        .primaries  = args->primaries,
+    ));
 
     if (memcmp(&tr, &pl_transform3x3_identity, sizeof(tr))) {
         ident_t cmat = sh_var(sh, (struct pl_shader_var) {
@@ -525,6 +528,12 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 
 void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 {
+    pl_shader_encode_color_ex(sh, pl_color_encode_args( .repr = repr ));
+}
+
+void pl_shader_encode_color_ex(pl_shader sh, const struct pl_color_encode_args *args)
+{
+    const struct pl_color_repr *repr = args->repr;
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
@@ -617,7 +626,9 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 
     if (!skip) {
         struct pl_color_repr copy = *repr;
-        pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
+        pl_transform3x3 tr = pl_color_repr_decode_ex(&copy, pl_color_repr_decode_params(
+            .primaries = args->primaries,
+        ));
         pl_transform3x3_invert(&tr);
 
         ident_t cmat = sh_var(sh, (struct pl_shader_var) {

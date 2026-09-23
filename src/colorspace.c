@@ -1777,7 +1777,18 @@ static inline void apply_hue_sat(pl_matrix3x3 *m,
 pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
                                      const struct pl_color_adjustment *params)
 {
-    params = PL_DEF(params, &pl_color_adjustment_neutral);
+    return pl_color_repr_decode_ex(repr, pl_color_repr_decode_params(
+        .adjustment = params,
+    ));
+}
+
+pl_transform3x3 pl_color_repr_decode_ex(struct pl_color_repr *repr,
+                                        const struct pl_color_repr_decode_params *dparams)
+{
+    static const struct pl_color_repr_decode_params dparams_def = {0};
+    dparams = PL_DEF(dparams, &dparams_def);
+    const struct pl_color_adjustment *params =
+        PL_DEF(dparams->adjustment, &pl_color_adjustment_neutral);
 
     pl_matrix3x3 m;
     switch (repr->sys) {
@@ -1838,10 +1849,11 @@ pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         m = pl_matrix3x3_identity;
         break;
     case PL_COLOR_SYSTEM_XYZ: {
-        // For lack of anything saner to do, just assume the caller wants
-        // DCI-P3 primaries, which is a reasonable assumption.
-        const struct pl_raw_primaries *dst = pl_raw_primaries_get(PL_COLOR_PRIM_DCI_P3);
-        m = pl_get_xyz2rgb_matrix(dst);
+        // XYZ is device-independent, so the choice of primaries here decides
+        // the adopted white point (which XYZ value becomes RGB white). Default
+        // to DCI-P3, the reference space of DCDM X'Y'Z' (ST 428-1).
+        enum pl_color_primaries prim = PL_DEF(dparams->primaries, PL_COLOR_PRIM_DCI_P3);
+        m = pl_get_xyz2rgb_matrix(pl_raw_primaries_get(prim));
         break;
     }
     case PL_COLOR_SYSTEM_COUNT:

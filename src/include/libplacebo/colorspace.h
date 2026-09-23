@@ -746,10 +746,33 @@ PL_API pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 // Note: For BT.2100 ICtCp, this outputs in the color space L'M'S'. Further
 // non-linear processing must be done by the caller.
 //
-// Note: XYZ system is expected to be in DCDM X'Y'Z' encoding (ST 428-1), in
-// practice this means normalizing by (48.0 / 52.37) factor and applying 2.6 gamma
+// Note: For PL_COLOR_SYSTEM_XYZ, the input is expected to be linear light,
+// i.e. the transfer function (in practice ST 428-1, for DCDM X'Y'Z') must
+// already have been undone. The resulting RGB uses DCI-P3 primaries, the
+// reference space of DCDM. Use `pl_color_repr_decode_ex` to decode into a
+// different RGB color space.
 PL_API pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
                                             const struct pl_color_adjustment *params);
+
+struct pl_color_repr_decode_params {
+    // Color adjustment parameters. If NULL, defaults to
+    // `&pl_color_adjustment_neutral`.
+    const struct pl_color_adjustment *adjustment;
+
+    // The primaries of the RGB color space to decode into. Currently only
+    // relevant for PL_COLOR_SYSTEM_XYZ: XYZ tristimulus values are
+    // device-independent, so this choice decides which XYZ value decodes to
+    // RGB white (i.e. the adopted white point of the content), as well as the
+    // nominal gamut of the result. Defaults to PL_COLOR_PRIM_DCI_P3.
+    enum pl_color_primaries primaries;
+};
+
+#define pl_color_repr_decode_params(...) \
+    (&(struct pl_color_repr_decode_params) { __VA_ARGS__ })
+
+// Extended version of `pl_color_repr_decode`. `params` may be NULL.
+PL_API pl_transform3x3 pl_color_repr_decode_ex(struct pl_color_repr *repr,
+                                               const struct pl_color_repr_decode_params *params);
 
 // Common struct to describe an ICC profile
 struct pl_icc_profile {

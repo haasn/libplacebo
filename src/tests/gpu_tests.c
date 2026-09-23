@@ -701,6 +701,23 @@ static void pl_shader_tests(pl_gpu gpu)
         TEST_FBO_PATTERN(epsilon, "color system: %s", pl_color_system_name(sys));
     }
 
+    // XYZ roundtrip through explicit (non-default) primaries
+    sh = pl_dispatch_begin(dp);
+    pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
+    pl_shader_encode_color_ex(sh, pl_color_encode_args(
+        .repr       = &(struct pl_color_repr) { .sys = PL_COLOR_SYSTEM_XYZ },
+        .primaries  = PL_COLOR_PRIM_BT_2020,
+    ));
+    pl_shader_decode_color_ex(sh, pl_color_decode_args(
+        .repr       = &(struct pl_color_repr) { .sys = PL_COLOR_SYSTEM_XYZ },
+        .primaries  = PL_COLOR_PRIM_BT_2020,
+    ));
+    REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = fbo,
+    }));
+    TEST_FBO_PATTERN(1e-5, "%s", "color system: XYZ (BT.2020 primaries)");
+
     // Repeat this a few times to test the caching
     pl_cache cache = pl_cache_create(pl_cache_params( .log = gpu->log ));
     pl_gpu_set_cache(gpu, cache);
