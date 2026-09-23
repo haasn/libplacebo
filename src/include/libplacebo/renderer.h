@@ -576,6 +576,14 @@ struct pl_frame {
     void (*release)(pl_gpu gpu, struct pl_frame *frame);
 
     // Color representation / encoding / semantics of this frame.
+    //
+    // Note: For PL_COLOR_SYSTEM_XYZ, `color.primaries` denotes the RGB color
+    // space that the XYZ tristimulus values are decoded into (or encoded
+    // from), which decides the white point treated as neutral. Unless the
+    // frame is explicitly tagged as PL_COLOR_TRC_LINEAR, XYZ is assumed to be
+    // DCDM X'Y'Z' (SMPTE ST 428-1), i.e. ST 428-1 encoded DCI-P3, and any
+    // tagged primaries/transfer are ignored. Linear light XYZ honors the
+    // tagged primaries, defaulting to BT.2020 (D65) if unknown.
     struct pl_color_repr repr;
     struct pl_color_space color;
 

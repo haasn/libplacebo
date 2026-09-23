@@ -2075,6 +2075,7 @@ static bool pass_read_image(struct pass_state *pass)
 
     if (needs_conversion) {
         if (pass->img.repr.sys == PL_COLOR_SYSTEM_XYZ) {
+            // XYZ is decoded in linear light, into the frame's tagged primaries
             pl_shader_linearize(sh, &pass->img.color);
             pass->img.color.transfer = PL_COLOR_TRC_LINEAR;
         }
@@ -2096,6 +2097,7 @@ static bool pass_read_image(struct pass_state *pass)
 #endif
         pl_shader_decode_color_ex(sh, pl_color_decode_args(
             .repr              = &pass->img.repr,
+            .primaries         = pass->img.color.primaries,
             .color_adjustment  = params->color_adjustment,
             .enhancement_layer = el_sh,
         ));
@@ -3346,15 +3348,38 @@ static void fix_refs_and_rects(struct pass_state *pass)
     };
 }
 
+// For PL_COLOR_SYSTEM_XYZ frames, `color.primaries` denotes the RGB color
+// space that the (device-independent) XYZ tristimulus values are decoded into
+// or encoded from. In particular, this decides which XYZ value is treated as
+// reference white, and thus what chromatic adaptation is applied towards the
+// display. See `pl_color_repr_decode_params.primaries`.
+static void infer_xyz_color(struct pl_color_space *color)
+{
+    if (color->transfer == PL_COLOR_TRC_LINEAR) {
+        // Linear light XYZ (e.g. scene-referred camera data) is D65-referenced
+        // by convention. Honor explicitly tagged primaries, and otherwise
+        // default to a wide D65 gamut, to avoid needlessly limiting the
+        // (unbounded) XYZ gamut during gamut mapping.
+        if (!color->primaries)
+            color->primaries = PL_COLOR_PRIM_BT_2020;
+    } else {
+        // Anything else is assumed to be DCDM X'Y'Z' (SMPTE ST 428-1): a 2.6
+        // gamma encoding mastered on a reference projector with DCI white, so
+        // decode it into DCI-P3 and let the color mapping adapt the DCI white
+        // point towards the display. This deliberately overrides any tagged
+        // primaries, since in practice they are meaningless for DCDM (e.g.
+        // BT.709 fallbacks, or lavu's mapping of ST 428-1 to CIE 1931 RGB).
+        color->primaries = PL_COLOR_PRIM_DCI_P3;
+        color->transfer = PL_COLOR_TRC_ST428;
+    }
+}
+
 static void fix_frame(struct pl_frame *frame)
 {
     pl_tex tex = frame->planes[frame_ref(frame)].texture;
 
-    if (frame->repr.sys == PL_COLOR_SYSTEM_XYZ) {
-        // XYZ is implicity converted to linear DCI-P3 in pl_color_repr_decode
-        frame->color.primaries = PL_COLOR_PRIM_DCI_P3;
-        frame->color.transfer = PL_COLOR_TRC_ST428;
-    }
+    if (frame->repr.sys == PL_COLOR_SYSTEM_XYZ)
+        infer_xyz_color(&frame->color);
 
     // If the primaries are not known, guess them based on the resolution
     if (tex && !frame->color.primaries)
