@@ -1623,10 +1623,11 @@ retry_ssbo:
 bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
                                   struct pl_hdr_metadata *out)
 {
-    if (!state || state->type != PL_SHADER_OBJ_COLOR_MAP)
+    struct sh_color_map_obj *obj = SH_OBJ_LOOKUP(state, PL_SHADER_OBJ_COLOR_MAP,
+                                                 struct sh_color_map_obj);
+    if (!obj)
         return false;
 
-    struct sh_color_map_obj *obj = state->priv;
     update_peak_buf(state->gpu, obj, false);
     if (!obj->peak.avg_pq)
         return false;
@@ -1649,10 +1650,11 @@ bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
 
 void pl_reset_detected_peak(pl_shader_obj state)
 {
-    if (!state || state->type != PL_SHADER_OBJ_COLOR_MAP)
+    struct sh_color_map_obj *obj = SH_OBJ_LOOKUP(state, PL_SHADER_OBJ_COLOR_MAP,
+                                                 struct sh_color_map_obj);
+    if (!obj)
         return;
 
-    struct sh_color_map_obj *obj = state->priv;
     pl_buf readback = obj->peak.readback;
     pl_buf_destroy(state->gpu, &obj->peak.buf);
     memset(&obj->peak, 0, sizeof(obj->peak));

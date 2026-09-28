@@ -270,6 +270,7 @@ enum pl_shader_obj_type {
     PL_SHADER_OBJ_AV1_GRAIN,
     PL_SHADER_OBJ_FILM_GRAIN,
     PL_SHADER_OBJ_RESHAPE,
+    PL_SHADER_OBJ_MOTION,
 };
 
 struct pl_shader_obj_t {
@@ -292,6 +293,19 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
 void *sh_alloc_obj(pl_gpu gpu, pl_shader_obj *ptr,
                    enum pl_shader_obj_type type, size_t priv_size,
                    void (*uninit)(pl_gpu gpu, void *priv));
+
+// Returns `obj`'s private data, or NULL if `obj` is NULL or of the wrong type.
+// Never creates a new shader, unlike `sh_require_obj`.
+static inline void *sh_lookup_obj(pl_shader_obj obj, enum pl_shader_obj_type type)
+{
+    if (!obj || obj->type != type)
+        return NULL;
+
+    return obj->priv;
+}
+
+#define SH_OBJ_LOOKUP(obj, type, t) \
+    ((t*) sh_lookup_obj(obj, type))
 
 // Initializes a PRNG. The resulting string will directly evaluate to a
 // pseudorandom, uniformly distributed vec3 from [0.0,1.0). Since this
