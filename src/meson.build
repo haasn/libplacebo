@@ -75,6 +75,7 @@ headers = [
   'shaders/film_grain.h',
   'shaders/icc.h',
   'shaders/lut.h',
+  'shaders/motion.h',
   'shaders/sampling.h',
   'shaders.h',
   'swapchain.h',

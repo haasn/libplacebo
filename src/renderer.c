@@ -25,6 +25,7 @@
 #include "dispatch.h"
 
 #include <libplacebo/renderer.h>
+#include <libplacebo/shaders/motion.h>
 
 struct cached_frame {
     uint64_t signature;
@@ -68,6 +69,7 @@ struct pl_renderer_t {
     // Shader resource objects and intermediate textures (FBOs)
     pl_shader_obj tone_map_state;
     pl_shader_obj dither_state;
+    pl_shader_obj motion_state;
     pl_shader_obj grain_state[4];
     pl_shader_obj lut_state[3];
     pl_shader_obj icc_state[2];
@@ -158,6 +160,7 @@ static void renderer_uninit(pl_renderer rr)
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->tone_map_state);
     pl_shader_obj_destroy(&rr->dither_state);
+    pl_shader_obj_destroy(&rr->motion_state);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->lut_state); i++)
         pl_shader_obj_destroy(&rr->lut_state[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_state); i++)
@@ -226,6 +229,7 @@ void pl_renderer_flush_cache(pl_renderer rr)
     rr->frames.num = 0;
 
     pl_reset_detected_peak(rr->tone_map_state);
+    pl_motion_reset(rr->motion_state);
 }
 
 const struct pl_render_params pl_render_fast_params = { PL_RENDER_DEFAULTS };
