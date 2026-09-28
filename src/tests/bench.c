@@ -4,6 +4,7 @@
 #include <libplacebo/vulkan.h>
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/deinterlacing.h>
+#include <libplacebo/shaders/motion.h>
 #include <libplacebo/shaders/sampling.h>
 
 enum {
@@ -393,6 +394,94 @@ static void bench_bwdif(pl_shader sh, pl_shader_obj *state, pl_tex src)
     ));
 }
 
+// Maintain a frame signature for each frame. Motion estimation invalidates
+// it's cached data upon non-sequential frame signatures between calls.
+static uint64_t motion_sig = 1;
+
+static void run_motion(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
+                       pl_tex src_a, pl_tex src_b,
+                       enum pl_motion_direction dir, bool global,
+                       const struct pl_motion_estimate_params *params)
+{
+    const uint64_t sig = motion_sig++;
+
+    REQUIRE(pl_motion_estimate(pl_motion_estimate_input(
+        .gpu        = gpu,
+        .dispatch   = dp,
+        .a          = {
+            .tex    = src_a,
+            .sig    = sig,
+            .repr   = pl_color_repr_rgb,
+            .color  = pl_color_space_srgb,
+        },
+        .b          = {
+            .tex    = src_b,
+            .sig    = sig + 1,
+            .repr   = pl_color_repr_rgb,
+            .color  = pl_color_space_srgb,
+        },
+        .direction  = dir,
+        .estimate_global = global,
+        .state      = state,
+    ), params));
+}
+
+// Estimate motion between sequential pairs of frames, resetting the temporal
+// state upon looping, or on every call if `cold`.
+static void run_motion_seq(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
+                           pl_tex *srcs, int num_src, unsigned long iter,
+                           bool cold, enum pl_motion_direction dir, bool global,
+                           const struct pl_motion_estimate_params *params)
+{
+    const int i = iter % (num_src - 1);
+    if (!i || cold)
+        pl_motion_reset(*state); // no-op while the state is still NULL
+
+    // Nothing is rendered into an FBO, so throttle on the source texture
+    // instead, which was last used `num_src - 1` iterations ago
+    while (pl_tex_poll(gpu, srcs[i + 1], UINT64_MAX))
+        ; // do nothing
+
+    run_motion(gpu, dp, state, srcs[i], srcs[i + 1], dir, global, params);
+}
+
+static void bench_motion(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
+                         pl_tex *srcs, int num_src, unsigned long iter)
+{
+    run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
+                   PL_MOTION_FORWARD, false, NULL);
+}
+
+static void bench_motion_cold(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
+                              pl_tex *srcs, int num_src, unsigned long iter)
+{
+    run_motion_seq(gpu, dp, state, srcs, num_src, iter, true,
+                   PL_MOTION_FORWARD, false, NULL);
+}
+
+static void bench_motion_bidir(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
+                               pl_tex *srcs, int num_src, unsigned long iter)
+{
+    run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
+                   PL_MOTION_BOTH, false, NULL);
+}
+
+static void bench_motion_block4(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
+                                pl_tex *srcs, int num_src, unsigned long iter)
+{
+    run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
+                   PL_MOTION_FORWARD, false,
+                   pl_motion_estimate_params( .block_size = 4 ));
+}
+
+static void bench_motion_global(pl_gpu gpu, pl_dispatch dp,
+                                pl_shader_obj *state, pl_tex *srcs, int num_src,
+                                unsigned long iter)
+{
+    run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
+                   PL_MOTION_FORWARD, true, NULL);
+}
+
 static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_film_grain_params params = {
@@ -590,6 +679,14 @@ int main()
     benchmark(vk->gpu, "h274_grain", BENCH_SH(bench_h274_grain));
     benchmark(vk->gpu, "reshape_poly", BENCH_SH(bench_reshape_poly));
     benchmark(vk->gpu, "reshape_mmr", BENCH_SH(bench_reshape_mmr));
+
+    if (vk->gpu->glsl.compute) {
+        benchmark(vk->gpu, "motion", BENCH_MULTI(bench_motion));
+        benchmark(vk->gpu, "motion_cold", BENCH_MULTI(bench_motion_cold));
+        benchmark(vk->gpu, "motion_bidir", BENCH_MULTI(bench_motion_bidir));
+        benchmark(vk->gpu, "motion_block4", BENCH_MULTI(bench_motion_block4));
+        benchmark(vk->gpu, "motion_global", BENCH_MULTI(bench_motion_global));
+    }
 
     pl_vulkan_destroy(&vk);
     pl_log_destroy(&log);
