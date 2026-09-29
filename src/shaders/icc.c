@@ -655,6 +655,10 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
             uint16_t *data = ((uint16_t *) datap) + offset;
             cmsDoTransform(tf, tmp, data, s_r);
 
+            // The transform does not write the extra channel
+            for (int r = 0; r < s_r; r++)
+                data[r * 4 + 3] = 0;
+
             if (!icc->params.force_bpc)
                 continue;
 
