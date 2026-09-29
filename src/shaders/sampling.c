@@ -915,29 +915,29 @@ static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
 {
     const struct sh_sampler_obj *obj = params->priv;
     pl_filter filt = obj->filter;
+    pl_assert(params->width * params->height * params->comps ==
+              SCALER_LUT_SIZE * filt->row_stride);
+    pl_assert(filt->params.row_stride_align == 4); // always 4 components
 
-    if (filt->radius == filt->radius_zero) {
-        // Main lobe covers entire radius, so all weights are positive, meaning
-        // we can use the linear resampling trick
-        for (int n = 0; n < SCALER_LUT_SIZE; n++) {
-            const float *weights = filt->weights + n * filt->row_stride;
-            float *row = (float *) data + n * filt->row_stride;
+    for (int n = 0; n < SCALER_LUT_SIZE; n++) {
+        const float *weights = filt->weights + n * filt->row_stride;
+        float *row = (float *) data + n * filt->row_stride;
+        if (filt->radius == filt->radius_zero) {
+            // Main lobe covers entire radius, so all weights are positive,
+            // meaning we can use the linear resampling trick
             pl_assert(filt->row_size % 2 == 0);
-            int i = 0;
-            for (; i < filt->row_size; i += 2) {
+            for (int i = 0; i < filt->row_size; i += 2) {
                 const float w0 = weights[i], w1 = weights[i+1];
                 assert(w0 + w1 >= 0.0f);
                 row[i] = w0 + w1;
                 row[i+1] = w1 / (w0 + w1);
             }
-            pl_assert(filt->params.row_stride_align == 4); // always 4 components
-            for (; i < filt->row_stride; i++)
-                row[i] = i >= 4 ? row[i - 4] : 0;
+        } else {
+            memcpy(row, weights, filt->row_size * sizeof(float));
         }
-    } else {
-        size_t entries = SCALER_LUT_SIZE * filt->row_stride;
-        pl_assert(params->width * params->height * params->comps == entries);
-        memcpy(data, filt->weights, entries * sizeof(float));
+
+        for (int i = filt->row_size; i < filt->row_stride; i++)
+            row[i] = i >= 4 ? row[i - 4] : 0;
     }
 }
 
