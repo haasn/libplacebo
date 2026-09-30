@@ -295,9 +295,28 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             };
 
             nk_layout_row_dynamic(nk, 24, 2);
-            nk_label(nk, "Display orientation:", NK_TEXT_LEFT);
-            p->target_rot = nk_combo(nk, rotations, 4, p->target_rot,
-                                     16, nk_vec2(nk_widget_width(nk), 100));
+            nk_label(nk, "Image rotation:", NK_TEXT_LEFT);
+            p->input->rotation = nk_combo(nk, rotations, 4, p->input->rotation,
+                                          16, nk_vec2(nk_widget_width(nk), 100));
+
+            static const char *fit_modes[PL_FIT_MODE_COUNT] = {
+                [PL_FIT_CONTAIN]    = "Contain",
+                [PL_FIT_COVER]      = "Cover",
+                [PL_FIT_FILL]       = "Fill",
+                [PL_FIT_SCALE_DOWN] = "Scale down",
+                [PL_FIT_PLACE]      = "Place",
+                [PL_FIT_RAW]        = "Raw (unscaled)",
+            };
+
+            nk_label(nk, "Image placement:", NK_TEXT_LEFT);
+            p->input->fit = nk_combo(nk, fit_modes, PL_FIT_MODE_COUNT, p->input->fit,
+                                     16, nk_vec2(nk_widget_width(nk), 500));
+
+            nk_label(nk, "Focus point:", NK_TEXT_LEFT);
+            if (nk_button_label(nk, "Center"))
+                p->input->focus = (pl_vec2df) { 0.5f, 0.5f };
+            nk_property_float(nk, "Focus X", 0, &p->input->focus.x, 1, 0.05f, 0.005f);
+            nk_property_float(nk, "Focus Y", 0, &p->input->focus.y, 1, 0.05f, 0.005f);
             nk_tree_pop(nk);
         }
 
@@ -308,28 +327,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             static const char *tscale_none = "None (No frame mixing)";
             #define SCALE_DESC(scaler, fallback) (par->scaler ? par->scaler->description : fallback)
 
-            static const char *zoom_modes[ZOOM_COUNT] = {
-                [ZOOM_PAD]        = "Pad to window",
-                [ZOOM_CROP]       = "Crop to window",
-                [ZOOM_STRETCH]    = "Stretch to window",
-                [ZOOM_FIT]        = "Fit inside window",
-                [ZOOM_RAW]        = "Unscaled (raw)",
-                [ZOOM_400]        = "400% zoom",
-                [ZOOM_200]        = "200% zoom",
-                [ZOOM_100]        = "100% zoom",
-                [ZOOM_50]         = " 50% zoom",
-                [ZOOM_25]         = " 25% zoom",
-            };
-
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
-            nk_label(nk, "Zoom mode:", NK_TEXT_LEFT);
-            int zoom = nk_combo(nk, zoom_modes, ZOOM_COUNT, p->target_zoom, 16, nk_vec2(nk_widget_width(nk), 500));
-            if (zoom != p->target_zoom) {
-                // Image crop may change
-                pl_renderer_flush_cache(p->renderer);
-                p->target_zoom = zoom;
-            }
-
             nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, SCALE_DESC(upscaler, scale_none), nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
@@ -580,7 +578,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_checkbox_label(nk, "Allow 1-frame delay", &ppar->allow_delayed);
 
             struct pl_hdr_metadata metadata;
-            if (pl_renderer_get_hdr_metadata(p->renderer, &metadata)) {
+            if (pl_renderer_get_hdr_metadata(p->input->renderer, &metadata)) {
                 nk_layout_row_dynamic(nk, 24, 2);
                 nk_label(nk, "Detected max luminance:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%.2f cd/m² (%.2f%% PQ)",
@@ -1084,7 +1082,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             if (nk_check_label(nk, "Ignore Dolby Vision metadata", p->ignore_dovi) != p->ignore_dovi) {
                 // Flush the renderer cache on changes, since this can
                 // drastically alter the subjective appearance of the stream
-                pl_renderer_flush_cache(p->renderer);
+                pl_renderer_flush_cache(p->input->renderer);
                 p->ignore_dovi = !p->ignore_dovi;
             }
 
@@ -1097,10 +1095,12 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 p->stats.pts_interval = p->stats.vsync_interval = (struct timing) {0};
 
             if (nk_button_label(nk, "Flush renderer cache"))
-                pl_renderer_flush_cache(p->renderer);
+                pl_renderer_flush_cache(p->input->renderer);
             if (nk_button_label(nk, "Recreate renderer")) {
-                pl_renderer_destroy(&p->renderer);
-                p->renderer = pl_renderer_create(p->log, p->win->gpu);
+                // Note: This is technically naughty, as the compositor manages
+                // the lifetime of the renderer. Just a debug/test option.
+                pl_renderer_destroy(&p->input->renderer);
+                p->input->renderer = pl_renderer_create(p->log, p->win->gpu);
             }
 
             if (nk_tree_push(nk, NK_TREE_NODE, "Shader passes / GPU timing", NK_MINIMIZED)) {
@@ -1124,11 +1124,11 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_label(nk, "Current PTS:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%.3f", p->stats.current_pts);
                 nk_label(nk, "Estimated FPS:", NK_TEXT_LEFT);
-                nk_labelf(nk, NK_TEXT_LEFT, "%.3f", pl_queue_estimate_fps(p->queue));
+                nk_labelf(nk, NK_TEXT_LEFT, "%.3f", pl_queue_estimate_fps(p->input->queue));
                 nk_label(nk, "Estimated vsync rate:", NK_TEXT_LEFT);
-                nk_labelf(nk, NK_TEXT_LEFT, "%.3f", pl_queue_estimate_vps(p->queue));
+                nk_labelf(nk, NK_TEXT_LEFT, "%.3f", pl_queue_estimate_vps(p->input->queue));
                 nk_label(nk, "PTS drift offset:", NK_TEXT_LEFT);
-                nk_labelf(nk, NK_TEXT_LEFT, "%.3f ms", 1e3 * pl_queue_pts_offset(p->queue));
+                nk_labelf(nk, NK_TEXT_LEFT, "%.3f ms", 1e3 * pl_queue_pts_offset(p->input->queue));
                 nk_label(nk, "Frames rendered:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, p->stats.rendered);
                 nk_label(nk, "Decoded frames", NK_TEXT_LEFT);

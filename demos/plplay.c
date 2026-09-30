@@ -38,12 +38,11 @@ static void uninit(struct plplay *p)
 {
     if (p->decoder_thread_created) {
         p->exit_thread = true;
-        pl_queue_push(p->queue, NULL); // Signal EOF to wake up thread
+        pl_queue_push(p->input->queue, NULL); // Signal EOF to wake up thread
         pl_thread_join(p->decoder_thread);
     }
 
-    pl_queue_destroy(&p->queue);
-    pl_renderer_destroy(&p->renderer);
+    pl_compositor_destroy(&p->comp);
     pl_options_free(&p->opts);
 
     for (int i = 0; i < p->shader_num; i++) {
@@ -259,6 +258,7 @@ static PL_THREAD_VOID decode_loop(void *arg)
 {
     int ret;
     struct plplay *p = arg;
+    pl_input input = p->input;
     AVPacket *packet = av_packet_alloc();
     AVFrame *frame = av_frame_alloc();
     if (!frame || !packet)
@@ -302,7 +302,7 @@ static PL_THREAD_VOID decode_loop(void *arg)
                 first_pts = last_pts;
             frame->opaque = p;
             (void) atomic_fetch_add(&p->stats.decoded, 1);
-            pl_queue_push_block(p->queue, UINT64_MAX, &(struct pl_source_frame) {
+            pl_queue_push_block(input->queue, UINT64_MAX, &(struct pl_source_frame) {
                 .pts = last_pts - first_pts + base_pts,
                 .duration = frame_duration,
                 .map = map_frame,
@@ -343,22 +343,24 @@ static PL_THREAD_VOID decode_loop(void *arg)
     }
 
 done:
-    pl_queue_push(p->queue, NULL); // Signal EOF to flush queue
+    pl_queue_push(input->queue, NULL); // Signal EOF to flush queue
     av_packet_free(&packet);
     av_frame_free(&frame);
     PL_THREAD_RETURN();
 }
 
-static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *mix)
+static void update_colorspace_hint(struct plplay *p,
+                                   const struct pl_queue_params *params)
 {
-    const struct pl_frame *frame = NULL;
+    int width = 0, height = 0;
+    pl_swapchain_resize(p->win->swapchain, &width, &height);
 
-    for (int i = 0; i < mix->num_frames; i++) {
-        if (mix->timestamps[i] > 0.0)
-            break;
-        frame = mix->frames[i];
-    }
+    const struct pl_canvas_size canvas = {
+        .width  = width,
+        .height = height,
+    };
 
+    const struct pl_frame *frame = pl_compositor_current_frame(p->comp, params, &canvas);
     if (!frame)
         return;
 
@@ -371,7 +373,7 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
 }
 
 static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *frame,
-                         const struct pl_frame_mix *mix)
+                         const struct pl_queue_params *params)
 {
     struct pl_frame target;
     pl_options opts = p->opts;
@@ -400,49 +402,6 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
         target.icc = p->icc;
     }
 
-    assert(mix->num_frames);
-    pl_rect2df crop = mix->frames[0]->crop;
-    float sar = mix->frames[0]->pixel_aspect_ratio;
-    if (sar && p->target_zoom != ZOOM_RAW)
-        pl_rect2df_stretch(&crop, fmaxf(1.0f, sar), fmaxf(1.0f, 1.0 / sar));
-
-    // Apply target rotation and un-rotate crop relative to target
-    target.rotation = p->target_rot;
-    pl_rect2df_rotate(&crop, mix->frames[0]->rotation - target.rotation);
-
-    switch (p->target_zoom) {
-    case ZOOM_PAD:
-        pl_rect2df_aspect_copy(&target.crop, &crop, 0.0);
-        break;
-    case ZOOM_CROP:
-        pl_rect2df_aspect_copy(&target.crop, &crop, 1.0);
-        break;
-    case ZOOM_STRETCH:
-        break; // target.crop already covers full image
-    case ZOOM_FIT:
-        pl_rect2df_aspect_fit(&target.crop, &crop, 0.0);
-        break;
-    case ZOOM_RAW: ;
-        // Ensure pixels are exactly aligned, to avoid fractional scaling
-        int w = roundf(fabsf(pl_rect_w(crop)));
-        int h = roundf(fabsf(pl_rect_h(crop)));
-        target.crop.x0 = roundf((pl_rect_w(target.crop) - w) / 2.0f);
-        target.crop.y0 = roundf((pl_rect_h(target.crop) - h) / 2.0f);
-        target.crop.x1 = target.crop.x0 + w;
-        target.crop.y1 = target.crop.y0 + h;
-        break;
-    case ZOOM_400:
-    case ZOOM_200:
-    case ZOOM_100:
-    case ZOOM_50:
-    case ZOOM_25: ;
-        const float z = powf(2.0f, (int) ZOOM_100 - p->target_zoom);
-        const float sx = z * fabsf(pl_rect_w(crop)) / pl_rect_w(target.crop);
-        const float sy = z * fabsf(pl_rect_h(crop)) / pl_rect_h(target.crop);
-        pl_rect2df_stretch(&target.crop, sx, sy);
-        break;
-    }
-
     struct pl_color_map_params *cpars = &opts->color_map_params;
     if (cpars->visualize_lut) {
         cpars->visualize_rect = (pl_rect2df) {0, 0, 1, 1};
@@ -451,7 +410,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     }
 
     pl_clock_t ts_pre = pl_clock_now();
-    if (!pl_render_image_mix(p->renderer, mix, &target, &opts->params))
+    if (!pl_compositor_render(p->comp, &target, params, NULL))
         return false;
     pl_clock_t ts_rendered = pl_clock_now();
     if (!ui_draw(p->ui, frame))
@@ -469,14 +428,14 @@ static bool render_loop(struct plplay *p)
 {
     pl_options opts = p->opts;
 
-    struct pl_queue_params qparams = *pl_queue_params(
+    struct pl_queue_params params = {
         .interpolation_threshold = 0.01,
         .timeout = UINT64_MAX,
-    );
+    };
 
     // Initialize the frame queue, blocking indefinitely until done
-    struct pl_frame_mix mix;
-    switch (pl_queue_update(p->queue, &mix, &qparams)) {
+    struct pl_input_status status;
+    switch (pl_input_update(p->input, &status, &params)) {
     case PL_QUEUE_OK:  break;
     case PL_QUEUE_EOF: return true;
     case PL_QUEUE_ERR: goto error;
@@ -484,7 +443,7 @@ static bool render_loop(struct plplay *p)
     }
 
     struct pl_swapchain_frame frame;
-    update_colorspace_hint(p, &mix);
+    update_colorspace_hint(p, &params);
     if (!pl_swapchain_start_frame(p->win->swapchain, &frame))
         goto error;
 
@@ -493,7 +452,7 @@ static bool render_loop(struct plplay *p)
     if (frame.color_repr.alpha == PL_ALPHA_NONE)
         opts->params.background_transparency = 0.0;
 
-    if (!render_frame(p, &frame, &mix))
+    if (!render_frame(p, &frame, &params))
         goto error;
     if (!pl_swapchain_submit_frame(p->win->swapchain))
         goto error;
@@ -517,7 +476,7 @@ static bool render_loop(struct plplay *p)
         if (p->toggle_fullscreen)
             window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
 
-        update_colorspace_hint(p, &mix);
+        update_colorspace_hint(p, &params);
         pl_clock_t ts_acquire = pl_clock_now();
         if (!pl_swapchain_start_frame(p->win->swapchain, &frame)) {
             // Window stuck/invisible? Block for events and try again.
@@ -530,16 +489,16 @@ static bool render_loop(struct plplay *p)
         if (!ts_start)
             ts_start = ts_pre_update;
 
-        qparams.timeout = 0; // non-blocking update
-        qparams.radius = pl_frame_mix_radius(&p->opts->params);
-        qparams.pts = fmax(pts_target, pl_clock_diff(ts_pre_update, ts_start));
-        p->stats.current_pts = qparams.pts;
-        if (qparams.pts != prev_pts)
-            log_time(&p->stats.pts_interval, qparams.pts - prev_pts);
-        prev_pts = qparams.pts;
+        struct pl_queue_params *qparams = &params;
+        qparams->timeout = 0; // non-blocking update
+        qparams->pts = fmax(pts_target, pl_clock_diff(ts_pre_update, ts_start));
+        p->stats.current_pts = qparams->pts;
+        if (qparams->pts != prev_pts)
+            log_time(&p->stats.pts_interval, qparams->pts - prev_pts);
+        prev_pts = qparams->pts;
 
 retry:
-        switch (pl_queue_update(p->queue, &mix, &qparams)) {
+        switch (pl_input_update(p->input, &status, &params)) {
         case PL_QUEUE_ERR: goto error;
         case PL_QUEUE_EOF:
             printf("End of file reached\n");
@@ -547,14 +506,14 @@ retry:
         case PL_QUEUE_OK:
             break;
         case PL_QUEUE_MORE:
-            qparams.timeout = UINT64_MAX; // retry in blocking mode
+            qparams->timeout = UINT64_MAX; // retry in blocking mode
             goto retry;
         }
 
         pl_clock_t ts_post_update = pl_clock_now();
         log_time(&p->stats.update, pl_clock_diff(ts_post_update, ts_pre_update));
 
-        if (qparams.timeout) {
+        if (qparams->timeout) {
             double stuck_ms = 1e3 * pl_clock_diff(ts_post_update, ts_pre_update);
             fprintf(stderr, "Stalled for %.4f ms due to frame queue underrun!\n", stuck_ms);
             ts_start += ts_post_update - ts_pre_update; // subtract time spent waiting
@@ -562,7 +521,7 @@ retry:
             p->stats.stalled_ms += stuck_ms;
         }
 
-        if (!render_frame(p, &frame, &mix))
+        if (!render_frame(p, &frame, &params))
             goto error;
 
         if (pts_target) {
@@ -606,9 +565,9 @@ retry:
         if (!opts->params.frame_mixer) {
             struct pl_source_frame next;
             for (int i = 0;; i++) {
-                if (!pl_queue_peek(p->queue, i, &next))
+                if (!pl_queue_peek(p->input->queue, i, &next))
                     break;
-                if (next.pts > qparams.pts) {
+                if (next.pts > qparams->pts) {
                     pts_target = next.pts;
                     break;
                 }
@@ -616,7 +575,7 @@ retry:
         }
 
         if (p->fps_override)
-            pts_target = fmax(pts_target, qparams.pts + 1.0 / p->fps);
+            pts_target = fmax(pts_target, qparams->pts + 1.0 / p->fps);
     }
 
     return true;
@@ -626,9 +585,13 @@ error:
     return false;
 }
 
-static void info_callback(void *priv, const struct pl_render_info *info)
+static void info_callback(void *priv, pl_input input,
+                          const struct pl_render_info *info)
 {
     struct plplay *p = priv;
+    if (!input)
+        return; // only show the passes rendering the video itself
+
     switch (info->stage) {
     case PL_RENDER_STAGE_FRAME:
         if (info->index >= MAX_FRAME_PASSES)
@@ -682,10 +645,6 @@ int main(int argc, char *argv[])
     // Enable dynamic parameters by default, due to plplay's heavy reliance on
     // GUI controls for dynamically adjusting render parameters.
     opts->params.dynamic_constants = true;
-
-    // Hook up our pass info callback
-    opts->params.info_callback = info_callback;
-    opts->params.info_priv = &state;
 
     struct plplay *p = &state;
     if (!open_file(p, state.args.filename))
@@ -745,7 +704,14 @@ int main(int argc, char *argv[])
         }
     }
 
-    p->queue = pl_queue_create(p->win->gpu);
+    p->comp = pl_compositor_create(p->log);
+    if (!pl_compositor_init(p->comp, p->win->gpu))
+        goto error;
+    p->comp->info_callback = info_callback;
+    p->comp->info_priv = p;
+    p->input = pl_compositor_input_create(p->comp);
+    pl_compositor_options_set(p->comp, p->opts);
+
     int ret = pl_thread_create(&p->decoder_thread, decode_loop, p);
     if (ret != 0) {
         fprintf(stderr, "Failed creating decode thread: %s\n", strerror(errno));
@@ -753,8 +719,6 @@ int main(int argc, char *argv[])
     }
 
     p->decoder_thread_created = true;
-
-    p->renderer = pl_renderer_create(p->log, p->win->gpu);
     if (!render_loop(p))
         goto error;
 

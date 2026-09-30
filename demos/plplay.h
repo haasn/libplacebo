@@ -1,8 +1,8 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 
+#include <libplacebo/compositor.h>
 #include <libplacebo/options.h>
-#include <libplacebo/utils/frame_queue.h>
 
 #include "common.h"
 #include "pl_thread.h"
@@ -10,20 +10,6 @@
 #define MAX_FRAME_PASSES 256
 #define MAX_BLEND_PASSES 8
 #define MAX_BLEND_FRAMES 8
-
-enum {
-    ZOOM_PAD = 0,
-    ZOOM_CROP,
-    ZOOM_STRETCH,
-    ZOOM_FIT,
-    ZOOM_RAW,
-    ZOOM_400,
-    ZOOM_200,
-    ZOOM_100,
-    ZOOM_50,
-    ZOOM_25,
-    ZOOM_COUNT,
-};
 
 struct plplay_args {
     const struct pl_render_params *preset;
@@ -43,10 +29,10 @@ struct plplay {
 
     // libplacebo
     pl_log log;
-    pl_renderer renderer;
-    pl_queue queue;
     pl_cache cache;
     uint64_t cache_sig;
+    pl_compositor comp;
+    pl_input input;
 
     // libav*
     AVFormatContext *format;
@@ -58,8 +44,6 @@ struct plplay {
 
     // settings / ui state
     pl_options opts;
-    pl_rotation target_rot;
-    int target_zoom;
     bool colorspace_hint;
     bool colorspace_hint_dynamic;
     bool ignore_dovi;
