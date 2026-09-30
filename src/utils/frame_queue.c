@@ -90,6 +90,7 @@ struct pl_queue_t {
     PL_ARRAY(struct entry *) queue;
     uint64_t signature;
     int threshold_frames;
+    int total_fields; // source fields ever seen
     bool want_frame;
     bool eof;
 
@@ -334,15 +335,16 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     PL_TRACE(p, "Added new frame id %"PRIu64" with PTS %f",
              entry->signature, entry->pts);
 
+    const bool interlaced = src->first_field != PL_FIELD_NONE;
+    p->total_fields += interlaced ? 2 : 1;
+
     // Insert new entry into the correct spot in the queue, sorted by PTS
     for (int i = p->queue.num;; i--) {
         if (i == 0 || p->queue.elem[i - 1]->pts <= entry->pts) {
-            if (src->first_field == PL_FIELD_NONE) {
-                // Progressive
+            if (!interlaced) {
                 PL_ARRAY_INSERT_AT(p, p->queue, i, entry);
                 break;
             } else {
-                // Interlaced
                 struct entry *prev = i > 0 ? p->queue.elem[i - 1] : NULL;
                 struct entry *next = i < p->queue.num ? p->queue.elem[i] : NULL;
                 if (prev && prev->defer_second_field) {
@@ -874,7 +876,8 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
             // Don't forward EOF until we've held the last frame for the
             // desired ZOH hold duration
             double last_pts = p->queue.elem[p->queue.num - 1]->pts;
-            if (last_pts && params->pts >= last_pts + p->fps.estimate)
+            bool still_frame = p->total_fields <= 1;
+            if (params->pts >= last_pts + p->fps.estimate && !still_frame)
                 return ret;
             ret = PL_QUEUE_OK;
             goto done;
