@@ -761,7 +761,7 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
         const float *coef = rgb2xyz.m[1];
         // OOTF^-1
         float luma = coef[0] * color[0] + coef[1] * color[1] + coef[2] * color[2];
-        luma = fmaxf(1e-6f, powf(luma / csp_max, (1 - y) / y));
+        luma = powf(fmaxf(1e-6f, luma / csp_max), (1 - y) / y);
         MAP3(12 / csp_max * luma * X);
         // OETF
         MAP3(X > 1 ? HLG_A * logf(X - HLG_B) + HLG_C : 0.5f * sqrtf(X));

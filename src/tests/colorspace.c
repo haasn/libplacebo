@@ -86,6 +86,18 @@ int main()
                 break;
             }
         }
+
+        // Absolute black stays finite and below a dark gray, also with the
+        // default luminance range of the transfer
+        const struct pl_color_space def = { .transfer = trc };
+        float black[3] = { 0.0f, 0.0f, 0.0f };
+        float gray[3] = { 0.01f, 0.01f, 0.01f };
+        pl_color_delinearize(&def, black);
+        pl_color_delinearize(&def, gray);
+        for (int i = 0; i < 3; i++) {
+            REQUIRE(isfinite(black[i]));
+            REQUIRE_CMP(black[i], <, gray[i], "f");
+        }
     }
 
     // Test scRGB out-of-gamut handling
