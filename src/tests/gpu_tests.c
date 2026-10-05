@@ -1825,6 +1825,150 @@ error:
     pl_tex_destroy(gpu, &fbo_tex);
 }
 
+// The deband grain is relative to the reference white of the image. An SDR
+// signal peaks at its white, whatever luminance that is tagged with, so the
+// grain must not depend on it. An HDR signal gets the grain scaled down by its
+// peak relative to the reference white.
+static void pl_render_deband_tests(pl_gpu gpu)
+{
+    pl_renderer rr = NULL;
+    pl_tex src_tex = NULL, fbo = NULL;
+    printf("pl_render_deband_tests:\n");
+
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 32, 32,
+                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE);
+    if (!fmt) {
+        printf("- no suitable f32 fmt, skipping\n");
+        return;
+    }
+
+    enum { width = 64, height = 64 };
+    static const float gray = 0.5f;
+
+    // No alpha, the image is not to be blended against anything
+    static float src_data[height][width][4];
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            for (int c = 0; c < 3; c++)
+                src_data[y][x][c] = gray;
+        }
+    }
+
+    struct pl_plane src_plane = {0};
+    struct pl_plane_data src_pdata = {
+        .type           = PL_FMT_FLOAT,
+        .width          = width,
+        .height         = height,
+        .component_size = { 32, 32, 32 },
+        .component_map  = { 0, 1, 2 },
+        .pixel_stride   = 4 * sizeof(float),
+        .pixels         = src_data,
+    };
+    if (!pl_upload_plane(gpu, &src_plane, &src_tex, &src_pdata))
+        goto error;
+
+    fbo = pl_tex_create(gpu, pl_tex_params(
+        .w = width, .h = height, .format = fmt,
+        .renderable = true, .host_readable = true,
+    ));
+    if (!fbo)
+        goto error;
+
+    rr = pl_renderer_create(gpu->log, gpu);
+    REQUIRE(rr);
+
+    static const struct {
+        enum pl_color_transfer trc;
+        float image_luma, target_luma;  // tagged peak in cd/m^2, 0 if untagged
+        float scale;                    // expected grain, 1 is the configured one
+    } tests[] = {
+        { PL_COLOR_TRC_SRGB,       0,    0, 1.0f },
+        { PL_COLOR_TRC_SRGB,       0,  100, 1.0f },
+        { PL_COLOR_TRC_SRGB,      80,    0, 1.0f },
+        { PL_COLOR_TRC_SRGB,     480,  480, 1.0f },
+        { PL_COLOR_TRC_BT_1886,  100,    0, 1.0f },
+        { PL_COLOR_TRC_GAMMA22,  300,  300, 1.0f },
+        { PL_COLOR_TRC_LINEAR,    80,    0, 1.0f },
+        { PL_COLOR_TRC_PQ,         0,    0, PL_COLOR_SDR_WHITE / 10000 },
+        { PL_COLOR_TRC_PQ,      1000, 1000, PL_COLOR_SDR_WHITE / 1000 },
+        { PL_COLOR_TRC_HLG,        0,    0, PL_COLOR_SDR_WHITE / PL_COLOR_HLG_PEAK },
+        { PL_COLOR_TRC_HLG,      400,  400, PL_COLOR_SDR_WHITE / 400 },
+    };
+
+    // Peak to peak amplitude of the grain. The grain is configured to come
+    // out the same in every test, so that they are equally precise.
+    static const float amplitude = 0.2f;
+
+    for (int i = 0; i < PL_ARRAY_SIZE(tests); i++) {
+        struct pl_frame image = {
+            .num_planes = 1,
+            .planes     = { src_plane },
+            .repr       = pl_color_repr_rgb,
+            .color      = {
+                .primaries    = PL_COLOR_PRIM_BT_709,
+                .transfer     = tests[i].trc,
+                .hdr.max_luma = tests[i].image_luma,
+            },
+        };
+
+        // Same color space, to get the image out the way it went in
+        struct pl_frame target = {
+            .num_planes = 1,
+            .planes     = {{
+                .texture           = fbo,
+                .components        = 3,
+                .component_mapping = {0, 1, 2},
+            }},
+            .repr       = pl_color_repr_rgb,
+            .color      = image.color,
+        };
+        target.color.hdr.max_luma = tests[i].target_luma;
+
+        struct pl_deband_params deband = pl_deband_default_params;
+        deband.grain = 1000 * amplitude / tests[i].scale;
+
+        printf("- %s image at %g cd/m^2, target at %g cd/m^2\n",
+               pl_color_transfer_name(tests[i].trc), tests[i].image_luma,
+               tests[i].target_luma);
+
+        static float out[height][width][4];
+        for (int grain = 0; grain < 2; grain++) {
+            struct pl_render_params params = {
+                .deband_params = grain ? &deband : NULL,
+            };
+            REQUIRE(pl_render_image(rr, &image, &target, &params));
+            REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+            REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
+                .tex = fbo,
+                .ptr = out,
+            )));
+
+            float min = gray, max = gray;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    for (int c = 0; c < 3; c++) {
+                        REQUIRE(isfinite(out[y][x][c]));
+                        min = PL_MIN(min, out[y][x][c]);
+                        max = PL_MAX(max, out[y][x][c]);
+                    }
+                }
+            }
+
+            if (grain) {
+                REQUIRE_FEQ((max - min) / amplitude, 1.0, 1e-2);
+            } else {
+                REQUIRE_FEQ(min, gray, 1e-6);
+                REQUIRE_FEQ(max, gray, 1e-6);
+            }
+        }
+    }
+
+error:
+    pl_renderer_destroy(&rr);
+    pl_tex_destroy(gpu, &src_tex);
+    pl_tex_destroy(gpu, &fbo);
+}
+
 static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *params)
 {
     return (struct pl_hook_res) {0};
@@ -2083,6 +2227,7 @@ void gpu_shader_tests(pl_gpu gpu)
     pl_scaler_tests(gpu);
     pl_render_tests(gpu);
     pl_render_bits_tests(gpu);
+    pl_render_deband_tests(gpu);
     pl_ycbcr_tests(gpu);
 
     REQUIRE(!pl_gpu_is_failed(gpu));

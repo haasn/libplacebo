@@ -1359,9 +1359,11 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
     // Divide the deband grain scale by the effective current colorspace nominal
     // peak, to make sure the output intensity of the grain is as independent
     // of the source as possible, even though it happens this early in the
-    // process (well before any linearization / output adaptation)
+    // process (well before any linearization / output adaptation). SDR signals
+    // peak at their reference white, whatever its luminance is.
     struct pl_deband_params dparams = *params->deband_params;
-    dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
+    if (pl_color_transfer_is_hdr(image->color.transfer))
+        dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
     memcpy(dparams.grain_neutral, neutral, sizeof(dparams.grain_neutral));
 
     img->tex = NULL;
