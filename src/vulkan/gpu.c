@@ -542,7 +542,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .max_buffer_texels  = PL_MIN(limits.maxTexelBufferElements, max_size),
         .align_host_ptr     = host_props.minImportedHostPointerAlignment,
         .host_cached        = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_CACHED_BIT),
-        .host_ptr_slow      = driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY,
+        .host_ptr_slow      = driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY ||
+                              driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY,
         // pl_tex
         .max_tex_1d_dim     = limits.maxImageDimension1D,
         .max_tex_2d_dim     = limits.maxImageDimension2D,
