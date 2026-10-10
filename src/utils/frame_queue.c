@@ -61,6 +61,9 @@ struct entry {
 // Maximum number of not-yet-mapped frames to allow queueing in advance
 #define PREFETCH_FRAMES 2
 
+// Epsilon for comparing PTS values against derived the EOF timestamp.
+#define PTS_EPS 1e-6
+
 struct pool {
     double samples[MAX_SAMPLES];
     double estimate;
@@ -660,7 +663,7 @@ done:
 
         // Last frame is held for an extra `p->fps.estimate` duration,
         // afterwards this function just returns EOF.
-        if (pts < p->queue.elem[0]->pts + p->fps.estimate) {
+        if (pts + PTS_EPS < p->queue.elem[0]->pts + p->fps.estimate) {
             ret = PL_QUEUE_OK;
         } else {
             entry_cull(p, p->queue.elem[0], true);
@@ -877,7 +880,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
             // desired ZOH hold duration
             double last_pts = p->queue.elem[p->queue.num - 1]->pts;
             bool still_frame = p->total_fields <= 1;
-            if (params->pts >= last_pts + p->fps.estimate && !still_frame)
+            if (params->pts + PTS_EPS >= last_pts + p->fps.estimate && !still_frame)
                 return ret;
             ret = PL_QUEUE_OK;
             goto done;
