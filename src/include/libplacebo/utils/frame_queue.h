@@ -53,7 +53,7 @@ struct pl_source_frame {
     // only helps initialize the value for initial frames, which can smooth
     // out the interpolation weights. Its use is also highly recommended
     // when displaying interlaced frames. (Optional)
-    float duration;
+    double duration;
 
     // If set to something other than PL_FIELD_NONE, this source frame is
     // marked as interlaced. It will be split up into two separate frames
@@ -143,18 +143,18 @@ struct pl_queue_params {
 
     // The radius of the configured mixer. This should be set to the value
     // as returned by `pl_frame_mix_radius`.
-    float radius;
+    double radius;
 
     // The estimated duration of a vsync, in seconds. This will only be used as
     // a hint, the true value will be estimated by comparing `pts` timestamps
     // between calls to `pl_queue_update`. (Optional)
-    float vsync_duration;
+    double vsync_duration;
 
     // If the difference between `pts` and the closest frame is smaller than
     // this delta (in seconds), the mismatch will be assumed as drift/jitter
     // and dynamically subtracted from all future pl_queue_update calls, until
     // the queue is either reset or the PTS jumps by a large amount. (Optional)
-    float drift_compensation;
+    double drift_compensation;
 
     // If the difference between the (estimated) vsync duration and the
     // (measured) frame duration is smaller than this threshold, silently
@@ -166,7 +166,7 @@ struct pl_queue_params {
     // eventually resulted in a dropped or duplicated frame. (Though this can
     // be preferable to seeing that same phase drift result in a temporally
     // smeared image)
-    float interpolation_threshold;
+    double interpolation_threshold;
 
     // Specifies how long `pl_queue_update` will wait for frames to become
     // available, in nanoseconds, before giving up and returning with
@@ -218,8 +218,8 @@ PL_API enum pl_queue_status pl_queue_update(pl_queue queue, struct pl_frame_mix 
 
 // Returns a pl_queue's internal estimates for FPS and VPS (vsyncs per second).
 // Returns 0.0 if no estimate is available.
-PL_API float pl_queue_estimate_fps(pl_queue queue);
-PL_API float pl_queue_estimate_vps(pl_queue queue);
+PL_API double pl_queue_estimate_fps(pl_queue queue);
+PL_API double pl_queue_estimate_vps(pl_queue queue);
 
 // Returns the number of frames currently contained in a pl_queue.
 PL_API int pl_queue_num_frames(pl_queue queue);

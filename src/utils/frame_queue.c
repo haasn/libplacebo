@@ -62,9 +62,9 @@ struct entry {
 #define PREFETCH_FRAMES 2
 
 struct pool {
-    float samples[MAX_SAMPLES];
-    float estimate;
-    float sum;
+    double samples[MAX_SAMPLES];
+    double estimate;
+    double sum;
     int idx;
     int num;
     int total;
@@ -95,14 +95,14 @@ struct pl_queue_t {
 
     // Average vsync/frame fps estimation state
     struct pool vps, fps;
-    float reported_vps;
-    float reported_fps;
+    double reported_vps;
+    double reported_fps;
     double prev_pts;
     double pts_offset;
 
     // Storage for temporary arrays
     PL_ARRAY(uint64_t) tmp_sig;
-    PL_ARRAY(float) tmp_ts;
+    PL_ARRAY(double) tmp_ts;
     PL_ARRAY(const struct pl_frame *) tmp_frame;
 
     // Queue of GPU objects to reuse
@@ -239,21 +239,21 @@ void pl_queue_reset(pl_queue p)
     pl_mutex_unlock(&p->lock_strong);
 }
 
-static inline float delta(float old, float new)
+static inline double delta(double old, double new)
 {
-    return fabsf((new - old) / PL_MIN(new, old));
+    return fabs((new - old) / PL_MIN(new, old));
 }
 
-static inline void default_estimate(struct pool *pool, float val)
+static inline void default_estimate(struct pool *pool, double val)
 {
     if (!pool->estimate && isnormal(val) && val > 0.0)
         pool->estimate = val;
 }
 
-static inline void update_estimate(struct pool *pool, float cur)
+static inline void update_estimate(struct pool *pool, double cur)
 {
     if (pool->num) {
-        static const float max_delta = 0.3;
+        static const double max_delta = 0.3;
         if (delta(pool->sum / pool->num, cur) > max_delta) {
             pool->sum = 0.0;
             pool->num = pool->idx = 0;
@@ -306,7 +306,7 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     if (p->queue.num) {
         struct entry *last = p->queue.elem[p->queue.num - 1];
         double last_pts = last->pts;
-        float delta = src->pts - last_pts;
+        double delta = src->pts - last_pts;
         if (src->first_field != PL_FIELD_NONE && last->defer_second_field)
             delta /= 2;
         if (delta <= 0.0f) {
@@ -489,9 +489,9 @@ static void report_estimates(pl_queue p)
         if (p->reported_fps && p->reported_vps) {
             // Only re-report the estimates if they've changed considerably
             // from the previously reported values
-            static const float report_delta = 0.3f;
-            float delta_fps = delta(p->reported_fps, p->fps.estimate);
-            float delta_vps = delta(p->reported_vps, p->vps.estimate);
+            static const double report_delta = 0.3;
+            double delta_fps = delta(p->reported_fps, p->fps.estimate);
+            double delta_vps = delta(p->reported_vps, p->vps.estimate);
             if (delta_fps < report_delta && delta_vps < report_delta)
                 return;
         }
@@ -777,7 +777,7 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
     for (int i = 0; i < 2; i++) {
         if (!map_entry(p, entries[i]))
             return PL_QUEUE_ERR;
-        float ts = (entries[i]->pts - params->pts) / p->fps.estimate;
+        double ts = (entries[i]->pts - params->pts) / p->fps.estimate;
         PL_ARRAY_APPEND(p, p->tmp_sig, entries[i]->signature);
         PL_ARRAY_APPEND(p, p->tmp_frame, &entries[i]->frame);
         PL_ARRAY_APPEND(p, p->tmp_ts, ts);
@@ -810,7 +810,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
 
     // Silently disable interpolation if the ratio dips lower than the
     // configured threshold
-    float ratio = fabs(p->fps.estimate / p->vps.estimate - 1.0);
+    double ratio = fabs(p->fps.estimate / p->vps.estimate - 1.0);
     if (ratio <= params->interpolation_threshold) {
         if (!p->threshold_frames) {
             PL_INFO(p, "Detected fps ratio %.4f below threshold %.4f, "
@@ -838,7 +838,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
         return oversample(p, mix, params);
 
     pl_assert(p->fps.estimate && p->vps.estimate);
-    float radius = params->radius * fmaxf(1.0f, p->vps.estimate / p->fps.estimate);
+    double radius = params->radius * fmax(1.0, p->vps.estimate / p->fps.estimate);
     double min_pts = params->pts - radius * p->fps.estimate,
            max_pts = params->pts + radius * p->fps.estimate;
 
@@ -911,7 +911,7 @@ done: ;
             break;
         if (!map_entry(p, entry))
             return PL_QUEUE_ERR;
-        float ts = (entry->pts - params->pts) / p->fps.estimate;
+        double ts = (entry->pts - params->pts) / p->fps.estimate;
         PL_ARRAY_APPEND(p, p->tmp_sig, entry->signature);
         PL_ARRAY_APPEND(p, p->tmp_frame, &entry->frame);
         PL_ARRAY_APPEND(p, p->tmp_ts, ts);
@@ -973,7 +973,7 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     pl_mutex_lock(&p->lock_weak);
     default_estimate(&p->vps, params->vsync_duration);
 
-    float delta = params->pts - p->prev_pts;
+    double delta = params->pts - p->prev_pts;
     if (delta < 0.0f) {
 
         // This is a backwards PTS jump. This is something we can handle
@@ -1033,8 +1033,8 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     }
 
     // Ignore unrealistically high or low FPS, common near start of playback
-    static const float max_vsync = 1.0 / MIN_FPS;
-    static const float min_vsync = 1.0 / MAX_FPS;
+    static const double max_vsync = 1.0 / MIN_FPS;
+    static const double min_vsync = 1.0 / MAX_FPS;
     bool estimation_ok = p->vps.estimate > min_vsync && p->vps.estimate < max_vsync;
     enum pl_queue_status ret;
 
@@ -1055,18 +1055,18 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     return ret;
 }
 
-float pl_queue_estimate_fps(pl_queue p)
+double pl_queue_estimate_fps(pl_queue p)
 {
     pl_mutex_lock(&p->lock_weak);
-    float estimate = p->fps.estimate;
+    double estimate = p->fps.estimate;
     pl_mutex_unlock(&p->lock_weak);
     return estimate ? 1.0f / estimate : 0.0f;
 }
 
-float pl_queue_estimate_vps(pl_queue p)
+double pl_queue_estimate_vps(pl_queue p)
 {
     pl_mutex_lock(&p->lock_weak);
-    float estimate = p->vps.estimate;
+    double estimate = p->vps.estimate;
     pl_mutex_unlock(&p->lock_weak);
     return estimate ? 1.0f / estimate : 0.0f;
 }

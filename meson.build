@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '375': 'change pl_source_frame and pl_frame_mix members from float to double',
       '374': 'add pl_color_map_params.mastering_clip',
       '373': 'add pl_color_map_params.film_strength',
       '372': 'add pl_color_repr_limits',

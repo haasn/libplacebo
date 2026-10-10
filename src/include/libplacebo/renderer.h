@@ -797,7 +797,7 @@ struct pl_frame_mix {
     // Note: This function assumes zero-order-hold semantics, i.e. the frame at
     // timestamp 0.7 is intended to remain visible until timestamp 1.7, when
     // the next frame replaces it.
-    const float *timestamps;
+    const double *timestamps;
 
     // The duration for which the vsync being drawn will be held, using the
     // same scale as `timestamps`. If the display has an unknown or variable
@@ -807,7 +807,7 @@ struct pl_frame_mix {
     //
     // As an example, if `vsync_duration` is 0.4, then it's assumed that the
     // vsync being painted is visible for the period [0.0, 0.4].
-    float vsync_duration;
+    double vsync_duration;
 
     // Explanation of the frame mixing radius: The algorithm chosen in
     // `pl_render_params.frame_mixer` has a canonical radius equal to

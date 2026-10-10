@@ -3701,9 +3701,9 @@ const struct pl_frame *pl_frame_mix_nearest(const struct pl_frame_mix *mix)
         return NULL;
 
     const struct pl_frame *best = mix->frames[0];
-    float best_dist = fabsf(mix->timestamps[0]);
+    double best_dist = fabs(mix->timestamps[0]);
     for (int i = 1; i < mix->num_frames; i++) {
-        float dist = fabsf(mix->timestamps[i]);
+        double dist = fabs(mix->timestamps[i]);
         if (dist < best_dist) {
             best = mix->frames[i];
             best_dist = dist;

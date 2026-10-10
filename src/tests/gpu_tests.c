@@ -1483,7 +1483,7 @@ static void pl_render_tests(pl_gpu gpu)
         .num_frames = 2,
         .frames = (const struct pl_frame *[]) { &image, &image },
         .signatures = (uint64_t[]) { 0xFFF1, 0xFFF2 },
-        .timestamps = (float[]) { -100, 100 },
+        .timestamps = (double[]) { -100, 100 },
         .vsync_duration = 1.6,
     };
     REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
