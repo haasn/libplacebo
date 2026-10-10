@@ -199,3 +199,10 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
         (arr) = _arr.elem;                                                      \
         (idxvar) = _arr.num;                                                    \
     } while (0)
+
+#define PL_ARRAY_REMOVE_AT_RAW(arr, numvar, idx)                                \
+    do {                                                                        \
+        PL_ARRAY(__typeof__((arr)[0])) _arr = { (arr), (numvar) };              \
+        PL_ARRAY_REMOVE_AT(_arr, idx);                                          \
+        (numvar) = _arr.num;                                                    \
+    } while (0)
