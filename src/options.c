@@ -36,7 +36,7 @@ struct priv {
     PL_ARRAY(const struct pl_hook *) hooks;
 };
 
-static const struct pl_options_t defaults = {
+static const struct pl_options_t default_options = {
     .params             = { PL_RENDER_DEFAULTS },
     .deband_params      = { PL_DEBAND_DEFAULTS },
     .sigmoid_params     = { PL_SIGMOID_DEFAULTS },
@@ -117,7 +117,7 @@ static inline void redirect_params(pl_options opts)
 
 void pl_options_reset(pl_options opts, const struct pl_render_params *preset)
 {
-    *opts = defaults;
+    *opts = default_options;
     if (preset)
         opts->params = *preset;
     redirect_params(opts);
@@ -208,7 +208,7 @@ typedef const struct opt_ctx_t {
     pl_log log; // as a convenience, only needed when parsing
     pl_opt opt;
     void *alloc; // for printing only
-    pl_options opts; // current base ptr
+    void *base; // current struct base ptr
 } *opt_ctx;
 
 struct enum_val {
@@ -241,10 +241,10 @@ typedef const struct opt_priv_t {
 
 static pl_opt_data get_opt_data(opt_ctx ctx)
 {
-    pl_options opts = ctx->opts;
+    pl_options opts = ctx->base;
     struct priv *p = PL_PRIV(opts);
     opt_priv priv = ctx->opt->priv;
-    const void *val = (void *) ((uintptr_t) opts + priv->offset);
+    const void *val = (const char *) ctx->base + priv->offset;
 
     p->data_text.len = 0;
     priv->print(ctx, &p->data_text, val);
@@ -270,7 +270,7 @@ pl_opt_data pl_options_get(pl_options opts, const char *key)
 
     return get_opt_data(&(struct opt_ctx_t) {
         .alloc = opts,
-        .opts  = opts,
+        .base  = opts,
         .opt   = opt,
     });
 }
@@ -285,13 +285,13 @@ void pl_options_iterate(pl_options opts,
 
         struct opt_ctx_t ctx = {
             .alloc = opts,
-            .opts  = opts,
+            .base  = opts,
             .opt   = opt,
         };
 
         opt_priv priv = opt->priv;
         const void *val = (void *) ((uintptr_t) opts + priv->offset);
-        const void *ref = (void *) ((uintptr_t) &defaults + priv->offset);
+        const void *ref = (void *) ((uintptr_t) &default_options + priv->offset);
         int cmp = priv->compare ? priv->compare(&ctx, val, ref)
                                 : memcmp(val, ref, priv->size);
         if (cmp != 0)
@@ -344,7 +344,7 @@ found:
 
     struct opt_ctx_t ctx = {
         .log  = p->log,
-        .opts = opts,
+        .base = opts,
         .opt  = opt,
     };
 
@@ -519,7 +519,7 @@ static bool parse_params(opt_ctx p, pl_str str, void *out)
     if (!parse_bool(p, str, &set))
         return false;
     if (set) {
-        *res = (const void *) ((uintptr_t) p->opts + priv->offset_params);
+        *res = (const void *) ((uintptr_t) p->base + priv->offset_params);
     } else {
         *res = NULL;
     }
@@ -572,7 +572,7 @@ static bool parse_preset(opt_ctx p, pl_str str, void *out)
                 // Redirect params structs into internal system after loading
                 struct pl_render_params *params = out, prev = *params;
                 *params = *preset;
-                redirect_params(p->opts);
+                redirect_params(p->base);
 
                 // Re-apply excluded options
                 params->lut = prev.lut;
@@ -673,7 +673,7 @@ static bool parse_scaler(opt_ctx p, pl_str str, void *out)
         *res = NULL;
         return true;
     } else if (pl_str_equals0(str, "custom")) {
-        *res = (void *) ((uintptr_t) p->opts + priv->offset_params);
+        *res = (void *) ((uintptr_t) p->base + priv->offset_params);
         return true;
     }
 
@@ -727,6 +727,8 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
     return false;
 }
 
+#define SIZEOF(FIELD) sizeof((*(STRUCT_BASE *) NULL).FIELD)
+
 #define OPT_BOOL(KEY, NAME, FIELD, ...)                                         \
     {                                                                           \
         .key  = KEY,                                                            \
@@ -735,10 +737,10 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .priv = &(struct opt_priv_t) {                                          \
             .print  = print_bool,                                               \
             .parse  = parse_bool,                                               \
-            .offset = offsetof(struct pl_options_t, FIELD),                     \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
             .size   = sizeof(struct {                                           \
                 bool dummy;                                                     \
-                pl_static_assert(sizeof(defaults.FIELD) == sizeof(bool));       \
+                pl_static_assert(SIZEOF(FIELD) == sizeof(bool));                \
             }),                                                                 \
         },                                                                      \
         __VA_ARGS__                                                             \
@@ -752,10 +754,10 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .priv = &(struct opt_priv_t) {                                          \
             .print  = print_int,                                                \
             .parse  = parse_int,                                                \
-            .offset = offsetof(struct pl_options_t, FIELD),                     \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
             .size   = sizeof(struct {                                           \
                 int dummy;                                                      \
-                pl_static_assert(sizeof(defaults.FIELD) == sizeof(int));        \
+                pl_static_assert(SIZEOF(FIELD) == sizeof(int));                 \
             }),                                                                 \
         },                                                                      \
         __VA_ARGS__                                                             \
@@ -769,10 +771,10 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .priv = &(struct opt_priv_t) {                                          \
             .print  = print_float,                                              \
             .parse  = parse_float,                                              \
-            .offset = offsetof(struct pl_options_t, FIELD),                     \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
             .size   = sizeof(struct {                                           \
                 float dummy;                                                    \
-                pl_static_assert(sizeof(defaults.FIELD) == sizeof(float));      \
+                pl_static_assert(SIZEOF(FIELD) == sizeof(float));               \
             }),                                                                 \
         },                                                                      \
         __VA_ARGS__                                                             \
@@ -787,11 +789,11 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
             .compare       = compare_params,                                    \
             .print         = print_params,                                      \
             .parse         = parse_params,                                      \
-            .offset        = offsetof(struct pl_options_t, params.PARAMS),      \
-            .offset_params = offsetof(struct pl_options_t, PARAMS),             \
+            .offset        = offsetof(STRUCT_BASE, params.PARAMS),              \
+            .offset_params = offsetof(STRUCT_BASE, PARAMS),                     \
             .size          = sizeof(struct {                                    \
                 void *dummy;                                                    \
-                pl_static_assert(sizeof(defaults.params.PARAMS) == sizeof(void*));\
+                pl_static_assert(SIZEOF(params.PARAMS) == sizeof(void*));       \
             }),                                                                 \
         },                                                                      \
         __VA_ARGS__                                                             \
@@ -805,10 +807,10 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .priv = &(struct opt_priv_t) {                                          \
             .print  = print_enum,                                               \
             .parse  = parse_enum,                                               \
-            .offset = offsetof(struct pl_options_t, FIELD),                     \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
             .size   = sizeof(struct {                                           \
                 unsigned dummy;                                                 \
-                pl_static_assert(sizeof(defaults.FIELD) == sizeof(unsigned));   \
+                pl_static_assert(SIZEOF(FIELD) == sizeof(unsigned));            \
             }),                                                                 \
             .values = (struct enum_val[]) { VALUES }                            \
         },                                                                      \
@@ -823,8 +825,8 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .preset = true,                                                         \
         .priv   = &(struct opt_priv_t) {                                        \
             .parse   = parse_preset,                                            \
-            .offset  = offsetof(struct pl_options_t, PARAMS),                   \
-            .size    = sizeof(defaults.PARAMS),                                 \
+            .offset  = offsetof(STRUCT_BASE, PARAMS),                           \
+            .size    = SIZEOF(PARAMS),                                          \
             .presets = (struct preset[]) { PRESETS },                           \
         },                                                                      \
         __VA_ARGS__                                                             \
@@ -838,12 +840,12 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .priv = &(struct opt_priv_t) {                                          \
             .print  = print_named,                                              \
             .parse  = parse_named,                                              \
-            .offset = offsetof(struct pl_options_t, FIELD),                     \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
             .names  = (const struct named * const * ) NAMES,                    \
             .size   = sizeof(struct {                                           \
                 const struct named *dummy;                                      \
                 pl_static_assert(offsetof(__typeof__(*NAMES[0]), name) == 0);   \
-                pl_static_assert(sizeof(defaults.FIELD) ==                      \
+                pl_static_assert(SIZEOF(FIELD) ==                               \
                                  sizeof(const struct named *));                 \
             }),                                                                 \
         },                                                                      \
@@ -858,11 +860,11 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .priv = &(struct opt_priv_t) {                                          \
             .print         = print_scaler,                                      \
             .parse         = parse_scaler,                                      \
-            .offset        = offsetof(struct pl_options_t, params.SCALER),      \
-            .offset_params = offsetof(struct pl_options_t, SCALER),             \
+            .offset        = offsetof(STRUCT_BASE, params.SCALER),              \
+            .offset_params = offsetof(STRUCT_BASE, SCALER),                     \
             .size          = sizeof(struct {                                    \
                 const struct pl_filter_config *dummy;                           \
-                pl_static_assert(sizeof(defaults.SCALER) ==                     \
+                pl_static_assert(SIZEOF(SCALER) ==                              \
                                  sizeof(struct pl_filter_config));              \
             }),                                                                 \
         },                                                                      \
@@ -877,10 +879,10 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
         .preset = true,                                                         \
         .priv   = &(struct opt_priv_t) {                                        \
             .parse         = parse_scaler_preset,                               \
-            .offset        = offsetof(struct pl_options_t, SCALER),             \
+            .offset        = offsetof(STRUCT_BASE, SCALER),                     \
             .size          = sizeof(struct {                                    \
                 struct pl_filter_config dummy;                                  \
-                pl_static_assert(sizeof(defaults.SCALER) ==                     \
+                pl_static_assert(SIZEOF(SCALER) ==                              \
                                  sizeof(struct pl_filter_config));              \
             }),                                                                 \
         },                                                                      \
@@ -906,6 +908,7 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
     OPT_BOOL(PREFIX"_polar", NAME" polar", FIELD.polar)
 
 const struct pl_opt_t pl_option_list[] = {
+#define STRUCT_BASE struct pl_options_t
     OPT_PRESET("preset", "Global preset", params, LIST(
                {"default",      &pl_render_default_params},
                {"fast",         &pl_render_fast_params},
@@ -1167,6 +1170,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_BOOL("force_low_bit_depth_fbos", "Force 8-bit FBOs", params.force_low_bit_depth_fbos),
     OPT_BOOL("dynamic_constants", "Dynamic constants", params.dynamic_constants),
     {0},
+#undef STRUCT_BASE
 };
 
 const int pl_option_count = PL_ARRAY_SIZE(pl_option_list) - 1;
