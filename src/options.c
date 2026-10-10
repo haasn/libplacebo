@@ -239,6 +239,23 @@ typedef const struct opt_priv_t {
     size_t offset_params; // offset of actual struct (for params toggles)
 } *opt_priv;
 
+// Returns the offset of the option relative to the struct base
+static pl_opt resolve(const struct pl_opt_t *list, pl_str key,
+                      ptrdiff_t *out_offset)
+{
+    for (pl_opt opt = list; opt->key; opt++) {
+        if (!pl_str_equals0(key, opt->key))
+            continue;
+
+        opt_priv priv = opt->priv;
+        if (out_offset)
+            *out_offset = priv->offset;
+        return opt;
+    }
+
+    return NULL;
+}
+
 static pl_opt_data get_opt_data(opt_ctx ctx)
 {
     pl_options opts = ctx->base;
@@ -327,17 +344,14 @@ static bool option_set_raw(pl_options opts, pl_str k, pl_str v)
     k = pl_str_strip(k);
     v = pl_str_strip(v);
 
-    pl_opt opt;
-    for (opt = pl_option_list; opt->key; opt++) {
-        if (pl_str_equals0(k, opt->key))
-            goto found;
+    ptrdiff_t offset;
+    pl_opt opt = resolve(pl_option_list, k, &offset);
+    if (!opt) {
+        PL_ERR(p, "Unrecognized option '%.*s', in '%.*s=%.*s'",
+               PL_STR_FMT(k), PL_STR_FMT(k), PL_STR_FMT(v));
+        return false;
     }
 
-    PL_ERR(p, "Unrecognized option '%.*s', in '%.*s=%.*s'",
-           PL_STR_FMT(k), PL_STR_FMT(k), PL_STR_FMT(v));
-    return false;
-
-found:
     PL_TRACE(p, "Parsing option '%s' = '%.*s'", opt->key, PL_STR_FMT(v));
     if (opt->deprecated)
         PL_WARN(p, "Option '%s' is deprecated", opt->key);
@@ -349,8 +363,7 @@ found:
     };
 
     opt_priv priv = opt->priv;
-    void *val = (void *) ((uintptr_t) opts + priv->offset);
-    return priv->parse(&ctx, v, val);
+    return priv->parse(&ctx, v, (char *) opts + offset);
 }
 
 bool pl_options_set_str(pl_options opts, const char *key, const char *value)
@@ -1177,10 +1190,5 @@ const int pl_option_count = PL_ARRAY_SIZE(pl_option_list) - 1;
 
 pl_opt pl_find_option(const char *key)
 {
-    for (int i = 0; i < pl_option_count; i++) {
-        if (!strcmp(key, pl_option_list[i].key))
-            return &pl_option_list[i];
-    }
-
-    return NULL;
+    return resolve(pl_option_list, pl_str0(key), NULL);
 }
