@@ -20,6 +20,7 @@
 #include "common.h"
 #include "log.h"
 
+#include <libplacebo/compositor.h>
 #include <libplacebo/options.h>
 
 #include "options.h"
@@ -1062,6 +1063,11 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
 
 #define LIST(...) __VA_ARGS__, {0}
 
+#define ROUND_VALUES LIST(                                                      \
+    {"nearest", PL_PTS_ROUND_NEAREST},                                          \
+    {"up",      PL_PTS_ROUND_UP},                                               \
+    {"down",    PL_PTS_ROUND_DOWN})
+
 #define SCALE_OPTS(PREFIX, NAME, FIELD)                                               \
     OPT_SCALER(PREFIX, NAME, FIELD),                                                  \
     OPT_SCALER_PRESET(PREFIX"_preset", NAME "preset", FIELD),                         \
@@ -1345,6 +1351,146 @@ const struct pl_opt_t pl_option_list[] = {
 };
 
 const int pl_option_count = PL_ARRAY_SIZE(pl_option_list) - 1;
+
+static const struct pl_opt_t pl_bit_encoding_opts[] = {
+#define STRUCT_BASE struct pl_bit_encoding
+    OPT_INT("sample_depth", "Sampled bit depth", sample_depth),
+    OPT_INT("color_depth", "Effective bit depth", color_depth),
+    OPT_INT("bit_shift", "Bit shift", bit_shift),
+    {0},
+#undef STRUCT_BASE
+};
+
+// Note: `prim`, `scene_max`, `scene_avg`, `ootf` and the PQ averages are
+// omitted; they are decoder-provided metadata rather than user settings.
+static const struct pl_opt_t pl_hdr_metadata_opts[] = {
+#define STRUCT_BASE struct pl_hdr_metadata
+    OPT_FLOAT("min_luma", "Black point (cd/m²)", min_luma),
+    OPT_FLOAT("max_luma", "Peak brightness (cd/m²)", max_luma),
+    OPT_FLOAT("max_cll", "Maximum content light level (cd/m²)", max_cll),
+    OPT_FLOAT("max_fall", "Maximum frame average light level (cd/m²)", max_fall),
+    {0},
+#undef STRUCT_BASE
+};
+
+static const struct pl_opt_t pl_vec2df_opts[] = {
+#define STRUCT_BASE pl_vec2df
+    OPT_FLOAT("x", "Horizontal component", x),
+    OPT_FLOAT("y", "Vertical component", y),
+    {0},
+#undef STRUCT_BASE
+};
+
+static const struct pl_opt_t pl_rect2df_opts[] = {
+#define STRUCT_BASE pl_rect2df
+    OPT_FLOAT("x0", "Left edge", x0),
+    OPT_FLOAT("y0", "Top edge", y0),
+    OPT_FLOAT("x1", "Right edge", x1),
+    OPT_FLOAT("y1", "Bottom edge", y1),
+    {0},
+#undef STRUCT_BASE
+};
+
+const struct pl_opt_t pl_color_repr_opts[] = {
+#define STRUCT_BASE struct pl_color_repr
+    OPT_ENUM("sys", "Color system", sys, LIST(
+             {"auto",        PL_COLOR_SYSTEM_UNKNOWN},
+             {"bt.601",      PL_COLOR_SYSTEM_BT_601},
+             {"bt.709",      PL_COLOR_SYSTEM_BT_709},
+             {"smpte-240m",  PL_COLOR_SYSTEM_SMPTE_240M},
+             {"bt.2020-ncl", PL_COLOR_SYSTEM_BT_2020_NC},
+             {"bt.2020-cl",  PL_COLOR_SYSTEM_BT_2020_C},
+             {"bt.2100-pq",  PL_COLOR_SYSTEM_BT_2100_PQ},
+             {"bt.2100-hlg", PL_COLOR_SYSTEM_BT_2100_HLG},
+             {"dolbyvision", PL_COLOR_SYSTEM_DOLBYVISION},
+             {"ycgco",       PL_COLOR_SYSTEM_YCGCO},
+             {"ycgco-re",    PL_COLOR_SYSTEM_YCGCO_RE},
+             {"ycgco-ro",    PL_COLOR_SYSTEM_YCGCO_RO},
+             {"rgb",         PL_COLOR_SYSTEM_RGB},
+             {"xyz",         PL_COLOR_SYSTEM_XYZ})),
+    OPT_ENUM("levels", "Color levels", levels, LIST(
+             {"auto",        PL_COLOR_LEVELS_UNKNOWN},
+             {"limited",     PL_COLOR_LEVELS_LIMITED},
+             {"full",        PL_COLOR_LEVELS_FULL})),
+    OPT_ENUM("alpha", "Alpha mode", alpha, LIST(
+             {"unknown",       PL_ALPHA_UNKNOWN},
+             {"independent",   PL_ALPHA_INDEPENDENT},
+             {"premultiplied", PL_ALPHA_PREMULTIPLIED},
+             {"none",          PL_ALPHA_NONE})),
+    OPT_STRUCT("bits", "Bit encoding", bits, pl_bit_encoding_opts),
+    {0},
+#undef STRUCT_BASE
+};
+
+const struct pl_opt_t pl_color_space_opts[] = {
+#define STRUCT_BASE struct pl_color_space
+    OPT_ENUM("primaries", "Color primaries", primaries, LIST(
+             {"auto",        PL_COLOR_PRIM_UNKNOWN},
+             {"bt.601-525",  PL_COLOR_PRIM_BT_601_525},
+             {"bt.601-625",  PL_COLOR_PRIM_BT_601_625},
+             {"bt.709",      PL_COLOR_PRIM_BT_709},
+             {"bt.470m",     PL_COLOR_PRIM_BT_470M},
+             {"ebu3213",     PL_COLOR_PRIM_EBU_3213},
+             {"bt.2020",     PL_COLOR_PRIM_BT_2020},
+             {"apple",       PL_COLOR_PRIM_APPLE},
+             {"adobe",       PL_COLOR_PRIM_ADOBE},
+             {"prophoto",    PL_COLOR_PRIM_PRO_PHOTO},
+             {"cie1931",     PL_COLOR_PRIM_CIE_1931},
+             {"dci-p3",      PL_COLOR_PRIM_DCI_P3},
+             {"display-p3",  PL_COLOR_PRIM_DISPLAY_P3},
+             {"v-gamut",     PL_COLOR_PRIM_V_GAMUT},
+             {"s-gamut",     PL_COLOR_PRIM_S_GAMUT},
+             {"film-c",      PL_COLOR_PRIM_FILM_C},
+             {"aces-ap0",    PL_COLOR_PRIM_ACES_AP0},
+             {"aces-ap1",    PL_COLOR_PRIM_ACES_AP1})),
+    OPT_ENUM("transfer", "Transfer function", transfer, LIST(
+             {"auto",        PL_COLOR_TRC_UNKNOWN},
+             {"bt.1886",     PL_COLOR_TRC_BT_1886},
+             {"srgb",        PL_COLOR_TRC_SRGB},
+             {"linear",      PL_COLOR_TRC_LINEAR},
+             {"gamma1.8",    PL_COLOR_TRC_GAMMA18},
+             {"gamma2.0",    PL_COLOR_TRC_GAMMA20},
+             {"gamma2.2",    PL_COLOR_TRC_GAMMA22},
+             {"gamma2.4",    PL_COLOR_TRC_GAMMA24},
+             {"gamma2.6",    PL_COLOR_TRC_GAMMA26},
+             {"gamma2.8",    PL_COLOR_TRC_GAMMA28},
+             {"prophoto",    PL_COLOR_TRC_PRO_PHOTO},
+             {"st428",       PL_COLOR_TRC_ST428},
+             {"pq",          PL_COLOR_TRC_PQ},
+             {"hlg",         PL_COLOR_TRC_HLG},
+             {"v-log",       PL_COLOR_TRC_V_LOG},
+             {"s-log1",      PL_COLOR_TRC_S_LOG1},
+             {"s-log2",      PL_COLOR_TRC_S_LOG2},
+             {"scrgb",       PL_COLOR_TRC_SCRGB})),
+    OPT_STRUCT("hdr", "HDR metadata", hdr, pl_hdr_metadata_opts),
+    {0},
+#undef STRUCT_BASE
+};
+
+const struct pl_opt_t pl_input_opts[] = {
+#define STRUCT_BASE struct pl_input_t
+    OPT_DOUBLE("start_pts", "Output PTS at which the input appears", start_pts),
+    OPT_DOUBLE("stop_pts", "Output PTS at which the input disappears", stop_pts),
+    OPT_ENUM("start_mode", "Rounding mode for `start_pts`", start_mode, ROUND_VALUES),
+    OPT_ENUM("stop_mode", "Rounding mode for `stop_pts`", stop_mode, ROUND_VALUES),
+    OPT_DOUBLE("seek_pts", "Input PTS to display at `start_pts`", seek_pts),
+    OPT_STRUCT("repr", "Color representation override", repr, pl_color_repr_opts),
+    OPT_STRUCT("color", "Color space override", color, pl_color_space_opts),
+    OPT_INT("z_index", "Compositing order", z_index),
+    OPT_INT("rotation", "Extra rotation, in multiples of 90°", rotation),
+    OPT_ENUM("fit", "Image placement mode", fit, LIST(
+             {"contain",    PL_FIT_CONTAIN},
+             {"cover",      PL_FIT_COVER},
+             {"fill",       PL_FIT_FILL},
+             {"scale_down", PL_FIT_SCALE_DOWN},
+             {"place",      PL_FIT_PLACE},
+             {"raw",        PL_FIT_RAW})),
+    OPT_STRUCT("src_rect", "Custom source rectangle", src_rect, pl_rect2df_opts),
+    OPT_STRUCT("dst_rect", "Custom target rectangle", dst_rect, pl_rect2df_opts),
+    OPT_STRUCT("focus", "Focus point", focus, pl_vec2df_opts),
+    {0},
+#undef STRUCT_BASE
+};
 
 pl_opt pl_find_option(const char *key)
 {

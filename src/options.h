@@ -21,6 +21,10 @@
 
 #include "pl_string.h"
 
+extern const struct pl_opt_t pl_color_repr_opts[];
+extern const struct pl_opt_t pl_color_space_opts[];
+extern const struct pl_opt_t pl_input_opts[];
+
 // Generalization of pl_options_set_str to arbitrary structs
 bool pl_options_set_str_ex(pl_log log, void *base, const struct pl_opt_t *list,
                            pl_str key, pl_str value);
