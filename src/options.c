@@ -22,6 +22,8 @@
 
 #include <libplacebo/options.h>
 
+#include "options.h"
+
 struct priv {
     pl_log log;
 
@@ -387,32 +389,57 @@ const char *pl_options_save(pl_options opts)
     return p->saved.len ? (char *) p->saved.buf : "";
 }
 
-static bool option_set_raw(pl_options opts, pl_str k, pl_str v)
+void *pl_opt_field(pl_opt opt, void *base)
 {
-    struct priv *p = PL_PRIV(opts);
-    k = pl_str_strip(k);
-    v = pl_str_strip(v);
+    opt_priv priv = opt->priv;
+    return (char *) base + priv->offset;
+}
 
-    ptrdiff_t offset;
-    pl_opt opt = resolve(pl_option_list, k, &offset);
-    if (!opt) {
-        PL_ERR(p, "Unrecognized option '%.*s', in '%.*s=%.*s'",
-               PL_STR_FMT(k), PL_STR_FMT(k), PL_STR_FMT(v));
-        return false;
-    }
+size_t pl_opt_size(pl_opt opt)
+{
+    opt_priv priv = opt->priv;
+    return priv->size;
+}
 
-    PL_TRACE(p, "Parsing option '%.*s' = '%.*s'", PL_STR_FMT(k), PL_STR_FMT(v));
+bool pl_opt_parse(pl_log log, void *base, pl_opt opt, void *field, pl_str value)
+{
+    pl_assert(opt->type != PL_OPT_STRUCT);
+    pl_msg(log, PL_LOG_TRACE, "Parsing option '%s' = '%.*s'",
+           opt->key, PL_STR_FMT(value));
     if (opt->deprecated)
-        PL_WARN(p, "Option '%.*s' is deprecated", PL_STR_FMT(k));
+        pl_msg(log, PL_LOG_WARN, "Option '%s' is deprecated", opt->key);
 
     struct opt_ctx_t ctx = {
-        .log  = p->log,
-        .base = opts,
+        .log  = log,
+        .base = base,
         .opt  = opt,
     };
 
     opt_priv priv = opt->priv;
-    return priv->parse(&ctx, v, (char *) opts + offset);
+    return priv->parse(&ctx, value, field);
+}
+
+bool pl_options_set_str_ex(pl_log log, void *base, const struct pl_opt_t *list,
+                           pl_str k, pl_str v)
+{
+    k = pl_str_strip(k);
+    v = pl_str_strip(v);
+
+    ptrdiff_t offset;
+    pl_opt opt = resolve(list, k, &offset);
+    if (!opt) {
+        pl_msg(log, PL_LOG_ERR, "Unrecognized option '%.*s', in '%.*s=%.*s'",
+               PL_STR_FMT(k), PL_STR_FMT(k), PL_STR_FMT(v));
+        return false;
+    }
+
+    return pl_opt_parse(log, base, opt, (char *) base + offset, v);
+}
+
+static bool option_set_raw(pl_options opts, pl_str k, pl_str v)
+{
+    struct priv *p = PL_PRIV(opts);
+    return pl_options_set_str_ex(p->log, opts, pl_option_list, k, v);
 }
 
 bool pl_options_set_str(pl_options opts, const char *key, const char *value)
