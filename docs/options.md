@@ -46,7 +46,6 @@ Sets the filter used for downscaling. Defaults to `hermite`. Pass
 roughly ordered from fastest to slowest:
 
 - `none`: Use the same filter as specified for `upscaler`
-- `box`: Box averaging (very fast)
 - `hermite`: Hermite-weighted averaging (fast)
 - `bilinear`: Bilinear (triangle) averaging (fast)
 - `bicubic`: Bicubic interpolation (fast)
