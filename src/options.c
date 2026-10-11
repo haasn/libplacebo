@@ -559,6 +559,57 @@ static bool parse_float(opt_ctx p, pl_str str, void *out)
     return true;
 }
 
+static void print_double(opt_ctx p, pl_str *out, const void *ptr)
+{
+    pl_str_append_asprintf_c(p->alloc, out, "%f", *(const double *) ptr);
+}
+
+static bool parse_fraction_double(pl_str str, double *val)
+{
+    pl_str denom, num = pl_str_split_char(str, '/', &denom);
+    double n, d;
+    bool ok = denom.buf && denom.len && pl_str_parse_double(num, &n) &&
+                                        pl_str_parse_double(denom, &d);
+    if (ok)
+        *val = n / d;
+    return ok;
+}
+
+static bool parse_double(opt_ctx p, pl_str str, void *out)
+{
+    pl_opt opt = p->opt;
+    double val;
+    if (!parse_fraction_double(str, &val) && !pl_str_parse_double(str, &val)) {
+        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating point "
+                  "or fraction", PL_STR_FMT(str), opt->key);
+        return false;
+    }
+
+    switch (fpclassify(val)) {
+    case FP_NAN:
+    case FP_INFINITE:
+    case FP_SUBNORMAL:
+        PL_ERR(p, "Invalid value '%f' for option '%s', non-normal float",
+               val, opt->key);
+        return false;
+
+    case FP_ZERO:
+    case FP_NORMAL:
+        break;
+    }
+
+    if (opt->min != opt->max) {
+        if (val < opt->min || val > opt->max) {
+            PL_ERR(p, "Value of %f out of range for option '%s': [%.2f, %.2f]",
+                   val, opt->key, opt->min, opt->max);
+            return false;
+        }
+    }
+
+    *(double *) out = val;
+    return true;
+}
+
 static int compare_params(opt_ctx p, const void *pa, const void *pb)
 {
     const bool a = *(const void * const *) pa;
@@ -856,6 +907,23 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
             .size          = sizeof(struct {                                    \
                 void *dummy;                                                    \
                 pl_static_assert(SIZEOF(params.PARAMS) == sizeof(void*));       \
+            }),                                                                 \
+        },                                                                      \
+        __VA_ARGS__                                                             \
+    }
+
+#define OPT_DOUBLE(KEY, NAME, FIELD, ...)                                       \
+    {                                                                           \
+        .key  = KEY,                                                            \
+        .name = NAME,                                                           \
+        .type = PL_OPT_FLOAT,                                                   \
+        .priv = &(struct opt_priv_t) {                                          \
+            .print  = print_double,                                             \
+            .parse  = parse_double,                                             \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
+            .size   = sizeof(struct {                                           \
+                double dummy;                                                   \
+                pl_static_assert(SIZEOF(FIELD) == sizeof(double));              \
             }),                                                                 \
         },                                                                      \
         __VA_ARGS__                                                             \
