@@ -1946,12 +1946,14 @@ static bool pass_read_image(struct pass_state *pass)
          SH_FLOAT(neutral_luma), SH_FLOAT(neutral_chroma));
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
-    // and re-add them as part of `pass->img.rect`, always rounding towards 0.
-    // Additionally, drop anamorphic subpixel mismatches.
+    // and re-add them as part of `pass->img.rect`, rounding to the nearest
+    // pixel. (Since the offset may be dropped entirely at 1:1 scale, rounding
+    // towards 0 would turn float error like 0.99999994 into a whole pixel
+    // shift.) Additionally, drop anamorphic subpixel mismatches.
     const pl_rect2df ref_rc = ref->img.rect;
     pl_rect2d ref_rounded;
-    ref_rounded.x0 = truncf(ref_rc.x0);
-    ref_rounded.y0 = truncf(ref_rc.y0);
+    ref_rounded.x0 = roundf(ref_rc.x0);
+    ref_rounded.y0 = roundf(ref_rc.y0);
     ref_rounded.x1 = ref_rounded.x0 + roundf(pl_rect_w(ref_rc));
     ref_rounded.y1 = ref_rounded.y0 + roundf(pl_rect_h(ref_rc));
 
