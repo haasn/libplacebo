@@ -167,7 +167,7 @@ struct pl_render_params {
     const struct pl_filter_config *frame_mixer;
 
     // Configures the settings used to deband source textures. Leaving this as
-    // NULL disables debanding.
+    // NULL, or setting both `iterations` and `grain` to 0, disables debanding.
     //
     // Note: The `deband_params.grain` setting is automatically adjusted to
     // prevent blowing up on HDR sources. The user need not account for this.
@@ -202,7 +202,7 @@ struct pl_render_params {
     const struct pl_error_diffusion_kernel *error_diffusion;
 
     // Configures the settings used to simulate color blindness, if desired.
-    // If NULL, this feature is disabled.
+    // If NULL, or if no cones are affected, this feature is disabled.
     const struct pl_cone_params *cone_params;
 
     // Configures output blending. When rendering to the final target, the

@@ -3708,11 +3708,33 @@ done:
     return true;
 }
 
+static const struct pl_render_params *
+fix_params(struct pl_render_params *out, const struct pl_render_params *params)
+{
+    *out = *PL_DEF(params, &pl_render_default_params);
+
+    const struct pl_deband_params    *deband  = out->deband_params;
+    const struct pl_color_adjustment *adjust  = out->color_adjustment;
+    const struct pl_cone_params      *cones   = out->cone_params;
+    const struct pl_distort_params   *distort = out->distort_params;
+    if (deband && !deband->iterations && !deband->grain)
+        out->deband_params = NULL;
+    if (adjust && !memcmp(adjust, &pl_color_adjustment_neutral, sizeof(*adjust)))
+        out->color_adjustment = NULL;
+    if (cones && (!cones->cones || cones->strength == 1.0f))
+        out->cone_params = NULL;
+    if (distort && !memcmp(distort, &pl_distort_default_params, sizeof(*distort)))
+        out->distort_params = NULL;
+
+    return out;
+}
+
 bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
                      const struct pl_frame *ptarget,
                      const struct pl_render_params *params)
 {
-    params = PL_DEF(params, &pl_render_default_params);
+    struct pl_render_params fixed;
+    params = fix_params(&fixed, params);
     pl_dispatch_mark_dynamic(rr->dp, params->dynamic_constants);
     if (!pimage)
         return draw_empty_overlays(rr, ptarget, params);
@@ -3894,7 +3916,8 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (!images->num_frames)
         return pl_render_image(rr, NULL, ptarget, params);
 
-    params = PL_DEF(params, &pl_render_default_params);
+    struct pl_render_params fixed;
+    params = fix_params(&fixed, params);
     struct params_info par_info = render_params_info(params);
     pl_dispatch_mark_dynamic(rr->dp, params->dynamic_constants);
 
