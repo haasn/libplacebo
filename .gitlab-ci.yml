@@ -137,7 +137,7 @@ llvmpipe:
                       --werror
                       -Dtests=true
                       -Ddebug-abort=true
-                      -Dc_args='-DCI_ALLOW_SW -DCI_MAXGL'
+                      -Dc_args='-DCI_ALLOW_SW -DCI_MAXGL -DCI_NO_SHADER_DUMP'
                       -Dshaderc=enabled
                       -Dglslang=enabled
                       -Dvulkan-sdk=$VULKAN_SDK
@@ -161,6 +161,7 @@ gpu:
                       -Dglslang=enabled
                       -Dvulkan-sdk=$VULKAN_SDK
                       -Db_coverage=true
+                      -Dc_args='-DCI_NO_SHADER_DUMP'
         - ninja -C build
         - vulkaninfo
         - cd build && meson test -t 5 -v --num-processes=1
@@ -196,7 +197,7 @@ sanitize:
                         --werror
                         -Dtests=true
                         -Ddebug-abort=true
-                        -Dc_args='-DCI_MAXGL -Wno-deprecated-declarations'
+                        -Dc_args='-DCI_MAXGL -DCI_NO_SHADER_DUMP -Wno-deprecated-declarations'
                         -Db_sanitize=address,undefined
                         -Db_lundef=false
                         -Dshaderc=enabled
