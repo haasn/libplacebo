@@ -165,6 +165,8 @@ gpu:
         - ninja -C build
         - vulkaninfo --summary
         - cd build && meson test -t 5 -v --num-processes=1
+        # Exclude the tests themselves from the (lcov) coverage report
+        - find src/tests \( -name '*.gcno' -o -name '*.gcda' \) -delete
         - ninja coverage-html
         - mv meson-logs/coveragereport ../coverage
         - ninja coverage-xml
