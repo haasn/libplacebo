@@ -37,7 +37,8 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
     case GL_DEBUG_SEVERITY_HIGH:        level = PL_LOG_ERR; break;
     }
 
-    pl_msg(log, level, "GL: %s", message);
+    const pl_str msg = pl_str_strip(pl_str0(message));
+    pl_msg(log, level, "GL: %.*s", PL_STR_FMT(msg));
 
     if (level <= PL_LOG_ERR)
         pl_log_stack_trace(log, level);
