@@ -163,7 +163,7 @@ gpu:
                       -Db_coverage=true
                       -Dc_args='-DCI_NO_SHADER_DUMP'
         - ninja -C build
-        - vulkaninfo
+        - vulkaninfo --summary
         - cd build && meson test -t 5 -v --num-processes=1
         - ninja coverage-html
         - mv meson-logs/coveragereport ../coverage
