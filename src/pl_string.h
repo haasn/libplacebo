@@ -113,6 +113,11 @@ bool pl_str_parse_uint64(pl_str str, uint64_t *out);
 bool pl_str_parse_float(pl_str str, float *out);
 bool pl_str_parse_double(pl_str str, double *out);
 
+// Parse numbers from a decimal representation or a fraction; also rejecting
+// invalid values like 0/0, 1/0 or subnormals
+bool pl_str_parse_float_fraction(pl_str str, float *out);
+bool pl_str_parse_double_fraction(pl_str str, double *out);
+
 // Variants of string.h functions
 int pl_strchr(pl_str str, int c);
 size_t pl_strspn(pl_str str, const char *accept);

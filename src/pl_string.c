@@ -15,6 +15,8 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
+
 #include "common.h"
 #include "hash.h"
 
@@ -249,6 +251,52 @@ bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out)
 error:
     pl_free(buf);
     return false;
+}
+
+static bool parse_float_fraction(pl_str str, float *val)
+{
+    pl_str denom, num = pl_str_split_char(str, '/', &denom);
+    float n, d;
+    bool ok = denom.buf && denom.len && pl_str_parse_float(num, &n) &&
+                                        pl_str_parse_float(denom, &d);
+    if (ok)
+        *val = n / d;
+    return ok;
+}
+
+bool pl_str_parse_float_fraction(pl_str str, float *out)
+{
+    float val;
+    if (!parse_float_fraction(str, &val) && !pl_str_parse_float(str, &val))
+        return false;
+    if (val && !isnormal(val))
+        return false;
+
+    *out = val;
+    return true;
+}
+
+static bool parse_double_fraction(pl_str str, double *val)
+{
+    pl_str denom, num = pl_str_split_char(str, '/', &denom);
+    double n, d;
+    bool ok = denom.buf && denom.len && pl_str_parse_double(num, &n) &&
+                                        pl_str_parse_double(denom, &d);
+    if (ok)
+        *val = n / d;
+    return ok;
+}
+
+bool pl_str_parse_double_fraction(pl_str str, double *out)
+{
+    double val;
+    if (!parse_double_fraction(str, &val) && !pl_str_parse_double(str, &val))
+        return false;
+    if (val && !isnormal(val))
+        return false;
+
+    *out = val;
+    return true;
 }
 
 struct pl_str_builder_t {

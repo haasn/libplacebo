@@ -541,38 +541,14 @@ static void print_float(opt_ctx p, pl_str *out, const void *ptr)
     pl_str_append_asprintf_c(p->alloc, out, "%f", *val);
 }
 
-static bool parse_fraction(pl_str str, float *val)
-{
-    pl_str denom, num = pl_str_split_char(str, '/', &denom);
-    float n, d;
-    bool ok = denom.buf && denom.len && pl_str_parse_float(num, &n) &&
-                                        pl_str_parse_float(denom, &d);
-    if (ok)
-        *val = n / d;
-    return ok;
-}
-
 static bool parse_float(opt_ctx p, pl_str str, void *out)
 {
     pl_opt opt = p->opt;
     float val;
-    if (!parse_fraction(str, &val) && !pl_str_parse_float(str, &val)) {
-        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating point "
-                  "or fraction", PL_STR_FMT(str), opt->key);
+    if (!pl_str_parse_float_fraction(str, &val)) {
+        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating "
+               "point or finite fraction", PL_STR_FMT(str), opt->key);
         return false;
-    }
-
-    switch (fpclassify(val)) {
-    case FP_NAN:
-    case FP_INFINITE:
-    case FP_SUBNORMAL:
-        PL_ERR(p, "Invalid value '%f' for option '%s', non-normal float",
-               val, opt->key);
-        return false;
-
-    case FP_ZERO:
-    case FP_NORMAL:
-        break;
     }
 
     if (opt->min != opt->max) {
@@ -592,38 +568,14 @@ static void print_double(opt_ctx p, pl_str *out, const void *ptr)
     pl_str_append_asprintf_c(p->alloc, out, "%f", *(const double *) ptr);
 }
 
-static bool parse_fraction_double(pl_str str, double *val)
-{
-    pl_str denom, num = pl_str_split_char(str, '/', &denom);
-    double n, d;
-    bool ok = denom.buf && denom.len && pl_str_parse_double(num, &n) &&
-                                        pl_str_parse_double(denom, &d);
-    if (ok)
-        *val = n / d;
-    return ok;
-}
-
 static bool parse_double(opt_ctx p, pl_str str, void *out)
 {
     pl_opt opt = p->opt;
     double val;
-    if (!parse_fraction_double(str, &val) && !pl_str_parse_double(str, &val)) {
-        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating point "
-                  "or fraction", PL_STR_FMT(str), opt->key);
+    if (!pl_str_parse_double_fraction(str, &val)) {
+        PL_ERR(p, "Invalid value '%.*s' for option '%s', expected floating "
+               "point or finite fraction", PL_STR_FMT(str), opt->key);
         return false;
-    }
-
-    switch (fpclassify(val)) {
-    case FP_NAN:
-    case FP_INFINITE:
-    case FP_SUBNORMAL:
-        PL_ERR(p, "Invalid value '%f' for option '%s', non-normal float",
-               val, opt->key);
-        return false;
-
-    case FP_ZERO:
-    case FP_NORMAL:
-        break;
     }
 
     if (opt->min != opt->max) {
