@@ -1150,8 +1150,8 @@ static enum pl_queue_status get_frame_ptr(struct pl_source_frame *out_frame,
 
 static void render_info_cb(void *priv, const struct pl_render_info *info)
 {
-    printf("{%d} Executed shader: %s\n", info->index,
-           info->pass->shader->description);
+    REQUIRE(info->pass);
+    REQUIRE(info->pass->shader->description);
 }
 
 static void pl_render_tests(pl_gpu gpu)
