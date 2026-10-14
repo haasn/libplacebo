@@ -215,9 +215,9 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
         REQUIRE_MEMEQ(src, dst, bytes);
     }
 
-    // Report timer results
-    printf("upload time: %"PRIu64", download time: %"PRIu64"\n",
-           pl_timer_query(gpu, ul), pl_timer_query(gpu, dl));
+    // Exercise timer queries
+    (void) pl_timer_query(gpu, ul);
+    (void) pl_timer_query(gpu, dl);
 
     pl_timer_destroy(gpu, &ul);
     pl_timer_destroy(gpu, &dl);
@@ -250,7 +250,6 @@ void pl_texture_tests(pl_gpu gpu)
         pl_tex tex[2];
 
         if (gpu->limits.max_tex_1d_dim >= 16) {
-            printf("-- 1D\n");
             struct pl_tex_params params = ref_params;
             params.w = 16;
             if (!gpu->limits.blittable_1d_3d)
@@ -263,7 +262,6 @@ void pl_texture_tests(pl_gpu gpu)
         }
 
         if (gpu->limits.max_tex_2d_dim >= 16) {
-            printf("-- 2D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = 16;
             for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
@@ -274,7 +272,6 @@ void pl_texture_tests(pl_gpu gpu)
         }
 
         if (gpu->limits.max_tex_3d_dim >= 16) {
-            printf("-- 3D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = params.d = 16;
             if (!gpu->limits.blittable_1d_3d)
