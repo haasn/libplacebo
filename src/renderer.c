@@ -995,7 +995,9 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         pl_color_space_infer_map(&ol_color, &target_color);
         if (image && pl_color_space_equal(&ol_color, &image->color)) {
             const struct pl_color_map_params *cmp = pass->params->color_map_params;
-            pl_shader_color_map_ex(sh, cmp, pl_color_map_args(
+            struct pl_color_map_params overlay_cmp = *PL_DEF(cmp, &pl_color_map_default_params);
+            overlay_cmp.visualize_lut = false;
+            pl_shader_color_map_ex(sh, &overlay_cmp, pl_color_map_args(
                 .src   = ol_color,
                 .dst   = color,
                 .state = &rr->tone_map_state,
