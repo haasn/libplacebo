@@ -342,8 +342,11 @@ void pl_shader_decode_color_ex(pl_shader sh,
         repr->dovi && repr->dovi->nlq_active)
     {
         ident_t el = sh_subpass(sh, args->enhancement_layer);
-        if (el)
-            sh_dovi_compose_nlq(sh, repr->dovi, el);
+        if (!el) {
+            SH_FAIL(sh, "Failed merging the enhancement layer shader");
+            return;
+        }
+        sh_dovi_compose_nlq(sh, repr->dovi, el);
     }
 
     enum pl_color_system orig_sys = repr->sys;
