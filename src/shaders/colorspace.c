@@ -60,7 +60,7 @@ static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
 
     assert(min_order <= max_order);
     if (min_order < max_order)
-        GLSL("uint order = uint(coeffs.w); \n");
+        GLSL("int order = int(coeffs.w); \n");
 
     GLSL("vec4 sigX;                            \n"
          "s = coeffs.x;                         \n"
