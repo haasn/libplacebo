@@ -53,7 +53,8 @@ struct pl_color_decode_args {
 
     // Optional sub-shader producing the enhancement-layer. The expected format
     // and output of the shader depends on the EL being used, based on repr.
-    // Currently only Dolby Vision EL is supported.
+    // Currently only Dolby Vision EL is supported, whose shader returns the
+    // EL sample codes as floats.
     pl_shader enhancement_layer;
 
     // The primaries of the RGB color space to decode into. Only relevant for

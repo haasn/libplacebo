@@ -248,8 +248,9 @@ struct pl_dovi_metadata;
 
 // Add the NLQ-decoded enhancement-layer residual to the (already reshaped)
 // base layer. `el_signal` names a no-arg function (typically produced by
-// `sh_subpass`) returning a vec4 whose `.rgb` holds the EL signal at the current
-// output coordinate. No-op if `data` is NULL or `data->nlq_active` is false.
+// `sh_subpass`) returning a vec4 whose `.rgb` holds the EL sample codes at the
+// current output coordinate. No-op if `data` is NULL or `data->nlq_active` is
+// false.
 void sh_dovi_compose_nlq(pl_shader sh, const struct pl_dovi_metadata *data,
                          ident_t el_signal);
 

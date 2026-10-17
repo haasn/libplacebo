@@ -1013,24 +1013,14 @@ PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
                       mapping->nlq_method_idc == AV_DOVI_NLQ_LINEAR_DZ &&
                       !pl_avdovi_mapping_nlq_is_trivial(header, mapping);
     if (out->nlq_active) {
-        const float el_scale = 1.0f / ((1 << header->el_bit_depth) - 1);
-        // Use double for `coef_scale_d` math to preserve numerical stability.
-        const double coef_scale_d  = 1.0 / (1ULL << header->coef_log2_denom);
-        // DV LINEAR_DZ dequantization: for residual code rr,
-        //   r_norm = sign(rr) * ((|rr| - 0.5) * S_norm + T_norm)
-        // where S_norm, T_norm are coef_log2_denom-normalized. To let the
-        // shader operate on el_centered in [-1, 1] / (2^eld - 1) space, we
-        // pre-fold (2^eld - 1) into slope and -0.5*S into threshold.
-        const double slope_scale_d = ((1ULL << header->el_bit_depth) - 1)
-                                   * coef_scale_d;
+        const double coef_scale = 1.0 / (1ULL << header->coef_log2_denom);
         for (int c = 0; c < 3; c++) {
             const AVDOVINLQParams *src = &mapping->nlq[c];
             struct pl_dovi_nlq_data *dst = &out->nlq[c];
-            const double S = src->linear_deadzone_slope;
-            const double T = src->linear_deadzone_threshold;
-            dst->offset = el_scale * src->nlq_offset;
-            dst->deadzone_slope = slope_scale_d * S;
-            dst->deadzone_threshold = coef_scale_d * (T - 0.5 * S);
+            dst->offset = src->nlq_offset;
+            dst->deadzone_slope = coef_scale * src->linear_deadzone_slope;
+            dst->deadzone_threshold = coef_scale * src->linear_deadzone_threshold;
+            dst->hdr_in_max = coef_scale * src->vdr_in_max;
         }
     }
 }

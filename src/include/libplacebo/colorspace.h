@@ -152,17 +152,16 @@ struct pl_dovi_metadata {
     // profile 7 streams. When `nlq_active` is false the rest of these fields are
     // unused and only BL-only reshape is performed.
     //
-    // LINEAR_DZ dequantization:
-    //   residual = sign(el_centered) *
-    //              (|el_centered| * deadzone_slope + deadzone_threshold)
-    // The (2^eld - 1) factor is pre-folded into `deadzone_slope` and the
-    // -0.5*S half-pixel correction (from the spec's (2|rr|-1) rounding) is
-    // absorbed into `deadzone_threshold`.
+    // LINEAR_DZ dequantization of the EL code e, with rr = e - offset:
+    //   residual = 0                                                  if rr == 0
+    //   residual = sign(rr) * ((|rr| - 0.5) * deadzone_slope + deadzone_threshold)
+    // bounded to [-hdr_in_max, hdr_in_max]
     bool nlq_active;
     struct pl_dovi_nlq_data {
-        float offset;             // normalized to [0.0, 1.0] based on EL bit depth
-        float deadzone_slope;     // (2^el_bit_depth - 1) * S / 2^coef_log2_denom
-        float deadzone_threshold; // (T - S/2) / 2^coef_log2_denom
+        float offset;             // nlq_offset, in EL codes
+        float deadzone_slope;     // linear_deadzone_slope / 2^coef_log2_denom
+        float deadzone_threshold; // linear_deadzone_threshold / 2^coef_log2_denom
+        float hdr_in_max;         // hdr_in_max / 2^coef_log2_denom
     } nlq[3];
 };
 

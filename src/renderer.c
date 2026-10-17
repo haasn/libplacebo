@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "colorspace.h"
 #include "filters.h"
 #include "hash.h"
 #include "shaders.h"
@@ -1658,8 +1659,9 @@ static pl_shader sample_el(struct pass_state *pass, const struct pl_frame *el)
     float rlx = lrx >= 1 ? roundf(lrx) : 1.0 / roundf(1.0 / lrx),
           rly = lry >= 1 ? roundf(lry) : 1.0 / roundf(1.0 / lry);
 
+    // The NLQ reads the EL planes as the integer codes they hold
     struct pl_color_repr el_repr = el->repr;
-    float el_scale = pl_color_repr_normalize(&el_repr);
+    float el_scale = pl_color_repr_code_scale(&el_repr, NULL);
 
 #pragma GLSL vec4 color = vec4(0.0), tmp;
 

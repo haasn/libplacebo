@@ -113,11 +113,12 @@ void sh_dovi_compose_nlq(pl_shader sh, const struct pl_dovi_metadata *data,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    float offset[3], slope[3], threshold[3];
+    float offset[3], slope[3], threshold[3], hdr_max[3];
     for (int c = 0; c < 3; c++) {
         offset[c] = data->nlq[c].offset;
         slope[c] = data->nlq[c].deadzone_slope;
         threshold[c] = data->nlq[c].deadzone_threshold;
+        hdr_max[c] = data->nlq[c].hdr_in_max;
     }
 
     ident_t off = sh_var(sh, (struct pl_shader_var) {
@@ -132,16 +133,21 @@ void sh_dovi_compose_nlq(pl_shader sh, const struct pl_dovi_metadata *data,
         .var  = pl_var_vec3("nlq_threshold"),
         .data = threshold,
     });
+    ident_t mx = sh_var(sh, (struct pl_shader_var) {
+        .var  = pl_var_vec3("nlq_max"),
+        .data = hdr_max,
+    });
 
-    // LINEAR_DZ dequantization. The (2^eld - 1) factor and the -0.5*S
-    // half-pixel correction are pre-folded into slope/threshold by
-    // pl_map_dovi_metadata, so the per-pixel form collapses to:
-    //   residual = sign(el_centered) * (|el_centered| * slope + threshold)
-    // sign(0) == 0 covers the spec's rr==0 carve-out exactly.
+    // LINEAR_DZ dequantization of the EL codes, rounded to integers after
+    // the resampling: rr = 0 gives no residual, otherwise
+    //   residual = sign(rr) * ((|rr| - 0.5) * slope + threshold)
+    // bounded by hdr_in_max
 #pragma GLSL /* sh_dovi_compose_nlq */                                  \
     {                                                                   \
-    vec3 el_centered = $el_signal().rgb - $off;                         \
-    color.rgb += sign(el_centered) * (abs(el_centered) * $slp + $thr);  \
+    vec3 rr = round($el_signal().rgb - $off);                           \
+    vec3 res = sign(rr) * ((abs(rr) - 0.5) * $slp + $thr);              \
+    color.rgb += clamp(res, -$mx, $mx);                                 \
+    color.rgb = clamp(color.rgb, 0.0, 1.0);                             \
     }
 #endif
 }
