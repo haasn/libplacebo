@@ -205,10 +205,6 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
     }, {
         .name = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
-#ifdef VK_KHR_internally_synchronized_queues
-    }, {
-        .name = VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME,
-#endif
     }, {
         .name = VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
         .funs = (const struct vk_fun[]) {
@@ -246,9 +242,6 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,
     VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
     VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
-#ifdef VK_KHR_internally_synchronized_queues
-    VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME,
-#endif
     VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
 };
 
@@ -262,18 +255,8 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "vk_device_extensions?");
 
 // Recommended features; keep in sync with libavutil vulkan hwcontext
-#ifdef VK_KHR_internally_synchronized_queues
-static const VkPhysicalDeviceInternallySynchronizedQueuesFeaturesKHR synchronized_queues = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INTERNALLY_SYNCHRONIZED_QUEUES_FEATURES_KHR,
-    .internallySynchronizedQueues = true,
-};
-#endif
-
 static const VkPhysicalDeviceVideoMaintenance2FeaturesKHR video_maintenance2 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR,
-#ifdef VK_KHR_internally_synchronized_queues
-    .pNext = (void *) &synchronized_queues,
-#endif
     .videoMaintenance2 = true,
 };
 

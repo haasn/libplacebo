@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '377': 'VK_KHR_internally_synchronized_queues is used only on request',
       '376': 'add pl_color_repr_decode_ex, pl_color_decode_args.primaries and pl_shader_encode_color_ex',
       '375': 'change pl_source_frame and pl_frame_mix members from float to double',
       '374': 'add pl_color_map_params.mastering_clip',

@@ -147,6 +147,13 @@ struct pl_vulkan_t {
     // submission or other related operations when sharing the VkDevice between
     // multiple threads, Using this on queue families or indices not contained
     // in `queues` is undefined behavior.
+    //
+    // These are no-ops when the device was created with
+    // VK_KHR_internally_synchronized_queues. libplacebo only enables it when
+    // requested through `pl_vulkan_params.opt_extensions` and `.features`,
+    // because queues created with it must be retrieved with the matching
+    // VkDeviceQueueCreateFlags (see `pl_vulkan_queue.flags`), which every
+    // other user of the device has to know about.
     void (*lock_queue)(pl_vulkan vk, uint32_t qf, uint32_t qidx);
     void (*unlock_queue)(pl_vulkan vk, uint32_t qf, uint32_t qidx);
 
