@@ -5,6 +5,8 @@
 #include <libplacebo/utils/frame_queue.h>
 #include <libplacebo/utils/upload.h>
 
+#include "dispatch.h"
+
 //#define PRINT_OUTPUT
 
 void pl_buffer_tests(pl_gpu gpu)
@@ -2314,12 +2316,506 @@ static void pl_render_offset_tests(pl_gpu gpu)
     pl_tex_destroy(gpu, &dst);
 }
 
+#ifdef PL_HAVE_DOVI
+
+// The composer of ETSI GS CCM 001 V1.1.1 clause 5.4, in its integer arithmetic
+struct dovi_ref_curve {
+    int num_pivots;
+    int pivots[9];
+    int mapping_idc[8]; // 0: polynomial, 1: MMR
+    int poly_order[8];
+    int64_t poly_coef[8][3];
+    int mmr_order[8];
+    int64_t mmr_constant[8];
+    int64_t mmr_coef[8][3][7];
+};
+
+struct dovi_ref {
+    int bl_bit_depth, el_bit_depth, coef_log2_denom;
+    struct dovi_ref_curve curve[3];
+    struct {
+        int offset;
+        int64_t slope, threshold, hdr_in_max;
+    } nlq[3];
+};
+
+// 5.4.2.2, taking the last piece for a sample at or above the last pivot
+static int dovi_ref_piece(const struct dovi_ref_curve *cv, int s)
+{
+    for (int i = 0; i < cv->num_pivots - 1; i++) {
+        if (s < cv->pivots[i + 1])
+            return i;
+    }
+    return cv->num_pivots - 2;
+}
+
+static int64_t dovi_ref_clamp(const struct dovi_ref_curve *cv, int s)
+{
+    return PL_CLAMP(s, cv->pivots[0], cv->pivots[cv->num_pivots - 1]);
+}
+
+// 5.4.2.3.2
+static int64_t dovi_ref_poly(const struct dovi_ref *ref, int cmp, int piece, int s)
+{
+    const struct dovi_ref_curve *cv = &ref->curve[cmp];
+    const int64_t sc = dovi_ref_clamp(cv, s);
+    int64_t ss = 1, vv = 0;
+    int shift = 20;
+    for (int i = 0; i <= cv->poly_order[piece]; i++) {
+        vv += cv->poly_coef[piece][i] * (ss << shift);
+        ss *= sc;
+        shift -= ref->bl_bit_depth;
+    }
+    vv = PL_MAX(vv, 0);
+    return PL_MIN(vv >> (4 + ref->coef_log2_denom), 0xffff);
+}
+
+// 5.4.2.3.3, with the luma of the sample itself as the down-sampled luma
+static int64_t dovi_ref_mmr(const struct dovi_ref *ref, int cmp, int piece,
+                            const int sample[3])
+{
+    const struct dovi_ref_curve *cv = &ref->curve[cmp];
+    const int n = ref->bl_bit_depth;
+    int64_t s[3];
+    for (int c = 0; c < 3; c++)
+        s[c] = dovi_ref_clamp(&ref->curve[c], sample[c]);
+
+    int64_t tt[22];
+    tt[0] = 1 << 20;
+    tt[1] = s[0] << (20 - n);
+    tt[2] = s[1] << (20 - n);
+    tt[3] = s[2] << (20 - n);
+    tt[4] = (s[0] * s[1]) << (20 - 2 * n);
+    tt[5] = (s[0] * s[2]) << (20 - 2 * n);
+    tt[6] = (s[1] * s[2]) << (20 - 2 * n);
+    tt[7] = (tt[4] * tt[3]) >> 20;
+    tt[8] = (s[0] * s[0]) << (20 - 2 * n);
+    tt[9] = (s[1] * s[1]) << (20 - 2 * n);
+    tt[10] = (s[2] * s[2]) << (20 - 2 * n);
+    tt[11] = (tt[4] * tt[4]) >> 20;
+    tt[12] = (tt[5] * tt[5]) >> 20;
+    tt[13] = (tt[6] * tt[6]) >> 20;
+    tt[14] = (tt[7] * tt[7]) >> 20;
+    tt[15] = (tt[1] * tt[8]) >> 20;
+    tt[16] = (tt[2] * tt[9]) >> 20;
+    tt[17] = (tt[3] * tt[10]) >> 20;
+    tt[18] = (tt[4] * tt[11]) >> 20;
+    tt[19] = (tt[5] * tt[12]) >> 20;
+    tt[20] = (tt[6] * tt[13]) >> 20;
+    tt[21] = (tt[7] * tt[14]) >> 20;
+
+    int64_t rr = cv->mmr_constant[piece] * tt[0];
+    int cnt = 1;
+    for (int i = 0; i < cv->mmr_order[piece]; i++) {
+        for (int j = 0; j < 7; j++)
+            rr += cv->mmr_coef[piece][i][j] * tt[cnt++];
+    }
+    rr = PL_MAX(rr, 0);
+    return PL_MIN(rr >> (4 + ref->coef_log2_denom), 0xffff);
+}
+
+// 5.4.3.2
+static int64_t dovi_ref_nlq(const struct dovi_ref *ref, int cmp, int e)
+{
+    const int64_t T = ref->nlq[cmp].threshold, S = ref->nlq[cmp].slope,
+                  R = ref->nlq[cmp].hdr_in_max;
+    const int eld = ref->el_bit_depth;
+    int64_t rr = e - ref->nlq[cmp].offset;
+    if (rr == 0)
+        return 0;
+
+    const int64_t sign = rr < 0 ? -1 : 1;
+    rr = (2 * rr - sign) * (1 << (10 - eld));
+    int64_t dq = rr * S + (T << (10 - eld + 1)) * sign;
+    const int64_t RR = R << (10 - eld + 1);
+    dq = PL_CLAMP(dq, -RR, RR);
+
+    // arithmetic shift, rounding towards minus infinity
+    const int64_t div = (int64_t) 1 << (ref->coef_log2_denom - 5 - eld);
+    int64_t r = dq / div;
+    if (dq % div && dq < 0)
+        r--;
+    return r;
+}
+
+// The composed signal h of 5.4.3.3 of component `cmp`, before its rounding to
+// hdr_bit_depth, as a fraction of 2^16. At an interior pivot the float
+// rounding of the sample may select either piece, so both are returned.
+static int dovi_ref_compose(const struct dovi_ref *ref, int cmp, const int bl[3],
+                            int el, double out[2], bool *mmr)
+{
+    const struct dovi_ref_curve *cv = &ref->curve[cmp];
+    const int piece = dovi_ref_piece(cv, bl[cmp]);
+    const int64_t r = dovi_ref_nlq(ref, cmp, el);
+    int num = 0;
+    *mmr = false;
+    for (int p = piece; p >= PL_MAX(piece - 1, 0); p--) {
+        if (p < piece && bl[cmp] != cv->pivots[piece])
+            break;
+        int64_t v = cv->mapping_idc[p] ? dovi_ref_mmr(ref, cmp, p, bl)
+                                       : dovi_ref_poly(ref, cmp, p, bl[cmp]);
+        *mmr |= cv->mapping_idc[p] == 1;
+        out[num++] = PL_CLAMP((v + r) / 65536.0, 0.0, 1.0);
+    }
+    return num;
+}
+
+// SMPTE ST 2084, relative to 10000 cd/m^2
+static double dovi_pq_eotf(double x)
+{
+    const double m1 = 2610.0 / 16384, m2 = 2523.0 / 32, c1 = 3424.0 / 4096,
+                 c2 = 2413.0 / 128, c3 = 2392.0 / 128;
+    const double y = pow(PL_CLAMP(x, 0.0, 1.0), 1.0 / m2);
+    return pow(fmax(y - c1, 0.0) / (c2 - c3 * y), 1.0 / m1);
+}
+
+static double dovi_pq_oetf(double lin)
+{
+    const double m1 = 2610.0 / 16384, m2 = 2523.0 / 32, c1 = 3424.0 / 4096,
+                 c2 = 2413.0 / 128, c3 = 2392.0 / 128;
+    const double y = pow(fmax(lin, 0.0), m1);
+    return pow((c1 + c2 * y) / (1.0 + c3 * y), m2);
+}
+
+// The decoding of the composed signal by pl_shader_decode_color: the PQ EOTF,
+// the matrix `mat` and the PQ OETF
+static void dovi_ref_decode(const pl_matrix3x3 *mat, const double h[3], double out[3])
+{
+    double lin[3];
+    for (int c = 0; c < 3; c++)
+        lin[c] = dovi_pq_eotf(h[c]);
+    for (int c = 0; c < 3; c++) {
+        double sum = 0.0;
+        for (int k = 0; k < 3; k++)
+            sum += mat->m[c][k] * lin[k];
+        out[c] = dovi_pq_oetf(sum);
+    }
+}
+
+#define Q23(x) ((int64_t) llround((x) * (double) (1 << 23)))
+
+// Mappings of all kinds, with pivots inside the code range and a residual
+// bound that bites often (luma), at the largest codes only (Cr) or never (Cb),
+// given for 10-bit codes and shifted down for 8-bit ones
+static void dovi_test_ref(int depth, struct dovi_ref *ref)
+{
+    const int sh = 10 - depth;
+    *ref = (struct dovi_ref) {
+        .bl_bit_depth = depth,
+        .el_bit_depth = depth,
+        .coef_log2_denom = 23,
+        .curve = {
+            {
+                .num_pivots = 5,
+                .pivots = {64 >> sh, 128 >> sh, 300 >> sh, 700 >> sh, 940 >> sh},
+                .mapping_idc = {0, 0, 0, 0},
+                .poly_order = {1, 2, 2, 1},
+                .poly_coef = {
+                    {Q23(0.02), Q23(0.9), 0},
+                    {Q23(-0.05), Q23(1.6), Q23(-1.2)},
+                    {Q23(0.157), Q23(0.636), Q23(-0.113)},
+                    {Q23(-0.3), Q23(1.5), 0},
+                },
+            }, {
+                .num_pivots = 3,
+                .pivots = {0, 512 >> sh, 1023 >> sh},
+                .mapping_idc = {1, 1},
+                .mmr_order = {2, 3},
+                .mmr_constant = {Q23(0.3), Q23(0.2)},
+                .mmr_coef = {
+                    {
+                        {Q23(0.35), Q23(0.6), Q23(0.08), Q23(-0.45), Q23(-0.2), Q23(-0.3), Q23(0.25)},
+                        {Q23(-0.12), Q23(-0.4), Q23(-0.05), Q23(0.3), Q23(0.2), Q23(0.15), Q23(-0.3)},
+                    }, {
+                        {Q23(0.3), Q23(0.5), Q23(0.2), Q23(-0.3), Q23(-0.25), Q23(0.1), Q23(0.15)},
+                        {Q23(-0.1), Q23(-0.2), Q23(-0.15), Q23(0.25), Q23(0.2), Q23(-0.05), Q23(-0.1)},
+                        {Q23(0.12), Q23(0.08), Q23(0.1), Q23(-0.15), Q23(-0.1), Q23(0.05), Q23(0.2)},
+                    },
+                },
+            }, {
+                .num_pivots = 3,
+                .pivots = {0, 400 >> sh, 1023 >> sh},
+                .mapping_idc = {0, 1},
+                .poly_order = {2},
+                .poly_coef = {{Q23(0.5), Q23(0.3), Q23(-0.2)}},
+                .mmr_order = {0, 1},
+                .mmr_constant = {0, Q23(0.1)},
+                .mmr_coef = {
+                    {{0}},
+                    {{Q23(0.2), Q23(0.45), Q23(0.35), Q23(-0.15), Q23(0.1), Q23(-0.3), Q23(0.5)}},
+                },
+            },
+        },
+        .nlq = {
+            {.offset = 512 >> sh, .slope = 1 << 15, .threshold = 1 << 13, .hdr_in_max = 1 << 17},
+            {.offset = 512 >> sh, .slope = 3 << 13, .threshold = 1 << 12, .hdr_in_max = 1 << 19},
+            {.offset = 512 >> sh, .slope = 5 << 12, .threshold = 0,       .hdr_in_max = 1 << 16},
+        },
+    };
+}
+
+// The same metadata as pl_map_dovi_metadata() makes of an RPU, with the
+// inverse of the LMS to RGB matrix of pl_shader_decode_color as the RGB to
+// LMS matrix, so that the decoding returns the composed signal up to the
+// float rounding of their product, which is returned in `mat`
+static void dovi_test_metadata(const struct dovi_ref *ref,
+                               struct pl_dovi_metadata *out, pl_matrix3x3 *mat)
+{
+    const double coef = ldexp(1.0, -ref->coef_log2_denom);
+    const double pivot = ldexp(1.0, -ref->bl_bit_depth);
+
+    const pl_matrix3x3 lms2rgb = {{
+        { 3.06441879, -2.16597676,  0.10155818},
+        {-0.65612108,  1.78554118, -0.12943749},
+        { 0.01736321, -0.04725154,  1.03004253},
+    }};
+    pl_matrix3x3 rgb2lms = lms2rgb;
+    pl_matrix3x3_invert(&rgb2lms);
+    *mat = lms2rgb;
+    pl_matrix3x3_mul(mat, &rgb2lms);
+
+    *out = (struct pl_dovi_metadata) {
+        .nonlinear  = pl_matrix3x3_identity,
+        .linear     = rgb2lms,
+        .nlq_active = true,
+    };
+
+    for (int c = 0; c < 3; c++) {
+        const struct dovi_ref_curve *cv = &ref->curve[c];
+        struct pl_reshape_data *comp = &out->comp[c];
+        comp->num_pivots = cv->num_pivots;
+        for (int i = 0; i < cv->num_pivots; i++)
+            comp->pivots[i] = pivot * cv->pivots[i];
+        for (int i = 0; i < cv->num_pivots - 1; i++) {
+            comp->method[i] = cv->mapping_idc[i];
+            if (cv->mapping_idc[i] == 0) {
+                for (int k = 0; k <= cv->poly_order[i]; k++)
+                    comp->poly_coeffs[i][k] = coef * cv->poly_coef[i][k];
+            } else {
+                comp->mmr_order[i] = cv->mmr_order[i];
+                comp->mmr_constant[i] = coef * cv->mmr_constant[i];
+                for (int j = 0; j < cv->mmr_order[i]; j++) {
+                    for (int k = 0; k < 7; k++)
+                        comp->mmr_coeffs[i][j][k] = coef * cv->mmr_coef[i][j][k];
+                }
+            }
+        }
+
+        out->nlq[c].offset = ref->nlq[c].offset;
+        out->nlq[c].deadzone_slope = coef * ref->nlq[c].slope;
+        out->nlq[c].deadzone_threshold = coef * ref->nlq[c].threshold;
+        out->nlq[c].hdr_in_max = coef * ref->nlq[c].hdr_in_max;
+    }
+}
+
+// Every luma code, with chroma and enhancement layer codes that differ per
+// sample, the latter on both sides of the offset and at it
+static void dovi_test_codes(int x, int y, int depth, int offset, int bl[3], int el[3])
+{
+    const int max = (1 << depth) - 1;
+    bl[0] = x;
+    bl[1] = (x * 7 + y * 131) & max;
+    bl[2] = (x * 13 + y * 257 + 100) & max;
+    el[0] = PL_CLAMP(offset + (x + y) % 61 - 30, 0, max);
+    el[1] = PL_CLAMP(offset + (x * 3 + y) % 23 - 11, 0, max);
+    el[2] = PL_CLAMP(offset + (x * 5 + y * 7) % 9 - 4, 0, max);
+}
+
+static void pl_dovi_tests(pl_gpu gpu)
+{
+    pl_fmt fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 32, 32,
+                                 PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE);
+    if (!fbo_fmt)
+        return;
+    printf("pl_dovi_tests:\n");
+
+    pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
+    REQUIRE(dp);
+
+    static const struct {
+        int depth, tex_bits, shift;
+        enum pl_color_levels levels;
+    } variants[] = {
+        {10, 16, 0, PL_COLOR_LEVELS_FULL},
+        {10, 16, 0, PL_COLOR_LEVELS_LIMITED},
+        {10, 16, 6, PL_COLOR_LEVELS_LIMITED},
+        { 8,  8, 0, PL_COLOR_LEVELS_FULL},
+        { 8, 16, 0, PL_COLOR_LEVELS_LIMITED},
+        { 8, 16, 8, PL_COLOR_LEVELS_FULL},
+    };
+
+    for (int i = 0; i < PL_ARRAY_SIZE(variants); i++) {
+        const int depth = variants[i].depth, tex_bits = variants[i].tex_bits,
+                  shift = variants[i].shift;
+        pl_fmt tex_fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 4, tex_bits, tex_bits,
+                                     PL_FMT_CAP_SAMPLEABLE);
+        if (!tex_fmt) {
+            printf("- no %d-bit texture format, skipping\n", tex_bits);
+            continue;
+        }
+
+        struct dovi_ref ref;
+        dovi_test_ref(depth, &ref);
+        struct pl_dovi_metadata meta;
+        pl_matrix3x3 mat;
+        dovi_test_metadata(&ref, &meta, &mat);
+
+        const int W = 1 << depth, H = 8;
+        uint16_t *bl_data = malloc(W * H * 4 * sizeof(uint16_t));
+        uint16_t *el_data = malloc(W * H * 4 * sizeof(uint16_t));
+        uint8_t *bl_data8 = (uint8_t *) bl_data, *el_data8 = (uint8_t *) el_data;
+        REQUIRE(bl_data && el_data);
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                int bl[3], el[3];
+                dovi_test_codes(x, y, depth, ref.nlq[0].offset, bl, el);
+                for (int c = 0; c < 4; c++) {
+                    const int bv = c < 3 ? bl[c] << shift : 0,
+                              ev = c < 3 ? el[c] << shift : 0;
+                    if (tex_bits == 16) {
+                        bl_data[(y * W + x) * 4 + c] = bv;
+                        el_data[(y * W + x) * 4 + c] = ev;
+                    } else {
+                        bl_data8[(y * W + x) * 4 + c] = bv;
+                        el_data8[(y * W + x) * 4 + c] = ev;
+                    }
+                }
+            }
+        }
+
+        pl_tex bl_tex = pl_tex_create(gpu, pl_tex_params(
+            .format = tex_fmt,
+            .w = W,
+            .h = H,
+            .sampleable = true,
+            .initial_data = bl_data,
+        ));
+        pl_tex el_tex = pl_tex_create(gpu, pl_tex_params(
+            .format = tex_fmt,
+            .w = W,
+            .h = H,
+            .sampleable = true,
+            .initial_data = el_data,
+        ));
+        pl_tex fbo = pl_tex_create(gpu, pl_tex_params(
+            .format = fbo_fmt,
+            .w = W,
+            .h = H,
+            .renderable = true,
+            .host_readable = true,
+        ));
+        REQUIRE(bl_tex && el_tex && fbo);
+
+        struct pl_color_repr repr = {
+            .sys    = PL_COLOR_SYSTEM_DOLBYVISION,
+            .levels = variants[i].levels,
+            .dovi   = &meta,
+            .bits   = {
+                .sample_depth = tex_bits,
+                .color_depth  = depth,
+                .bit_shift    = shift,
+            },
+        };
+
+        // The enhancement layer sub-shader returns the EL codes
+        pl_shader el_sh = pl_dispatch_begin_ex(dp, true);
+        pl_shader_sample_nearest(el_sh, pl_sample_src(
+            .tex   = el_tex,
+            .scale = ldexpf((1 << tex_bits) - 1, -shift),
+        ));
+
+        pl_shader sh = pl_dispatch_begin_ex(dp, true);
+        pl_shader_sample_nearest(sh, pl_sample_src( .tex = bl_tex ));
+        pl_shader_decode_color_ex(sh, pl_color_decode_args(
+            .repr              = &repr,
+            .enhancement_layer = el_sh,
+        ));
+        pl_dispatch_abort(dp, &el_sh);
+        REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
+            .shader = &sh,
+            .target = fbo,
+        )));
+
+        float *out = malloc(W * H * 4 * sizeof(float));
+        REQUIRE(out);
+        REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
+            .tex = fbo,
+            .ptr = out,
+        )));
+
+        // The specification truncates the mapped signal and the residual to
+        // integers of 2^16 and the MMR terms to 2^20, the shader does not
+        int bad = 0;
+        double max_err = 0.0;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                int bl[3], el[3], num[3];
+                double h[3][2];
+                bool mmr[3];
+                dovi_test_codes(x, y, depth, ref.nlq[0].offset, bl, el);
+                for (int c = 0; c < 3; c++)
+                    num[c] = dovi_ref_compose(&ref, c, bl, el[c], h[c], &mmr[c]);
+
+                // The closest of the decodings of all candidate signals
+                double err[3] = { INFINITY, INFINITY, INFINITY };
+                for (int k = 0; k < num[0] * num[1] * num[2]; k++) {
+                    const double hk[3] = {
+                        h[0][k % num[0]],
+                        h[1][k / num[0] % num[1]],
+                        h[2][k / num[0] / num[1]],
+                    };
+                    double expect[3];
+                    dovi_ref_decode(&mat, hk, expect);
+                    for (int c = 0; c < 3; c++) {
+                        const float got = out[(y * W + x) * 4 + c];
+                        err[c] = fmin(err[c], fabs(got - expect[c]));
+                    }
+                }
+
+                for (int c = 0; c < 3; c++) {
+                    const double tol = mmr[c] ? 1e-4 : 5e-5;
+                    if (!(err[c] <= tol)) {
+                        if (bad < 5) {
+                            printf("  sample (%d, %d) component %d: codes %d %d %d, "
+                                   "EL %d: got %f, expected %f\n", x, y, c,
+                                   bl[0], bl[1], bl[2], el[c],
+                                   out[(y * W + x) * 4 + c], h[c][0]);
+                        }
+                        bad++;
+                    }
+                    max_err = fmax(max_err, err[c]);
+                }
+            }
+        }
+
+        printf("- %d-bit codes in %d-bit textures, shift %d, %s range: "
+               "max error %.2g\n", depth, tex_bits, shift,
+               variants[i].levels == PL_COLOR_LEVELS_FULL ? "full" : "limited",
+               max_err);
+        REQUIRE_CMP(bad, ==, 0, "d");
+
+        free(out);
+        free(bl_data);
+        free(el_data);
+        pl_tex_destroy(gpu, &bl_tex);
+        pl_tex_destroy(gpu, &el_tex);
+        pl_tex_destroy(gpu, &fbo);
+    }
+
+    pl_dispatch_destroy(&dp);
+}
+
+#endif // PL_HAVE_DOVI
+
 void gpu_shader_tests(pl_gpu gpu)
 {
     pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
     pl_planar_tests(gpu);
     pl_shader_tests(gpu);
+#ifdef PL_HAVE_DOVI
+    pl_dovi_tests(gpu);
+#endif
     pl_scaler_tests(gpu);
     pl_render_tests(gpu);
     pl_render_offset_tests(gpu);
