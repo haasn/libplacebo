@@ -464,7 +464,7 @@ void pl_shader_decode_color_ex(pl_shader sh,
         });
 
         // PQ EOTF
-        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));   \n"
+        GLSL("color.rgb = pow(clamp(color.rgb, 0.0, 1.0), vec3(1.0/%f)); \n"
              "color.rgb = max(color.rgb - vec3(%f), 0.0)            \n"
              "             / (vec3(%f) - vec3(%f) * color.rgb);     \n"
              "color.rgb = pow(color.rgb, vec3(1.0/%f));             \n",
@@ -733,7 +733,7 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = vec3(52.37/48.0) * pow(color.rgb, vec3(2.6));\n");
         goto scale_out;
     case PL_COLOR_TRC_PQ:
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
+        GLSL("color.rgb = pow(min(color.rgb, 1.0), vec3(1.0/%f)); \n"
              "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
              "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
              "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"

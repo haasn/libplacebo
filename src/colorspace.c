@@ -423,7 +423,7 @@ float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x)
     // Convert input to PL_SCALE_RELATIVE
     switch (from) {
     case PL_HDR_PQ:
-        x = powf(x, 1.0f / PQ_M2);
+        x = powf(fminf(x, 1.0f), 1.0f / PQ_M2);
         x = fmaxf(x - PQ_C1, 0.0f) / (PQ_C2 - PQ_C3 * x);
         x = powf(x, 1.0f / PQ_M1);
         x *= 10000.0f;
@@ -655,7 +655,7 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         MAP3(52.37f/48 * powf(X, 2.6f));
         goto scale_out;
     case PL_COLOR_TRC_PQ:
-        MAP3(powf(X, 1 / PQ_M2));
+        MAP3(powf(fminf(X, 1), 1 / PQ_M2));
         MAP3(fmaxf(X - PQ_C1, 0) / (PQ_C2 - PQ_C3 * X));
         MAP3(10000 / PL_COLOR_SDR_WHITE * powf(X, 1 / PQ_M1));
         goto scale_out;
