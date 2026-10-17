@@ -166,6 +166,27 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
             geti(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &glsl->max_group_size[i]);
     }
 
+    if (gl_test_ext(gpu, "GL_KHR_shader_subgroup", 0, 0) &&
+        glsl->version >= (p->gles_ver ? 310 : 140))
+    {
+        GLint stages = 0, features = 0, size = 0;
+        get(GL_SUBGROUP_SUPPORTED_STAGES_KHR, &stages);
+        get(GL_SUBGROUP_SUPPORTED_FEATURES_KHR, &features);
+        get(GL_SUBGROUP_SIZE_KHR, &size);
+
+        const GLint req_stages = GL_FRAGMENT_SHADER_BIT | GL_COMPUTE_SHADER_BIT;
+        const GLint req_features = GL_SUBGROUP_FEATURE_BASIC_BIT_KHR |
+                                   GL_SUBGROUP_FEATURE_VOTE_BIT_KHR |
+                                   GL_SUBGROUP_FEATURE_ARITHMETIC_BIT_KHR |
+                                   GL_SUBGROUP_FEATURE_BALLOT_BIT_KHR |
+                                   GL_SUBGROUP_FEATURE_SHUFFLE_BIT_KHR;
+        if ((stages & req_stages) == req_stages &&
+            (features & req_features) == req_features)
+        {
+            glsl->subgroup_size = size;
+        }
+    }
+
     if (gl_test_ext(gpu, "GL_ARB_texture_gather", 40, 31) &&
         glsl->version >= (p->gles_ver ? 310 : 400)) {
         if (p->gles_ver)

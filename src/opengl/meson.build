@@ -57,6 +57,7 @@ if opengl_build.allowed()
     'GL_EXT_texture_rg',
     'GL_EXT_unpack_subimage',
     'GL_KHR_debug',
+    'GL_KHR_shader_subgroup',
     'GL_OES_EGL_image',
     'GL_OES_EGL_image_external',
     'EGL_EXT_image_dma_buf_import',
