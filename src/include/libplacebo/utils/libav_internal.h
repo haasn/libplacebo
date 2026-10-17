@@ -980,7 +980,7 @@ PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
         struct pl_reshape_data *cdst = &out->comp[c];
         cdst->num_pivots = csrc->num_pivots;
         for (int i = 0; i < csrc->num_pivots; i++) {
-            const float scale = 1.0f / ((1 << header->bl_bit_depth) - 1);
+            const float scale = 1.0f / (1 << header->bl_bit_depth);
             cdst->pivots[i] = scale * csrc->pivots[i];
         }
         for (int i = 0; i < csrc->num_pivots - 1; i++) {

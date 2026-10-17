@@ -152,13 +152,32 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0) || !data)
         return;
 
+    // Clamp every component to its own pivot range, also for the components
+    // that the MMR mapping of another component reads
+    float lo[3] = {0.0, 0.0, 0.0}, hi[3] = {1.0, 1.0, 1.0};
+    for (int c = 0; c < 3; c++) {
+        const struct pl_reshape_data *comp = &data->comp[c];
+        if (comp->num_pivots) {
+            lo[c] = comp->pivots[0];
+            hi[c] = comp->pivots[comp->num_pivots - 1];
+        }
+    }
+
     sh_describe(sh, "reshaping");
     GLSL("// pl_shader_reshape                  \n"
          "{                                     \n"
          "vec3 sig;                             \n"
          "vec4 coeffs;                          \n"
          "float s;                              \n"
-         "sig = clamp(color.rgb, 0.0, 1.0);     \n");
+         "sig = clamp(color.rgb, "$", "$");     \n",
+         sh_var(sh, (struct pl_shader_var) {
+             .var  = pl_var_vec3("pivot_lo"),
+             .data = lo,
+         }),
+         sh_var(sh, (struct pl_shader_var) {
+             .var  = pl_var_vec3("pivot_hi"),
+             .data = hi,
+         }));
 
     float coeffs_data[8][4];
     float mmr_packed_data[8*6][4];
@@ -298,15 +317,7 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
             GLSL("} \n");
         }
 
-        ident_t lo = sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_float("lo"),
-            .data = &comp->pivots[0],
-        });
-        ident_t hi = sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_float("hi"),
-            .data = &comp->pivots[comp->num_pivots - 1],
-        });
-        GLSL("color[%d] = clamp(s, "$", "$"); \n", c, lo, hi);
+        GLSL("color[%d] = clamp(s, 0.0, 1.0); \n", c);
     }
 
     GLSL("} \n");
@@ -328,10 +339,12 @@ void pl_shader_decode_color_ex(pl_shader sh,
     GLSL("// pl_shader_decode_color \n"
          "{ \n");
 
-    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
-    {
-        ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
-        GLSL("color.rgb *= vec3("$"); \n", scale);
+    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
+        // The reshaping maps the sample code divided by 2^BL_bit_depth
+        int depth;
+        float scale = pl_color_repr_code_scale(repr, &depth);
+        scale = ldexpf(scale, -depth);
+        GLSL("color.rgb *= vec3("$"); \n", SH_FLOAT(scale));
     }
 
     if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)

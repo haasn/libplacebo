@@ -421,8 +421,8 @@ static void bench_reshape_poly(pl_shader sh, pl_shader_obj *state, pl_tex src)
     pl_shader_dovi_reshape(sh, &(struct pl_dovi_metadata) { .comp = {
         {
             .num_pivots = 8,
-            .pivots = {0.0, 0.00488758553, 0.0420332365, 0.177908108,
-                       0.428152502, 0.678396881, 0.92864126, 1.0},
+            .pivots = {0.0, 0.0048828125, 0.0419921875, 0.177734375,
+                       0.427734375, 0.677734375, 0.927734375, 0.9990234375},
             .method = {0, 0, 0, 0, 0, 0, 0},
             .poly_coeffs = {
                 {0.00290930271, 2.30019712, 50.1446037},
@@ -435,12 +435,12 @@ static void bench_reshape_poly(pl_shader sh, pl_shader_obj *state, pl_tex src)
             },
         }, {
             .num_pivots = 2,
-            .pivots = {0.0, 1.0},
+            .pivots = {0.0, 0.9990234375},
             .method = {0},
             .poly_coeffs = {{-0.397901177, 1.85908031, 0}},
         }, {
             .num_pivots = 2,
-            .pivots = {0.0, 1.0},
+            .pivots = {0.0, 0.9990234375},
             .method = {0},
             .poly_coeffs = {{-0.399355531, 1.85591626, 0}},
         },

@@ -282,9 +282,9 @@ static const struct pl_dovi_metadata dovi_meta = {
     .comp = {
         {
             .num_pivots = 9,
-            .pivots = {0.0615835786, 0.129032254, 0.353861183,
-                       0.604105592, 0.854349971, 0.890518069,
-                       0.906158328, 0.913978517, 0.92082113},
+            .pivots = {0.0615234375, 0.12890625, 0.353515625,
+                       0.603515625, 0.853515625, 0.8896484375,
+                       0.9052734375, 0.9130859375, 0.919921875},
             .method = {0, 0, 0, 0, 0, 0, 0, 0},
             .poly_coeffs = {
                 {-0.0488376617, 1.99335372, -2.41716385},
@@ -298,7 +298,7 @@ static const struct pl_dovi_metadata dovi_meta = {
             },
         }, {
             .num_pivots = 2,
-            .pivots = {0.0, 1.0},
+            .pivots = {0.0, 0.9990234375},
             .method = {1},
             .mmr_order = {3},
             .mmr_constant = {-0.500733018},
@@ -309,7 +309,7 @@ static const struct pl_dovi_metadata dovi_meta = {
             }},
         }, {
             .num_pivots = 2,
-            .pivots = {0.0, 1.0},
+            .pivots = {0.0, 0.9990234375},
             .method = {1},
             .mmr_order = {3},
             .mmr_constant = {-1.23833287},

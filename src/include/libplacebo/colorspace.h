@@ -138,7 +138,7 @@ struct pl_dovi_metadata {
     // Reshape data, grouped by component
     struct pl_reshape_data {
         uint8_t num_pivots;
-        float pivots[9]; // normalized to [0.0, 1.0] based on BL bit depth
+        float pivots[9]; // pivot codes divided by 2^BL_bit_depth
         uint8_t method[8]; // 0 = polynomial, 1 = MMR
         // Note: these must be normalized (divide by coefficient_log2_denom)
         float poly_coeffs[8][3]; // x^0, x^1, x^2, unused must be 0

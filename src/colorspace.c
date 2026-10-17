@@ -220,6 +220,23 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
     return scale;
 }
 
+float pl_color_repr_code_scale(struct pl_color_repr *repr, int *out_depth)
+{
+    struct pl_bit_encoding *bits = &repr->bits;
+    int tex_bits = PL_DEF(bits->sample_depth, bits->color_depth);
+    int col_bits = PL_DEF(bits->color_depth, bits->sample_depth);
+    if (!tex_bits)
+        tex_bits = col_bits = 8;
+
+    float scale = ((1LL << tex_bits) - 1.) / (1LL << bits->bit_shift);
+    if (out_depth)
+        *out_depth = col_bits;
+
+    bits->bit_shift = 0;
+    bits->color_depth = bits->sample_depth;
+    return scale;
+}
+
 void pl_color_repr_limits(const struct pl_color_repr *repr,
                           float out_min[4], float out_max[4])
 {
@@ -1931,11 +1948,11 @@ pl_transform3x3 pl_color_repr_decode_ex(struct pl_color_repr *repr,
 
 #ifdef PL_HAVE_DOVI
     if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
-        // The RPU matrix already includes levels normalization, but in this
-        // case we also have to respect the signalled color offsets
+        // The RPU matrix already includes levels normalization, and the
+        // signalled color offsets are in units of the composed signal
         for (int i = 0; i < 3; i++) {
             mul[i] = 1.0;
-            black[i] = repr->dovi->nonlinear_offset[i] * scale;
+            black[i] = repr->dovi->nonlinear_offset[i];
         }
     } else
 #endif
