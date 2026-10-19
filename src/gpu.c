@@ -430,10 +430,10 @@ void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     return;
 
 error:
-    if (src->params.debug_tag || dst->params.debug_tag) {
+    if ((src && src->params.debug_tag) || (dst && dst->params.debug_tag)) {
         PL_ERR(gpu, "  for textures: src %s, dst %s",
-               PL_DEF(src->params.debug_tag, "(unknown)"),
-               PL_DEF(dst->params.debug_tag, "(unknown)"));
+               PL_DEF(src ? src->params.debug_tag : NULL, "(unknown)"),
+               PL_DEF(dst ? dst->params.debug_tag : NULL, "(unknown)"));
     }
 }
 
