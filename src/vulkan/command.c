@@ -264,10 +264,11 @@ struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
         last = sem->read;
 
     if (last.queue != cmd->queue) {
-        if (!is_write && sem->read.queue == cmd->queue) {
-            // No semaphore needed in this case because the implicit submission
-            // order execution dependencies already transitively imply a wait
-            // for the previous write
+        if (!is_write && sem->read.queue == cmd->queue &&
+            (sem->read.stage & stage) == stage)
+        {
+            // A previous semaphore wait on this queue already covers these stages
+            // and all following accesses in the same stages.
         } else if (last.sync.sem) {
             // Image barrier still needs to depend on this stage for implicit
             // ordering guarantees to apply properly. A synchronization point
