@@ -70,7 +70,8 @@ static void vk_cmd_destroy(struct vk_cmd *cmd)
         return;
 
     struct vk_ctx *vk = cmd->pool->vk;
-    vk_cmd_poll(cmd, UINT64_MAX);
+    if (cmd->sync.sem || cmd->fence)
+        vk_cmd_poll(cmd, UINT64_MAX);
     vk_cmd_reset(cmd);
     vk->DestroyFence(vk->dev, cmd->fence, PL_VK_ALLOC);
     vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
