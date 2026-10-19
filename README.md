@@ -193,6 +193,9 @@ identifiers (so they can be freely merged together).
   comprising `pl_render_params` into a memory-managed, serializable struct that
   can also be treated as a key/value dictionary. Also includes an options
   parser to load options provided by the API user in string format.
+- `compositor.h`: A high-level wrapper around `renderer.h` which allows for
+  compositing multiple inputs on a virtual timeline / canvas, with support
+  for PTS synchronization, correct blending, and so forth.
 - `renderer.h`: A high-level renderer which combines the shader primitives
   and dispatch mechanism into a fully-fledged rendering pipeline that takes
   raw texture data and transforms it into the desired output image.

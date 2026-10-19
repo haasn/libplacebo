@@ -196,6 +196,9 @@ void pl_renderer_load(pl_renderer rr, const uint8_t *cache)
 
 void pl_renderer_flush_cache(pl_renderer rr)
 {
+    if (!rr)
+        return;
+
     for (int i = 0; i < rr->frames.num; i++)
         pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
     rr->frames.num = 0;
@@ -4528,6 +4531,9 @@ struct pl_render_errors pl_renderer_get_errors(pl_renderer rr)
 void pl_renderer_reset_errors(pl_renderer rr,
                               const struct pl_render_errors *errors)
 {
+    if (!rr)
+        return;
+
     if (!errors) {
         // Reset everything
         rr->errors = PL_RENDER_ERR_NONE;
