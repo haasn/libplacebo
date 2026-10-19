@@ -679,6 +679,9 @@ PL_API void pl_frame_set_chroma_location(struct pl_frame *frame,
 PL_API void pl_frame_from_swapchain(struct pl_frame *out_frame,
                                     const struct pl_swapchain_frame *frame);
 
+// Helper function to get the canonical / reference size of a frame.
+PL_API void pl_frame_size(const struct pl_frame *frame, int *w, int *h);
+
 // Helper function to determine if a frame is logically cropped or not. In
 // particular, this is useful in determining whether or not an output frame
 // needs to be cleared before rendering or not.

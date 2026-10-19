@@ -4372,6 +4372,13 @@ void pl_frame_from_swapchain(struct pl_frame *out_frame,
     };
 }
 
+void pl_frame_size(const struct pl_frame *frame, int *w, int *h)
+{
+    pl_tex ref = frame->planes[frame_ref(frame)].texture;
+    *w = ref->params.w;
+    *h = ref->params.h;
+}
+
 bool pl_frame_is_cropped(const struct pl_frame *frame)
 {
     int x0 = roundf(PL_MIN(frame->crop.x0, frame->crop.x1)),
