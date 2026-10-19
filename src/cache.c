@@ -484,15 +484,13 @@ void pl_cache_set_file(void *priv, pl_cache_obj obj)
     // Check if file exists
     FILE *fp = fopen(path, "rb");
     if (fp) {
-        pl_free(path);
         fclose(fp);
-        return; // Ignore already existing files; will be validated on next use
+        goto done; // Ignore already existing files; will be validated on next use
     }
 
     fp = fopen(path, "wb");
-    pl_free(path);
     if (!fp)
-        return;
+        goto done;
 
     // Generate a single entry cache file
     const struct cache_header header = {
@@ -512,13 +510,15 @@ void pl_cache_set_file(void *priv, pl_cache_obj obj)
     {
         fclose(fp);
         remove(path);
-        return;
+        goto done;
     }
 
     size_t written = fwrite(obj.data, 1, obj.size, fp);
     fclose(fp);
     if (written != obj.size)
         remove(path);
+done:
+    pl_free(path);
 }
 
 pl_cache_obj pl_cache_get_file(void *priv, uint64_t key)
