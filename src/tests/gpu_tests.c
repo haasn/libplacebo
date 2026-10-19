@@ -1579,6 +1579,25 @@ static void pl_render_tests(pl_gpu gpu)
     pl_queue_reset(queue);
     REQUIRE(pl_queue_update(queue, &mix, &qparams) == PL_QUEUE_EOF);
 
+    // Test that advancing without a mix still reports missing frames
+    const struct pl_filter_config *mixers[] = {
+        &pl_oversample_frame_mixer, &pl_filter_mitchell_clamp,
+    };
+    for (int m = 0; m < PL_ARRAY_SIZE(mixers); m++) {
+        mix_params.frame_mixer = mixers[m];
+        qparams = (struct pl_queue_params) {
+            .radius = pl_frame_mix_radius(&mix_params),
+            .vsync_duration = qparams.vsync_duration,
+        };
+
+        pl_queue_reset(queue);
+        for (int i = 0; i < 4; i++)
+            pl_queue_push(queue, &srcframes[i]);
+        REQUIRE_CMP(pl_queue_update(queue, NULL, &qparams), ==, PL_QUEUE_OK, "u");
+        qparams.pts = 3.5 * frame_duration;
+        REQUIRE_CMP(pl_queue_update(queue, NULL, &qparams), ==, PL_QUEUE_MORE, "u");
+    }
+
     // Test deinterlacing
     pl_queue_reset(queue);
     printf("- testing deinterlacing\n");

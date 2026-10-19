@@ -767,7 +767,7 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
     }
 
     if (!mix)
-        return PL_QUEUE_OK;
+        return ret;
 
     // Can't oversample with only a single frame, fall back to point sampling
     if (p->queue.num < 2 || p->queue.elem[0]->pts > params->pts) {
@@ -908,7 +908,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
 done: ;
 
     if (!mix)
-        return PL_QUEUE_OK;
+        return ret;
 
     // Construct a mix object representing the current queue state, starting at
     // the last frame before `min_pts` to make sure there's a fallback frame
