@@ -112,6 +112,14 @@ void pl_matrix3x3_apply(const pl_matrix3x3 *mat, float vec[3])
         vec[i] = mat->m[i][0] * x + mat->m[i][1] * y + mat->m[i][2] * z;
 }
 
+void pl_matrix3x3_apply_v(const pl_matrix3x3 *mat, pl_vec3df *v)
+{
+    const float x = v->x, y = v->y, z = v->z;
+    v->x = mat->m[0][0] * x + mat->m[0][1] * y + mat->m[0][2] * z;
+    v->y = mat->m[1][0] * x + mat->m[1][1] * y + mat->m[1][2] * z;
+    v->z = mat->m[2][0] * x + mat->m[2][1] * y + mat->m[2][2] * z;
+}
+
 void pl_matrix3x3_apply_rc(const pl_matrix3x3 *mat, pl_rect3df *rc)
 {
     float x0 = rc->x0, x1 = rc->x1,
@@ -204,6 +212,15 @@ void pl_transform3x3_apply(const pl_transform3x3 *t, float vec[3])
         vec[i] += t->c[i];
 }
 
+void pl_transform3x3_apply_v(const pl_transform3x3 *t, pl_vec3df *v)
+{
+    pl_matrix3x3_apply_v(&t->mat, v);
+
+    v->x += t->c[0];
+    v->y += t->c[1];
+    v->z += t->c[2];
+}
+
 void pl_transform3x3_apply_rc(const pl_transform3x3 *t, pl_rect3df *rc)
 {
     pl_matrix3x3_apply_rc(&t->mat, rc);
@@ -263,6 +280,13 @@ void pl_matrix2x2_apply(const pl_matrix2x2 *mat, float vec[2])
 
     for (int i = 0; i < 2; i++)
         vec[i] = mat->m[i][0] * x + mat->m[i][1] * y;
+}
+
+void pl_matrix2x2_apply_v(const pl_matrix2x2 *mat, pl_vec2df *v)
+{
+    const float x = v->x, y = v->y;
+    v->x = mat->m[0][0] * x + mat->m[0][1] * y;
+    v->y = mat->m[1][0] * x + mat->m[1][1] * y;
 }
 
 void pl_matrix2x2_apply_rc(const pl_matrix2x2 *mat, pl_rect2df *rc)
@@ -328,6 +352,14 @@ void pl_transform2x2_apply(const pl_transform2x2 *t, float vec[2])
 
     for (int i = 0; i < 2; i++)
         vec[i] += t->c[i];
+}
+
+void pl_transform2x2_apply_v(const pl_transform2x2 *t, pl_vec2df *v)
+{
+    pl_matrix2x2_apply_v(&t->mat, v);
+
+    v->x += t->c[0];
+    v->y += t->c[1];
 }
 
 void pl_transform2x2_apply_rc(const pl_transform2x2 *t, pl_rect2df *rc)

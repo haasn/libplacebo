@@ -26,6 +26,22 @@ PL_API_BEGIN
 
 // Some common utility types. These are overloaded to support 2D, 3D and
 // integer/float variants.
+typedef struct pl_vec2d {
+    int x, y;
+} pl_vec2d;
+
+typedef struct pl_vec3d {
+    int x, y, z;
+} pl_vec3d;
+
+typedef struct pl_vec2df {
+    float x, y;
+} pl_vec2df;
+
+typedef struct pl_vec3df {
+    float x, y, z;
+} pl_vec3df;
+
 typedef struct pl_rect2d {
     int x0, y0;
     int x1, y1;
@@ -88,6 +104,7 @@ PL_API extern const pl_matrix3x3 pl_matrix3x3_identity;
 
 // Applies a matrix to a float vector in-place.
 PL_API void pl_matrix3x3_apply(const pl_matrix3x3 *mat, float vec[3]);
+PL_API void pl_matrix3x3_apply_v(const pl_matrix3x3 *mat, pl_vec3df *v);
 
 // Applies a matrix to a pl_rect3df
 PL_API void pl_matrix3x3_apply_rc(const pl_matrix3x3 *mat, pl_rect3df *rc);
@@ -117,6 +134,7 @@ PL_API extern const pl_transform3x3 pl_transform3x3_identity;
 
 // Applies a transform to a float vector in-place.
 PL_API void pl_transform3x3_apply(const pl_transform3x3 *t, float vec[3]);
+PL_API void pl_transform3x3_apply_v(const pl_transform3x3 *t, pl_vec3df *v);
 
 // Applies a transform to a pl_rect3df
 PL_API void pl_transform3x3_apply_rc(const pl_transform3x3 *t, pl_rect3df *rc);
@@ -139,6 +157,7 @@ PL_API extern const pl_matrix2x2 pl_matrix2x2_identity;
 PL_API pl_matrix2x2 pl_matrix2x2_rotation(float angle);
 
 PL_API void pl_matrix2x2_apply(const pl_matrix2x2 *mat, float vec[2]);
+PL_API void pl_matrix2x2_apply_v(const pl_matrix2x2 *mat, pl_vec2df *v);
 PL_API void pl_matrix2x2_apply_rc(const pl_matrix2x2 *mat, pl_rect2df *rc);
 
 PL_API void pl_matrix2x2_mul(pl_matrix2x2 *a, const pl_matrix2x2 *b);
@@ -155,6 +174,7 @@ typedef struct pl_transform2x2 {
 PL_API extern const pl_transform2x2 pl_transform2x2_identity;
 
 PL_API void pl_transform2x2_apply(const pl_transform2x2 *t, float vec[2]);
+PL_API void pl_transform2x2_apply_v(const pl_transform2x2 *t, pl_vec2df *v);
 PL_API void pl_transform2x2_apply_rc(const pl_transform2x2 *t, pl_rect2df *rc);
 
 PL_API void pl_transform2x2_mul(pl_transform2x2 *a, const pl_transform2x2 *b);
