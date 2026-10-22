@@ -994,7 +994,9 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
     ident_t randfun = sh_fresh(sh, "rand"),
             state = sh_fresh(sh, "state");
 
-    // Based on pcg3d (http://jcgt.org/published/0009/03/02/)
+    // Based on pcg3d (http://jcgt.org/published/0009/03/02/). The result is
+    // made from the 24 high bits, which a float holds exactly, so that it
+    // stays below 1.0 (the full 32 bits would round up to 1.0 at the top)
     GLSLG("#define prng_t uvec3\n");
     GLSLH("vec3 "$"(inout uvec3 s) {                    \n"
           "    s = 1664525u * s + uvec3(1013904223u);   \n"
@@ -1005,7 +1007,7 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
           "    s.x += s.y * s.z;                        \n"
           "    s.y += s.z * s.x;                        \n"
           "    s.z += s.x * s.y;                        \n"
-          "    return vec3(s) * 1.0/float(0xFFFFFFFFu); \n"
+          "    return vec3(s >> 8u) * (1.0/16777216.0); \n"
           "}                                            \n",
           randfun);
 

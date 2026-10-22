@@ -289,7 +289,7 @@ void *sh_alloc_obj(pl_gpu gpu, pl_shader_obj *ptr,
                    void (*uninit)(pl_gpu gpu, void *priv));
 
 // Initializes a PRNG. The resulting string will directly evaluate to a
-// pseudorandom, uniformly distributed vec3 from [0.0,1.0]. Since this
+// pseudorandom, uniformly distributed vec3 from [0.0,1.0). Since this
 // algorithm works by mutating a state variable, if the user wants to use the
 // resulting PRNG inside a subfunction, they must add an extra `inout prng_t %s`
 // with the contents of `state` to the signature. (Optional)
