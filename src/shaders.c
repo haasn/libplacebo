@@ -427,9 +427,18 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
     case PL_VAR_UINT:
         GLSLH("const uint "$" = uint(%u); \n", id, *(unsigned int *) sc.data);
         return id;
-    case PL_VAR_FLOAT:
-        GLSLH("const float "$" = float(%f); \n", id, *(float *) sc.data);
+    case PL_VAR_FLOAT: {
+        // The shortest form of an integral value has no decimal point, which
+        // makes it an int literal, and the lexer limits those to 32 bits
+        char buf[32];
+        int len = pl_str_print_double(buf, sizeof(buf) - 2, *(float *) sc.data);
+        if (!memchr(buf, '.', len) && !memchr(buf, 'e', len)) {
+            buf[len++] = '.';
+            buf[len++] = '0';
+        }
+        GLSLH("const float "$" = float(%.*s); \n", id, len, buf);
         return id;
+    }
     case PL_VAR_INVALID:
     case PL_VAR_TYPE_COUNT:
         break;
