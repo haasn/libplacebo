@@ -2757,19 +2757,21 @@ static void translate_srgb_color(float out_color[3], const float in_color[3],
     case PL_COLOR_TRC_GAMMA22:
         // Re-use input transfer curve to avoid small adaptations
         srgb.transfer = csp->transfer;
-        srgb.hdr.min_luma = csp->hdr.min_luma;
         break;
     default:
-        // In all other cases, use infinite contrast sRGB, to avoid unwanted
-        // black level changes
-        srgb.hdr.min_luma = PL_COLOR_HDR_BLACK;
         break;
     }
 
-    // The colors are display-referred, so on SDR targets map sRGB white onto
-    // the target white, regardless of the target's absolute luminance
-    if (!pl_color_transfer_is_hdr(csp->transfer))
+    // The colors are display-referred, so on SDR targets map sRGB extremes
+    // onto the target extremes, regardless of the target's absolute luminance
+    if (!pl_color_transfer_is_hdr(csp->transfer)) {
+        srgb.hdr.min_luma = csp->hdr.min_luma;
         srgb.hdr.max_luma = csp->hdr.max_luma;
+    } else {
+        // On HDR targets, use infinite contrast sRGB instead, to avoid
+        // unwanted black level changes
+        srgb.hdr.min_luma = PL_COLOR_HDR_BLACK;
+    }
 
     memcpy(out_color, in_color, sizeof(float[3]));
     pl_color_linearize(&srgb, out_color);
