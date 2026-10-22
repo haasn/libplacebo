@@ -315,6 +315,14 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     if (p->gl_ver && p->gl_ver < 30 && fmt->component_depth[0] >= 32)
         fmt->emulated = true;
 
+    // GLES filters 32-bit floats only with GL_OES_texture_float_linear
+    if (p->gles_ver && fmt->type == PL_FMT_FLOAT && fmt->component_depth[0] == 32 &&
+        (fmt->caps & PL_FMT_CAP_SAMPLEABLE) &&
+        pl_opengl_has_ext(p->gl, "GL_OES_texture_float_linear"))
+    {
+        fmt->caps |= PL_FMT_CAP_LINEAR;
+    }
+
     // For sanity, clear the superfluous fields
     for (int i = fmt->num_components; i < 4; i++) {
         fmt->component_depth[i] = 0;
@@ -406,6 +414,13 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
         break;
     case PL_FMT_TYPE_COUNT:
         pl_unreachable();
+    }
+
+    // GLES blends 32-bit float draw buffers only with GL_EXT_float_blend
+    if (p->gles_ver && fmt->type == PL_FMT_FLOAT && fmt->component_depth[0] == 32 &&
+        !pl_opengl_has_ext(p->gl, "GL_EXT_float_blend"))
+    {
+        fmt->caps &= ~PL_FMT_CAP_BLENDABLE;
     }
 
     // TODO: Texel buffers
