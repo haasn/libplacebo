@@ -1794,7 +1794,7 @@ static void pl_render_bits_tests(pl_gpu gpu)
         for (int l = 0; l < 2; l++) {
             const enum pl_color_levels levels = l ? PL_COLOR_LEVELS_FULL
                                                   : PL_COLOR_LEVELS_LIMITED;
-            struct pl_color_repr repr = {
+            const struct pl_color_repr repr0 = {
                 .sys    = PL_COLOR_SYSTEM_BT_709,
                 .levels = levels,
                 .bits   = {
@@ -1803,6 +1803,7 @@ static void pl_render_bits_tests(pl_gpu gpu)
                     .bit_shift    = shift,
                 },
             };
+            struct pl_color_repr repr = repr0;
 
             // Nominal luma range and neutral chroma point, at `col` bits
             const int ylo = levels == PL_COLOR_LEVELS_LIMITED ?  16 << (col - 8) : 0;
@@ -1851,6 +1852,47 @@ static void pl_render_bits_tests(pl_gpu gpu)
                 REQUIRE_FEQ(g, expected[i], 1e-6);
                 REQUIRE_FEQ(r, g, 1e-6);
                 REQUIRE_FEQ(r, b, 1e-6);
+            }
+
+            // The same through the renderer, which normalizes the planes
+            // before the decode, and makes up the neutral chroma of a
+            // luma-only image itself
+            for (int luma_only = 0; luma_only < 2; luma_only++) {
+                struct pl_frame src_frame = {
+                    .num_planes = 1,
+                    .planes = {{
+                        .texture           = src_tex,
+                        .components        = luma_only ? 1 : 3,
+                        .component_mapping = {0, 1, 2},
+                    }},
+                    .repr  = repr0,
+                    .color = pl_color_space_bt709,
+                };
+                struct pl_frame dst_frame = {
+                    .num_planes = 1,
+                    .planes = {{
+                        .texture           = fbo_tex,
+                        .components        = 3,
+                        .component_mapping = {0, 1, 2},
+                    }},
+                    .repr  = pl_color_repr_rgb,
+                    .color = pl_color_space_bt709,
+                };
+                struct pl_render_params params = pl_render_default_params;
+                params.dither_params = NULL;
+                REQUIRE(pl_render_image(rr, &src_frame, &dst_frame, &params));
+                REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+                REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
+                    .tex = fbo_tex,
+                    .ptr = out,
+                )));
+
+                for (int i = 0; i < num_points; i++) {
+                    const float r = out[i][0], g = out[i][1], b = out[i][2];
+                    REQUIRE_FEQ(g, expected[i], 1e-6);
+                    REQUIRE_FEQ(r, g, 1e-6);
+                    REQUIRE_FEQ(r, b, 1e-6);
+                }
             }
         }
     }
@@ -2627,6 +2669,8 @@ static void pl_dovi_tests(pl_gpu gpu)
                                  PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE);
     if (!fbo_fmt)
         return;
+    pl_fmt f32_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 32, 32,
+                                 PL_FMT_CAP_SAMPLEABLE);
     printf("pl_dovi_tests:\n");
 
     pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
@@ -2635,6 +2679,7 @@ static void pl_dovi_tests(pl_gpu gpu)
     static const struct {
         int depth, tex_bits, shift;
         enum pl_color_levels levels;
+        bool normalized; // by the renderer, into a float texture
     } variants[] = {
         {10, 16, 0, PL_COLOR_LEVELS_FULL},
         {10, 16, 0, PL_COLOR_LEVELS_LIMITED},
@@ -2642,15 +2687,20 @@ static void pl_dovi_tests(pl_gpu gpu)
         { 8,  8, 0, PL_COLOR_LEVELS_FULL},
         { 8, 16, 0, PL_COLOR_LEVELS_LIMITED},
         { 8, 16, 8, PL_COLOR_LEVELS_FULL},
+        {10, 16, 0, PL_COLOR_LEVELS_FULL,    true},
+        {10, 16, 6, PL_COLOR_LEVELS_LIMITED, true},
+        { 8, 16, 8, PL_COLOR_LEVELS_FULL,    true},
     };
 
     for (int i = 0; i < PL_ARRAY_SIZE(variants); i++) {
         const int depth = variants[i].depth, tex_bits = variants[i].tex_bits,
                   shift = variants[i].shift;
+        const bool normalized = variants[i].normalized;
         pl_fmt tex_fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 4, tex_bits, tex_bits,
                                      PL_FMT_CAP_SAMPLEABLE);
-        if (!tex_fmt) {
-            printf("- no %d-bit texture format, skipping\n", tex_bits);
+        if (!tex_fmt || (normalized && !f32_fmt)) {
+            printf("- no %d-bit texture format, skipping\n",
+                   tex_fmt ? 32 : tex_bits);
             continue;
         }
 
@@ -2660,11 +2710,28 @@ static void pl_dovi_tests(pl_gpu gpu)
         pl_matrix3x3 mat;
         dovi_test_metadata(&ref, &meta, &mat);
 
+        struct pl_color_repr repr = {
+            .sys    = PL_COLOR_SYSTEM_DOLBYVISION,
+            .levels = variants[i].levels,
+            .dovi   = &meta,
+            .bits   = {
+                .sample_depth = tex_bits,
+                .color_depth  = depth,
+                .bit_shift    = shift,
+            },
+        };
+
+        // The renderer normalizes every plane before the decode
+        const float norm = normalized ? pl_color_repr_normalize(&repr) : 1.0f;
+        if (normalized)
+            REQUIRE_CMP(repr.bits.sample_depth, ==, depth, "d");
+
         const int W = 1 << depth, H = 8;
         uint16_t *bl_data = malloc(W * H * 4 * sizeof(uint16_t));
         uint16_t *el_data = malloc(W * H * 4 * sizeof(uint16_t));
+        float *bl_float = malloc(W * H * 4 * sizeof(float));
         uint8_t *bl_data8 = (uint8_t *) bl_data, *el_data8 = (uint8_t *) el_data;
-        REQUIRE(bl_data && el_data);
+        REQUIRE(bl_data && el_data && bl_float);
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 int bl[3], el[3];
@@ -2679,16 +2746,18 @@ static void pl_dovi_tests(pl_gpu gpu)
                         bl_data8[(y * W + x) * 4 + c] = bv;
                         el_data8[(y * W + x) * 4 + c] = ev;
                     }
+                    bl_float[(y * W + x) * 4 + c] = norm * bv /
+                                                    (float) ((1 << tex_bits) - 1);
                 }
             }
         }
 
         pl_tex bl_tex = pl_tex_create(gpu, pl_tex_params(
-            .format = tex_fmt,
+            .format = normalized ? f32_fmt : tex_fmt,
             .w = W,
             .h = H,
             .sampleable = true,
-            .initial_data = bl_data,
+            .initial_data = normalized ? (void *) bl_float : (void *) bl_data,
         ));
         pl_tex el_tex = pl_tex_create(gpu, pl_tex_params(
             .format = tex_fmt,
@@ -2705,17 +2774,6 @@ static void pl_dovi_tests(pl_gpu gpu)
             .host_readable = true,
         ));
         REQUIRE(bl_tex && el_tex && fbo);
-
-        struct pl_color_repr repr = {
-            .sys    = PL_COLOR_SYSTEM_DOLBYVISION,
-            .levels = variants[i].levels,
-            .dovi   = &meta,
-            .bits   = {
-                .sample_depth = tex_bits,
-                .color_depth  = depth,
-                .bit_shift    = shift,
-            },
-        };
 
         // The enhancement layer sub-shader returns the EL codes
         pl_shader el_sh = pl_dispatch_begin_ex(dp, true);
@@ -2788,15 +2846,16 @@ static void pl_dovi_tests(pl_gpu gpu)
             }
         }
 
-        printf("- %d-bit codes in %d-bit textures, shift %d, %s range: "
+        printf("- %d-bit codes in %d-bit textures, shift %d, %s range%s: "
                "max error %.2g\n", depth, tex_bits, shift,
                variants[i].levels == PL_COLOR_LEVELS_FULL ? "full" : "limited",
-               max_err);
+               normalized ? ", normalized" : "", max_err);
         REQUIRE_CMP(bad, ==, 0, "d");
 
         free(out);
         free(bl_data);
         free(el_data);
+        free(bl_float);
         pl_tex_destroy(gpu, &bl_tex);
         pl_tex_destroy(gpu, &el_tex);
         pl_tex_destroy(gpu, &fbo);

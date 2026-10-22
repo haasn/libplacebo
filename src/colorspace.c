@@ -208,7 +208,8 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
     if (!tex_bits)
         tex_bits = col_bits = 8;
 
-    if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_LIMITED) {
+    const bool limited = pl_color_levels_guess(repr) == PL_COLOR_LEVELS_LIMITED;
+    if (limited) {
         // Limit range is always shifted directly
         scale *= (float) (1LL << tex_bits) / (1LL << col_bits);
     } else {
@@ -216,6 +217,10 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
         scale *= ((1LL << tex_bits) - 1.) / ((1LL << col_bits) - 1.);
     }
 
+    // The result is a signal of the sample depth when limited range, and of
+    // the color depth when full range
+    if (bits->sample_depth || bits->color_depth)
+        bits->sample_depth = limited ? tex_bits : col_bits;
     bits->color_depth = bits->sample_depth;
     return scale;
 }
@@ -233,6 +238,8 @@ float pl_color_repr_code_scale(struct pl_color_repr *repr, int *out_depth)
         *out_depth = col_bits;
 
     bits->bit_shift = 0;
+    if (bits->sample_depth || bits->color_depth)
+        bits->sample_depth = col_bits;
     bits->color_depth = bits->sample_depth;
     return scale;
 }

@@ -204,8 +204,11 @@ PL_API void pl_color_repr_merge(struct pl_color_repr *orig,
 // This function normalizes the color representation such that
 // color_depth=sample_depth and bit_shift=0; and returns the scaling factor
 // that must be multiplied into the color value to accomplish this, assuming
-// it has already been sampled by the GPU. If unknown, the color and sample
-// depth will both be inferred as 8 bits for the purposes of this conversion.
+// it has already been sampled by the GPU. A full range signal is normalized
+// to the range of its color depth, so both depths become the color depth; a
+// limited range signal to the range of the sample depth. If unknown, the
+// color and sample depth will both be inferred as 8 bits for the purposes of
+// this conversion.
 PL_API float pl_color_repr_normalize(struct pl_color_repr *repr);
 
 // Compute the stored value limits for the given color representation,

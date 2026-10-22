@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include "colorspace.h"
+
 #define PL_CLAMP(x, l, h) ((x) < (l) ? (l) : (x) > (h) ? (h) : (x))
 #define INT(x, s) lroundf(PL_CLAMP(x, 0, 1) * s)
 
@@ -215,6 +217,109 @@ int main()
     pc_repr.bits.sample_depth = 16;
     float pc10to16 = pl_color_repr_normalize(&pc_repr);
     REQUIRE_FEQ(pc10to16 * 1000/65535., 1000/1023., 1e-7);
+
+    // A full range signal normalized out of a deeper texture is a signal of
+    // its own depth, which the decoding needs for the chroma midpoint and the
+    // YCgCo-R ranges: the neutral codes decode to black
+    static const enum pl_color_system full_sys[] = {
+        PL_COLOR_SYSTEM_BT_709,
+        PL_COLOR_SYSTEM_YCGCO_RE,
+        PL_COLOR_SYSTEM_YCGCO_RO,
+    };
+    for (int s = 0; s < PL_ARRAY_SIZE(full_sys); s++) {
+        struct pl_color_repr repr = {
+            .sys    = full_sys[s],
+            .levels = PL_COLOR_LEVELS_FULL,
+            .bits   = { .sample_depth = 16, .color_depth = 10 },
+        };
+        // the nominal luma range of YCgCo-R has fewer bits than its chroma
+        const int white_luma = full_sys[s] == PL_COLOR_SYSTEM_YCGCO_RE ? 255
+                             : full_sys[s] == PL_COLOR_SYSTEM_YCGCO_RO ? 511
+                             : 1023;
+        float black[3] = { 0, 512 / 65535.f, 512 / 65535.f };
+        float white[3] = { white_luma / 65535.f, 512 / 65535.f, 512 / 65535.f };
+        float scale = pl_color_repr_normalize(&repr);
+        pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
+        for (int c = 0; c < 3; c++) {
+            black[c] *= scale;
+            white[c] *= scale;
+        }
+        pl_transform3x3_apply(&tr, black);
+        pl_transform3x3_apply(&tr, white);
+        for (int c = 0; c < 3; c++) {
+            REQUIRE_FEQ(black[c], 0.0, 1e-6);
+            REQUIRE_FEQ(white[c], 1.0, 1e-6);
+        }
+        REQUIRE_CMP(repr.bits.sample_depth, ==, 10, "d");
+        REQUIRE_CMP(repr.bits.color_depth, ==, 10, "d");
+    }
+
+    // Unknown bits stay unknown, a missing sample depth is the color depth
+    struct pl_color_repr nobits = {
+        .sys    = PL_COLOR_SYSTEM_BT_709,
+        .levels = PL_COLOR_LEVELS_FULL,
+    };
+    REQUIRE_FEQ(pl_color_repr_normalize(&nobits), 1.0, 1e-7);
+    REQUIRE_CMP(nobits.bits.sample_depth, ==, 0, "d");
+    REQUIRE_CMP(nobits.bits.color_depth, ==, 0, "d");
+    for (int l = 0; l < 2; l++) {
+        struct pl_color_repr nosample = {
+            .sys    = PL_COLOR_SYSTEM_BT_709,
+            .levels = l ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED,
+            .bits   = { .color_depth = 10 },
+        };
+        REQUIRE_FEQ(pl_color_repr_normalize(&nosample), 1.0, 1e-7);
+        REQUIRE_CMP(nosample.bits.sample_depth, ==, 10, "d");
+        REQUIRE_CMP(nosample.bits.color_depth, ==, 10, "d");
+    }
+
+#ifdef PL_HAVE_DOVI
+    // The same for Dolby Vision, whose offsets are in units of the reshaped
+    // signal, the codes divided by 2^depth, which the reshaping scales the
+    // normalized signal to
+    static const struct pl_dovi_metadata dovi_black = {
+        .nonlinear_offset = { 16.0f / 256, 0.5f, 0.5f },
+        .nonlinear = { .m = {{ 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }} },
+    };
+    for (int depth = 10; depth <= 12; depth += 2) {
+        const struct pl_bit_encoding encodings[] = {
+            { depth, depth, 0 }, { 16, depth, 0 }, { 16, depth, 16 - depth },
+        };
+        for (int e = 0; e < PL_ARRAY_SIZE(encodings); e++) {
+            for (int stages = 0; stages <= 2; stages++) {
+                struct pl_color_repr repr = {
+                    .sys  = PL_COLOR_SYSTEM_DOLBYVISION,
+                    .bits = encodings[e],
+                    .dovi = &dovi_black,
+                };
+                const int codes[3] = {
+                    16 << (depth - 8), 128 << (depth - 8), 128 << (depth - 8),
+                };
+                float black[3];
+                for (int c = 0; c < 3; c++) {
+                    black[c] = ldexpf(codes[c], encodings[e].bit_shift) /
+                               ((1 << encodings[e].sample_depth) - 1);
+                }
+                for (int stage = 0; stage < stages; stage++) {
+                    float scale = pl_color_repr_normalize(&repr);
+                    for (int c = 0; c < 3; c++)
+                        black[c] *= scale;
+                }
+                int reshape_depth;
+                float scale = pl_color_repr_code_scale(&repr, &reshape_depth);
+                REQUIRE_CMP(reshape_depth, ==, depth, "d");
+                REQUIRE_CMP(repr.bits.sample_depth, ==, depth, "d");
+                REQUIRE_CMP(repr.bits.color_depth, ==, depth, "d");
+                pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
+                for (int c = 0; c < 3; c++)
+                    black[c] *= ldexpf(scale, -reshape_depth);
+                pl_transform3x3_apply(&tr, black);
+                for (int c = 0; c < 3; c++)
+                    REQUIRE_FEQ(black[c], 0.0, 1e-6);
+            }
+        }
+    }
+#endif
 
 #define BITVALUES(N, a, b, c, d) {                              \
     (a) / ((1LL << (N)) - 1.0f), (b) / ((1LL << (N)) - 1.0f),   \

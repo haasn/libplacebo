@@ -1888,7 +1888,10 @@ static bool pass_read_image(struct pass_state *pass)
         }
     }
 
-    int bits = image->repr.bits.sample_depth;
+    // The neutral values are in the units of the normalized signal
+    struct pl_color_repr normalized = image->repr;
+    pl_color_repr_normalize(&normalized);
+    int bits = normalized.bits.sample_depth;
     float out_scale = bits ? (1llu << bits) / ((1llu << bits) - 1.0f) : 1.0f;
     float neutral_luma = 0.0, neutral_chroma = 0.5f * out_scale;
     if (pl_color_levels_guess(&image->repr) == PL_COLOR_LEVELS_LIMITED)
