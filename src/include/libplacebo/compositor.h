@@ -341,7 +341,8 @@ PL_API pl_scene pl_scene_create_json(pl_log log, const char *json, size_t len);
 PL_API void pl_scene_destroy(pl_scene *scene);
 
 // Update the compositor and input parameters of `scene` to reflect the
-// current instance in time (output-referred).
+// current instance in time (output-referred). Has no effect on scenes without
+// animations.
 PL_API void pl_scene_update(pl_scene scene, double pts);
 
 // Helper function to both update a scene and render it.

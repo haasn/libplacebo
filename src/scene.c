@@ -15,6 +15,8 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
+
 #include "common.h"
 #include "log.h"
 #include "json.h"
@@ -25,6 +27,7 @@
 struct priv {
     pl_options opts; // compositor-level options
     PL_ARRAY(pl_options) input_opts;
+    PL_ARRAY(struct animation) animations;
 };
 
 void pl_scene_destroy(pl_scene *pscene)
@@ -43,9 +46,112 @@ void pl_scene_destroy(pl_scene *pscene)
     *pscene = NULL;
 }
 
+// Animation / tweening
+
+struct keyframe {
+    double pts;
+    double value;
+    double easing[4]; // [x1, y1, x2, y2]
+};
+
+struct animation {
+    pl_opt opt;
+    void *value;
+
+    // Sorted list of keyframes
+    PL_ARRAY(struct keyframe) keyframes;
+};
+
+static double cubic_bezier(double t, double v0, double v1, const double p[4])
+{
+    const double x1 = p[0], y1 = p[1], x2 = p[2], y2 = p[3];
+    if (x1 < 0.0 || x1 > 1.0 || x2 < 0.0 || x2 > 1.0)
+        return v0; // fall back to step hold
+    if (x1 == y1 && x2 == y2)
+        return v0 + (v1 - v0) * t;
+
+    /* Polynomial form with P0 = (0,0), P3 = (1,1):
+     * B(s) = ((a*s + b)*s + c)*s */
+    const double cx = 3.0 * x1;
+    const double bx = 3.0 * (x2 - x1) - cx;
+    const double ax = 1.0 - cx - bx;
+    const double cy = 3.0 * y1;
+    const double by = 3.0 * (y2 - y1) - cy;
+    const double ay = 1.0 - cy - by;
+
+    const double eps = 1e-7;
+    double s = t; /* good initial guess: x(s) is close to s */
+    int found = 0;
+
+    /* Newton-Raphson on x(s) - t = 0 */
+    for (int i = 0; i < 8; i++) {
+        const double err = ((ax * s + bx) * s + cx) * s - t;
+        if (fabs(err) < eps) { found = 1; break; }
+        const double d = (3.0 * ax * s + 2.0 * bx) * s + cx;   /* dx/ds */
+        if (fabs(d) < 1e-9) break;      /* flat spot, Newton unreliable */
+        s -= err / d;
+        if (s < 0.0 || s > 1.0) break;  /* left the domain */
+    }
+
+    /* Bisection fallback: x(s) is monotonic on [0,1] because x1, x2 lie in [0,1] */
+    if (!found) {
+        double lo = 0.0, hi = 1.0;
+        s = t;
+        for (int i = 0; i < 64; i++) {
+            const double x = ((ax * s + bx) * s + cx) * s;
+            if (fabs(x - t) < eps) break;
+            if (x < t) lo = s; else hi = s;
+            s = 0.5 * (lo + hi);
+        }
+    }
+
+    const double y = ((ay * s + by) * s + cy) * s;
+    return v0 + (v1 - v0) * y;
+}
+
+static double animation_sample(const struct animation *anim, double pts)
+{
+    pl_assert(anim && anim->keyframes.num > 0);
+    const struct keyframe *next = &anim->keyframes.elem[0], *prev = NULL;
+    if (pts < next->pts)
+        return next->value;
+
+    for (int i = 1; i < anim->keyframes.num; i++) {
+        prev = next;
+        next = &anim->keyframes.elem[i];
+        if (pts < next->pts)
+            break;
+    }
+
+    if (pts >= next->pts)
+        return next->value;
+
+    pl_assert(pts >= prev->pts && pts <= next->pts);
+    const double t = (pts - prev->pts) / (next->pts - prev->pts);
+    return cubic_bezier(t, prev->value, next->value, prev->easing);
+}
+
+static void animation_write(const struct animation *anim, double value)
+{
+    pl_opt opt = anim->opt;
+    if (opt->min != opt->max)
+        value = PL_CLAMP(value, opt->min, opt->max);
+
+    switch (pl_opt_size(opt)) {
+    case sizeof(float):  *(float *)  anim->value = value; return;
+    case sizeof(double): *(double *) anim->value = value; return;
+    }
+
+    pl_unreachable();
+}
+
 void pl_scene_update(pl_scene scene, const double pts)
 {
-    // TODO
+    struct priv *p = PL_PRIV(scene);
+    for (int i = 0; i < p->animations.num; i++) {
+        const struct animation *anim = &p->animations.elem[i];
+        animation_write(anim, animation_sample(anim, pts));
+    }
 }
 
 // JSON scene graph parsing
@@ -54,7 +160,162 @@ struct parse_ctx {
     pl_log log;
     pl_str path; // for error messages
     void *tmp;
+    struct pl_scene_t *scene;
 };
+
+static bool parse_number(struct parse_ctx *ctx, const struct json_value_s *val,
+                         double *out)
+{
+    pl_str str;
+    switch (val->type) {
+    case json_type_string:
+        str = json_str(val->payload);
+        break;
+    case json_type_number: {
+        const struct json_number_s *num = val->payload;
+        str = (pl_str) { (uint8_t *) num->number, num->number_size };
+        break;
+    }
+    default:
+        PL_ERR(ctx, "Invalid value type for '%.*s'. Expected number.",
+               PL_STR_FMT(ctx->path));
+        return false;
+    }
+
+    if (!pl_str_parse_double_fraction(str, out)) {
+        PL_ERR(ctx, "Failed parsing '%.*s' from value: '%.*s'",
+               PL_STR_FMT(ctx->path), PL_STR_FMT(str));
+        return false;
+    }
+
+    return true;
+}
+
+static bool parse_easing(struct parse_ctx *ctx, double easing[4],
+                         const struct json_value_s *val)
+{
+    const struct json_array_s *arr = json_value_as_array((void *) val);
+    if (!arr || arr->length != 4) {
+        PL_ERR(ctx, "Expected an array of four numbers [x1, y1, x2, y2] for "
+               "'%.*s'", PL_STR_FMT(ctx->path));
+        return false;
+    }
+
+    int idx = 0;
+    bool ok = true;
+    for (const struct json_array_element_s *e = arr->start; e; e = e->next) {
+        const size_t len_prefix = ctx->path.len;
+        pl_str_append_asprintf(ctx->tmp, &ctx->path, "[%d]", idx);
+        ok &= parse_number(ctx, e->value, &easing[idx]);
+        ctx->path = pl_str_take(ctx->path, len_prefix);
+        idx++;
+    }
+
+    if (ok && (easing[0] < 0.0 || easing[0] > 1.0 ||
+               easing[2] < 0.0 || easing[2] > 1.0))
+    {
+        PL_ERR(ctx, "Easing '%.*s' must have x1 and x2 in the range [0, 1]",
+               PL_STR_FMT(ctx->path));
+        return false;
+    }
+
+    return ok;
+}
+
+static bool parse_keyframe(struct parse_ctx *ctx, pl_opt opt,
+                           struct keyframe *kf, const struct json_value_s *val)
+{
+    const struct json_object_s *obj = json_value_as_object((void *) val);
+    if (!obj) {
+        PL_ERR(ctx, "Expected an object for '%.*s'", PL_STR_FMT(ctx->path));
+        return false;
+    }
+
+    *kf = (struct keyframe) { .easing = { -1.0 } }; // step hold by default
+    bool has_pts = false, has_value = false, ok = true;
+    for (const struct json_object_element_s *e = obj->start; e; e = e->next) {
+        const size_t len_prefix = ctx->path.len;
+        const pl_str key = json_str(e->name);
+        pl_str_append_asprintf(ctx->tmp, &ctx->path, ".%.*s", PL_STR_FMT(key));
+        if (pl_str_equals0(key, "pts")) {
+            has_pts = parse_number(ctx, e->value, &kf->pts);
+            ok &= has_pts;
+        } else if (pl_str_equals0(key, "value")) {
+            has_value = parse_number(ctx, e->value, &kf->value);
+            if (has_value && opt->min != opt->max &&
+                (kf->value < opt->min || kf->value > opt->max))
+            {
+                PL_ERR(ctx, "Value of %f for '%.*s' out of range: [%.2f, %.2f]",
+                       kf->value, PL_STR_FMT(ctx->path), opt->min, opt->max);
+                has_value = false;
+            }
+            ok &= has_value;
+        } else if (pl_str_equals0(key, "easing")) {
+            ok &= parse_easing(ctx, kf->easing, e->value);
+        } else {
+            PL_ERR(ctx, "Unrecognized key '%.*s'", PL_STR_FMT(ctx->path));
+            ok = false;
+        }
+        ctx->path = pl_str_take(ctx->path, len_prefix);
+    }
+
+    if (ok && (!has_pts || !has_value)) {
+        PL_ERR(ctx, "Keyframe '%.*s' requires both 'pts' and 'value'",
+               PL_STR_FMT(ctx->path));
+        return false;
+    }
+
+    return ok;
+}
+
+static bool parse_animation(struct parse_ctx *ctx, pl_opt opt,
+                            void *field, const struct json_array_s *arr)
+{
+    if (opt->type != PL_OPT_FLOAT) {
+        PL_ERR(ctx, "Option '%.*s' cannot be animated, only floating point "
+               "options can", PL_STR_FMT(ctx->path));
+        return false;
+    } else if (!arr->length) {
+        PL_ERR(ctx, "Animation '%.*s' requires at least one keyframe",
+               PL_STR_FMT(ctx->path));
+        return false;
+    }
+
+    struct pl_scene_t *scene = ctx->scene;
+    struct animation anim = { .value = field, .opt = opt };
+    int idx = 0;
+    bool ok = true;
+    for (const struct json_array_element_s *e = arr->start; e; e = e->next) {
+        const size_t len_prefix = ctx->path.len;
+        pl_str_append_asprintf(ctx->tmp, &ctx->path, "[%d]", idx);
+        struct keyframe kf;
+        if (parse_keyframe(ctx, opt, &kf, e->value)) {
+            PL_ARRAY_APPEND(scene, anim.keyframes, kf);
+        } else {
+            ok = false;
+        }
+        ctx->path = pl_str_take(ctx->path, len_prefix);
+        idx++;
+    }
+
+    if (!ok)
+        return false;
+
+    // Sort by pts, keeping keyframes with equal pts in the order given
+    for (int i = 1; i < anim.keyframes.num; i++) {
+        const struct keyframe kf = anim.keyframes.elem[i];
+        int j = i;
+        for (; j > 0 && anim.keyframes.elem[j - 1].pts > kf.pts; j--)
+            anim.keyframes.elem[j] = anim.keyframes.elem[j - 1];
+        anim.keyframes.elem[j] = kf;
+    }
+
+    // Hold the first value until the first pl_scene_update()
+    animation_write(&anim, anim.keyframes.elem[0].value);
+    struct priv *p = PL_PRIV(scene);
+    PL_ARRAY_APPEND(scene, p->animations, anim);
+    return true;
+}
 
 static bool parse_value(struct parse_ctx *ctx, void *base, pl_opt opt,
                         void *field, const struct json_value_s *val)
@@ -76,10 +337,11 @@ static bool parse_value(struct parse_ctx *ctx, void *base, pl_opt opt,
         str = pl_str0("no");
         break;
     case json_type_array:
+        return parse_animation(ctx, opt, field, val->payload);
     case json_type_object:
     case json_type_null:
         PL_ERR(ctx, "Invalid value type for option '%.*s'. Expected string, "
-               "number or boolean.", PL_STR_FMT(ctx->path));
+               "number, boolean or array.", PL_STR_FMT(ctx->path));
         return false;
     default:
         pl_unreachable();
@@ -143,6 +405,19 @@ static bool parse_struct(struct parse_ctx *ctx, void *base,
     return ok;
 }
 
+static bool parse_params(struct parse_ctx *ctx, pl_options opts,
+                         const struct json_value_s *val)
+{
+    struct priv *p = PL_PRIV(ctx->scene);
+    const int num_animations = p->animations.num;
+    bool ok = parse_struct(ctx, opts, pl_option_list, opts, val);
+
+    // Avoid recompiling shaders whenever an animated value changes
+    if (p->animations.num > num_animations)
+        opts->params.dynamic_constants = true;
+    return ok;
+}
+
 static bool parse_input(struct parse_ctx *ctx, struct pl_scene_t *scene,
                         const struct json_value_s *val)
 {
@@ -166,7 +441,7 @@ static bool parse_input(struct parse_ctx *ctx, struct pl_scene_t *scene,
         const pl_str key = json_str(e->name);
         pl_str_append_asprintf(ctx->tmp, &ctx->path, ".%.*s", PL_STR_FMT(key));
         if (pl_str_equals0(key, "params")) {
-            ok &= parse_struct(ctx, opts, pl_option_list, opts, e->value);
+            ok &= parse_params(ctx, opts, e->value);
         } else {
             ok &= parse_key(ctx, input, pl_input_opts, input, key, e->value);
         }
@@ -213,7 +488,7 @@ static bool parse_scene(struct parse_ctx *ctx, struct pl_scene_t *scene,
         const pl_str key = json_str(e->name);
         pl_str_append(ctx->tmp, &ctx->path, key);
         if (pl_str_equals0(key, "params")) {
-            ok &= parse_struct(ctx, p->opts, pl_option_list, p->opts, e->value);
+            ok &= parse_params(ctx, p->opts, e->value);
         } else if (pl_str_equals0(key, "inputs")) {
             ok &= parse_inputs(ctx, scene, e->value);
         } else {
@@ -243,8 +518,9 @@ pl_scene pl_scene_create_json(pl_log log, const char *json, size_t len)
     scene->comp->params = &p->opts->params;
 
     struct parse_ctx ctx = {
-        .log = log,
-        .tmp = pl_tmp(NULL),
+        .log   = log,
+        .tmp   = pl_tmp(NULL),
+        .scene = scene,
     };
 
     struct json_value_s *root;

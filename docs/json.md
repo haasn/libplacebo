@@ -184,3 +184,57 @@ each input, whichever it applies to:
 The `border` is the part of the canvas not covered by the lowest visible input,
 which is also the input it is blurred from with `border=blur`. The `background`
 is drawn below all inputs.
+
+## Animations
+
+Any floating point option, whether a field of an input (such as the rects,
+`focus` or the timestamps) or one of its render options (such as `brightness`),
+can be animated by giving it an array of keyframes instead of a single value:
+
+```json
+"dst_rect": {
+    "x1": [
+        { "pts": 0.0, "value": 0.5, "easing": [0.42, 0, 0.58, 1] },
+        { "pts": 2.0, "value": 1.0 }
+    ]
+}
+```
+
+Each keyframe takes the following keys:
+
+- `pts`: The output timestamp of the keyframe, in the same timebase as
+  `pl_queue_params.pts`. Required.
+- `value`: The value at that timestamp, given and range checked like any other
+  value of the option. Required.
+- `easing`: How to transition from this keyframe to the next one, as the
+  control points `[x1, y1, x2, y2]` of a cubic Bézier curve from `(0, 0)` to
+  `(1, 1)`, like the CSS `cubic-bezier()` function. `x1` and `x2` must lie in
+  the range `[0, 1]`. If omitted, the value is held until the next keyframe.
+
+Some common easing curves are:
+
+| Curve         | `easing`                 |
+|---------------|--------------------------|
+| linear        | `[0, 0, 1, 1]`           |
+| ease          | `[0.25, 0.1, 0.25, 1]`   |
+| ease-in       | `[0.42, 0, 1, 1]`        |
+| ease-out      | `[0, 0, 0.58, 1]`        |
+| ease-in-out   | `[0.42, 0, 0.58, 1]`     |
+
+Keyframes may be listed in any order, however, keyframes with the same `pts`
+keep the order they were given in, which can be used to jump from one value
+to another instantly. Before the first keyframe, and after the last one, the
+option keeps the value of the corresponding boundary keyframe.
+
+The animated values are only updated by `pl_scene_update()`, which should be
+called for every output frame before rendering it, with the same `pts` as
+passed to the compositor. Until the first update, every animated option has the
+value of its first keyframe.
+
+The values in between keyframes are clamped to the valid range of the option,
+so a curve that overshoots (with `y1` or `y2` outside of `[0, 1]`) stops at the
+limits of that range.
+
+Since changes to a render option may imply recompiling the affected shaders,
+animating any render option also enables `dynamic_constants` for the
+`params` it belongs to.

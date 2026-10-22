@@ -124,6 +124,64 @@ int main(void)
     require_invalid("{ \"inputs\": [ { \"src_rect\": { \"x2\": 1 } } ] }");
     require_invalid("{ \"inputs\": [ { \"fit\": \"cover\" }, { \"fit\": \"squish\" } ] }");
 
+    // Animations, with keyframes given out of order
+    scene = create(log,
+        "{ \"inputs\": [ {"
+        "    \"stop_pts\": [ { \"pts\": 0, \"value\": 10 } ],"
+        "    \"dst_rect\": {"
+        "      \"x1\": ["
+        "        { \"pts\": 2, \"value\": 1 },"
+        "        { \"pts\": 0, \"value\": \"1/2\", \"easing\": [0, 0, 1, 1] }"
+        "      ],"
+        "      \"y1\": ["
+        "        { \"pts\": 0, \"value\": 0, \"easing\": [0.42, 0, 1, 1] },"
+        "        { \"pts\": 2, \"value\": 1 }"
+        "      ]"
+        "    },"
+        "    \"params\": {"
+        "      \"brightness\": ["
+        "        { \"pts\": 3, \"value\": 0.4 }, { \"pts\": 1, \"value\": 0.2 } ],"
+        "      \"contrast\": ["
+        "        { \"pts\": 0, \"value\": 0, \"easing\": [0, -1, 1, -1] },"
+        "        { \"pts\": 2, \"value\": 1 } ]"
+        "    }"
+        "} ] }");
+    REQUIRE(scene);
+    in = scene->comp->inputs[0];
+    par = in->params;
+
+    // The first keyframe holds until the first update
+    REQUIRE_CMP(in->stop_pts, ==, 10.0, "f");
+    REQUIRE_CMP(in->dst_rect.x1, ==, 0.5f, "f");
+    REQUIRE_CMP(par->color_adjustment->brightness, ==, 0.2f, "f");
+    REQUIRE(par->dynamic_constants);
+    REQUIRE(!scene->comp->params->dynamic_constants);
+
+    pl_scene_update(scene, 1.0);
+    REQUIRE_CMP(in->dst_rect.x1, ==, 0.75f, "f");                // linear
+    REQUIRE(in->dst_rect.y1 > 0.0f && in->dst_rect.y1 < 0.5f); // ease-in
+    REQUIRE_CMP(par->color_adjustment->brightness, ==, 0.2f, "f");
+    REQUIRE_CMP(par->color_adjustment->contrast, ==, 0.0f, "f"); // clamped
+    pl_scene_update(scene, 2.5);
+    REQUIRE_CMP(in->dst_rect.x1, ==, 1.0f, "f");
+    REQUIRE_CMP(in->dst_rect.y1, ==, 1.0f, "f");
+    REQUIRE_CMP(par->color_adjustment->brightness, ==, 0.2f, "f"); // step hold
+    pl_scene_update(scene, 3.0);
+    REQUIRE_CMP(par->color_adjustment->brightness, ==, 0.4f, "f");
+    pl_scene_update(scene, -1.0);
+    REQUIRE_CMP(in->dst_rect.x1, ==, 0.5f, "f");
+    pl_scene_destroy(&scene);
+
+    require_invalid("{ \"inputs\": [ { \"fit\": [ { \"pts\": 0, \"value\": \"fill\" } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"stop_pts\": [ ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"params\": { \"brightness\": [ "
+                     "{ \"pts\": 0, \"value\": 2 } ] } } ] }");
+    require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0 } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0, \"value\": 1, "
+                     "\"easing\": [ 1.5, 0, 1, 1 ] } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0, \"value\": 1, "
+                     "\"nope\": 1 } ] } ] }");
+
     pl_gpu_dummy_destroy(&gpu);
     pl_log_destroy(&log);
     return 0;
