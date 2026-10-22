@@ -752,6 +752,7 @@ static bool is_opaque(pl_input input, const struct pl_frame *image)
     const struct pl_distort_params *distort = par->distort_params;
 
     return image->repr.alpha == PL_ALPHA_NONE && !par->corner_rounding &&
+           par->transparency <= 0.0f &&
            (!distort || !memcmp(distort, &pl_distort_default_params, sizeof(*distort)));
 }
 
@@ -805,6 +806,12 @@ static void update_inputs(pl_compositor comp, struct pl_compositor_status *statu
         const struct pl_frame *cur = pl_frame_mix_nearest(&pi->mix);
         pl_assert(cur);
         if (!on_canvas(input, cur, target))
+            continue;
+
+        // Fully transparent inputs still need to be rendered if they are
+        // the base layer, since they imply the shape of the bg/border
+        const struct pl_render_params *par = input_params(input);
+        if (p->visible.num && par->transparency >= 1.0f)
             continue;
 
         // If an opaque frame covers the entire output, disregard lower layers
