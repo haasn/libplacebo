@@ -380,7 +380,7 @@ enum pl_queue_status pl_input_update(pl_input input,
     }
 
     if (pi->status == PL_QUEUE_EOF || pi->status == PL_QUEUE_ERR) {
-        pl_renderer_flush_cache(input->renderer);
+        pl_renderer_reset(input->renderer);
         pl_queue_reset(input->queue);
         pl_queue_push(input->queue, NULL); // discard any further frames
         pi->stop_pts = pts;
