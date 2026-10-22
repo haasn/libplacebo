@@ -368,31 +368,7 @@ PL_DAV1D_API void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colo
 {
     struct pl_frame frame;
     pl_frame_from_dav1dpicture(&frame, picture);
-
-    *out_colors = (struct pl_swapchain_colors) {
-        .primaries = frame.color.primaries,
-        .transfer = frame.color.transfer,
-    };
-
-    const Dav1dContentLightLevel *cll = picture->content_light;
-    if (cll) {
-        out_colors->hdr.max_cll = cll->max_content_light_level;
-        out_colors->hdr.max_fall = cll->max_frame_average_light_level;
-    }
-
-    const Dav1dMasteringDisplay *md = picture->mastering_display;
-    if (md) {
-        out_colors->hdr.min_luma = pl_fixed18_14(md->min_luminance);
-        out_colors->hdr.max_luma = pl_fixed24_8(md->max_luminance);
-        out_colors->hdr.prim.red.x   = pl_fixed0_16(md->primaries[0][0]);
-        out_colors->hdr.prim.red.y   = pl_fixed0_16(md->primaries[0][1]);
-        out_colors->hdr.prim.green.x = pl_fixed0_16(md->primaries[1][0]);
-        out_colors->hdr.prim.green.y = pl_fixed0_16(md->primaries[1][1]);
-        out_colors->hdr.prim.blue.x  = pl_fixed0_16(md->primaries[2][0]);
-        out_colors->hdr.prim.blue.y  = pl_fixed0_16(md->primaries[2][1]);
-        out_colors->hdr.prim.white.x = pl_fixed0_16(md->white_point[0]);
-        out_colors->hdr.prim.white.y = pl_fixed0_16(md->white_point[1]);
-    }
+    *out_colors = frame.color;
 }
 
 #define PL_MAGIC0 0x2c2a1269
