@@ -37,22 +37,22 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
 
     for (int i = 0; i < params->num_variables; i++) {
         struct pl_shader_var sv = params->variables[i];
-        GLSLP("#define %s "$"\n", sv.var.name, sh_var(sh, sv));
+        GLSLG("#define %s "$"\n", sv.var.name, sh_var(sh, sv));
     }
 
     for (int i = 0; i < params->num_descriptors; i++) {
         struct pl_shader_desc sd = params->descriptors[i];
-        GLSLP("#define %s "$"\n", sd.desc.name, sh_desc(sh, sd));
+        GLSLG("#define %s "$"\n", sd.desc.name, sh_desc(sh, sd));
     }
 
     for (int i = 0; i < params->num_vertex_attribs; i++) {
         struct pl_shader_va sva = params->vertex_attribs[i];
-        GLSLP("#define %s "$"\n", sva.attr.name, sh_attr(sh, sva));
+        GLSLG("#define %s "$"\n", sva.attr.name, sh_attr(sh, sva));
     }
 
     for (int i = 0; i < params->num_constants; i++) {
         struct pl_shader_const sc = params->constants[i];
-        GLSLP("#define %s "$"\n", sc.name, sh_const(sh, sc));
+        GLSLG("#define %s "$"\n", sc.name, sh_const(sh, sc));
     }
 
     if (params->prelude)

@@ -379,6 +379,10 @@ static void generate_shaders(pl_dispatch dp,
     if (has_gather && !gpu->glsl.gles)
         ADD(pre, "#extension GL_ARB_texture_gather : enable\n");
 
+    // The shader prelude may hold #extension directives, which have to come
+    // before any declaration
+    ADD_CAT(pre, sh->buffers[SH_BUF_PRELUDE]);
+
     if (gpu->glsl.gles) {
         // Use 32-bit precision for floats if possible
         ADD(pre, "#ifdef GL_FRAGMENT_PRECISION_HIGH \n"
@@ -1043,7 +1047,7 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
         .dynamic = true,
     });
 
-    GLSLP("#define frag_pos(id) (vec2(id) + vec2(0.5))  \n"
+    GLSLG("#define frag_pos(id) (vec2(id) + vec2(0.5))  \n"
           "#define frag_map(id) ("$" * frag_pos(id))    \n"
           "#define gl_FragCoord vec4(frag_pos(gl_GlobalInvocationID), 0.0, 1.0) \n",
           *out_scale);
@@ -1059,7 +1063,7 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
             });
         }
 
-        GLSLP("#define "$"_map(id) "
+        GLSLG("#define "$"_map(id) "
              "(mix(mix("$", "$", frag_map(id).x), "
              "     mix("$", "$", frag_map(id).x), "
              "frag_map(id).y)) \n"
@@ -1538,7 +1542,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
         ident_t id = sh_fresh(sh, params->vertex_attribs[i].name);
         sh->vas.elem[i].attr = params->vertex_attribs[i];
         sh->vas.elem[i].attr.name = sh_ident_pack(id);
-        GLSLP("#define %s "$"\n", params->vertex_attribs[i].name, id);
+        GLSLG("#define %s "$"\n", params->vertex_attribs[i].name, id);
     }
 
     // Compute the coordinate projection matrix

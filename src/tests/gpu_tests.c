@@ -846,6 +846,10 @@ static void pl_shader_tests(pl_gpu gpu)
 
     // Test custom shaders
     struct pl_custom_shader custom = {
+        .prelude =
+            "#extension GL_ARB_texture_gather : enable  \n"
+            "#define INVERT invert                      \n",
+
         .header =
             "vec3 invert(vec3 color)            \n"
             "{                                  \n"
@@ -854,7 +858,7 @@ static void pl_shader_tests(pl_gpu gpu)
 
         .body =
             "color = vec4(gl_FragCoord.xy, 0.0, 1.0);   \n"
-            "color.rgb = invert(color.rgb) + offset;    \n",
+            "color.rgb = INVERT(color.rgb) + offset;    \n",
 
         .input = PL_SHADER_SIG_NONE,
         .output = PL_SHADER_SIG_COLOR,

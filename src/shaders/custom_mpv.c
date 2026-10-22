@@ -1488,7 +1488,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 goto error;
             }
 
-            GLSLP("#define out_image "$" \n", sh_desc(sh, (struct pl_shader_desc) {
+            GLSLG("#define out_image "$" \n", sh_desc(sh, (struct pl_shader_desc) {
                 .binding.object = fbo,
                 .desc = {
                     .name = "out_image",
