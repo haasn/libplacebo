@@ -221,6 +221,10 @@ void pl_queue_reset(pl_queue p)
 
     for (int i = 0; i < p->queue.num; i++)
         entry_cull(p, p->queue.elem[i], false);
+    for (int n = 0; n < p->cache.num; n++) {
+        for (int i = 0; i < PL_ARRAY_SIZE(p->cache.elem[n].tex); i++)
+            pl_tex_destroy(p->gpu, &p->cache.elem[n].tex[i]);
+    }
 
     *p = (struct pl_queue_t) {
         .gpu = p->gpu,
@@ -236,9 +240,7 @@ void pl_queue_reset(pl_queue p)
         .tmp_sig.elem = p->tmp_sig.elem,
         .tmp_ts.elem = p->tmp_ts.elem,
         .tmp_frame.elem = p->tmp_frame.elem,
-
-        // Reuse GPU object cache entirely
-        .cache = p->cache,
+        .cache.elem = p->cache.elem,
     };
 
     pl_cond_signal(&p->wakeup);

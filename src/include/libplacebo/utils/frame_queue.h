@@ -107,6 +107,7 @@ PL_API void pl_queue_destroy(pl_queue *queue);
 
 // Explicitly clear the queue. This is essentially equivalent to destroying
 // and recreating the queue, but preserves any internal memory allocations.
+// Any GPU textures held by the queue are released.
 //
 // Note: Calling `pl_queue_reset` may block, if another thread is currently
 // blocked on a different `pl_queue_*` call.
