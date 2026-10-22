@@ -884,6 +884,11 @@ corners, as if an alpha transparency mask had been applied. The value indicates
 the relative fraction of the side length to round - a value of `1.0` rounds the
 corners as much as possible. Defaults to `0.0`.
 
+### `transparency=<0.0..1.0>`
+
+The (inverted) alpha value of the image itself, multiplied on top of any alpha
+channel it already has. Defaults to `0.0`.
+
 ### `blend_against_tiles=<yes|no>`
 
 If true, then transparent images will made opaque by painting them against a

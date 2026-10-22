@@ -138,6 +138,7 @@ static void get_canvas_params(struct pl_render_params *par, pl_compositor comp)
     par->num_hooks          = 0;
     par->lut                = NULL;
     par->corner_rounding    = 0.0f;
+    par->transparency       = 0.0f;
 }
 
 static void info_callback(void *priv, const struct pl_render_info *info)

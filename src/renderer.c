@@ -2810,39 +2810,45 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
-    if (params->corner_rounding > 0.0f) {
-        const float out_w2 = fabsf(pl_rect_w(target->crop)) / 2.0f;
-        const float out_h2 = fabsf(pl_rect_h(target->crop)) / 2.0f;
-        const float radius = fminf(params->corner_rounding, 1.0f) *
-                             fminf(out_w2, out_h2);
-        const struct pl_rect2df relpos = {
-            .x0 = -out_w2, .y0 = -out_h2,
-            .x1 =  out_w2, .y1 =  out_h2,
-        };
-
+    // Both of these act as an alpha mask applied on top of the image
+    const float opacity = 1.0f - PL_CLAMP(params->transparency, 0.0f, 1.0f);
+    if (params->corner_rounding > 0.0f || opacity < 1.0f) {
         pl_shader sh = img_sh(pass, img);
-        GLSL("float radius = "$";                           \n"
-             "vec2 size2 = vec2("$", "$");                  \n"
-             "vec2 relpos = "$";                            \n"
-             "vec2 rd = abs(relpos) - size2 + vec2(radius); \n"
-             "float rdist = length(max(rd, 0.0)) - radius;  \n"
-             "float border = smoothstep(2.0f, 0.0f, rdist); \n",
-             SH_FLOAT_DYN(radius),
-             SH_FLOAT_DYN(out_w2), SH_FLOAT_DYN(out_h2),
-             sh_attr_vec2(sh, "relpos", &relpos));
+        GLSL("float mask = "$"; \n", SH_FLOAT_DYN(opacity));
+
+        if (params->corner_rounding > 0.0f) {
+            const float out_w2 = fabsf(pl_rect_w(target->crop)) / 2.0f;
+            const float out_h2 = fabsf(pl_rect_h(target->crop)) / 2.0f;
+            const float radius = fminf(params->corner_rounding, 1.0f) *
+                                 fminf(out_w2, out_h2);
+            const struct pl_rect2df relpos = {
+                .x0 = -out_w2, .y0 = -out_h2,
+                .x1 =  out_w2, .y1 =  out_h2,
+            };
+
+            GLSL("float radius = "$";                           \n"
+                 "vec2 size2 = vec2("$", "$");                  \n"
+                 "vec2 relpos = "$";                            \n"
+                 "vec2 rd = abs(relpos) - size2 + vec2(radius); \n"
+                 "float rdist = length(max(rd, 0.0)) - radius;  \n"
+                 "mask *= smoothstep(2.0f, 0.0f, rdist);        \n",
+                 SH_FLOAT_DYN(radius),
+                 SH_FLOAT_DYN(out_w2), SH_FLOAT_DYN(out_h2),
+                 sh_attr_vec2(sh, "relpos", &relpos));
+        }
 
         switch (img->repr.alpha) {
         case PL_ALPHA_UNKNOWN:
         case PL_ALPHA_NONE:
-            GLSL("color.a = border; \n");
+            GLSL("color.a = mask; \n");
             img->repr.alpha = PL_ALPHA_INDEPENDENT;
             img->comps = 4;
             break;
         case PL_ALPHA_INDEPENDENT:
-            GLSL("color.a *= border; \n");
+            GLSL("color.a *= mask; \n");
             break;
         case PL_ALPHA_PREMULTIPLIED:
-            GLSL("color *= border; \n");
+            GLSL("color *= mask; \n");
             break;
         case PL_ALPHA_MODE_COUNT:
             pl_unreachable();
@@ -3902,6 +3908,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.error_diffusion);
     CLEAR(params.force_dither);
     CLEAR(params.corner_rounding);
+    CLEAR(params.transparency);
 
     // Clear out other irrelevant fields
     CLEAR(params.dynamic_constants);

@@ -275,6 +275,12 @@ struct pl_render_params {
     // of 1.0 rounds the corners as much as possible.
     float corner_rounding;
 
+    // Transparency of the image itself, multiplied on top of any alpha
+    // channel it already has. 0.0 for opaque (the default), 1.0 for fully
+    // transparent. Like `corner_rounding`, this only affects the image, not
+    // the `border` around it.
+    float transparency;
+
     // --- Performance / quality trade-off options:
     // These should generally be left off where quality is desired, as they can
     // degrade the result quite noticeably; but may be useful for older or

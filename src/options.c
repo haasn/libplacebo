@@ -1140,6 +1140,7 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_FLOAT("background_transparency", "Background color transparency", params.background_transparency, .max = 1),
     OPT_BOOL("skip_target_clearing", "Skip target clearing", params.skip_target_clearing, .deprecated = true),
     OPT_FLOAT("corner_rounding", "Corner rounding", params.corner_rounding, .max = 1.0),
+    OPT_FLOAT("transparency", "Image transparency", params.transparency, .max = 1.0),
     OPT_BOOL("blend_against_tiles", "Blend against tiles", params.blend_against_tiles, .deprecated = true),
     OPT_FLOAT("tile_color_hi_r", "Bright tile R", params.tile_colors[0][0], .max = 1.0),
     OPT_FLOAT("tile_color_hi_g", "Bright tile G", params.tile_colors[0][1], .max = 1.0),
