@@ -1872,9 +1872,9 @@ static void fill_gamut_lut(void *data, const struct sh_lut_params *params)
     pl_assert(lut_params->lut_stride == 3);
     pl_assert(params->comps == 4);
     for (int i = 0; i < lut_size; i++) {
-        out[0] = roundf(in[0] * UINT16_MAX);
-        out[1] = roundf(in[1] * UINT16_MAX + (UINT16_MAX >> 1));
-        out[2] = roundf(in[2] * UINT16_MAX + (UINT16_MAX >> 1));
+        out[0] = PL_CLAMP(roundf(in[0] * UINT16_MAX), 0, UINT16_MAX);
+        out[1] = PL_CLAMP(roundf(in[1] * UINT16_MAX + (UINT16_MAX >> 1)), 0, UINT16_MAX);
+        out[2] = PL_CLAMP(roundf(in[2] * UINT16_MAX + (UINT16_MAX >> 1)), 0, UINT16_MAX);
         out[3] = 0;
         in  += 3;
         out += 4;
