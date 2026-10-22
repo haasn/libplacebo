@@ -489,7 +489,7 @@ static void generate_shaders(pl_dispatch dp,
             if (gpu->glsl.vulkan) {
                 ADD(pre, "layout(binding=%d) uniform %c%s "$";\n",
                     desc->binding, prefix, type, id);
-            } else if (gpu->glsl.gles && prefix != ' ') {
+            } else if (gpu->glsl.gles) {
                 ADD(pre, "uniform highp %c%s "$";\n", prefix, type, id);
             } else {
                 ADD(pre, "uniform %c%s "$";\n", prefix, type, id);
