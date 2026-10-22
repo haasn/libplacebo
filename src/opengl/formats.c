@@ -70,7 +70,7 @@ enum {
 };
 
 // Basic 8-bit formats
-const struct gl_format formats_norm8[] = {
+static const struct gl_format formats_norm8[] = {
     {GL_R8,             R,     U8,  FMT("r8",       8, UNORM, S|L|F|V)},
     {GL_RG8,            RG,    U8,  FMT("rg8",      8, UNORM, S|L|F|V)},
     {GL_RGB8,           RGB,   U8,  FMT("rgb8",     8, UNORM, S|L|F|V)},
@@ -79,7 +79,7 @@ const struct gl_format formats_norm8[] = {
 
 // Signed variants
 /* TODO: these are broken in mesa
-const struct gl_format formats_snorm8[] = {
+static const struct gl_format formats_snorm8[] = {
     {GL_R8_SNORM,       R,     I8,  FMT("r8s",      8, SNORM, S|L|F|V)},
     {GL_RG8_SNORM,      RG,    I8,  FMT("rg8s",     8, SNORM, S|L|F|V)},
     {GL_RGB8_SNORM,     RGB,   I8,  FMT("rgb8s",    8, SNORM, S|L|F|V)},
@@ -88,7 +88,7 @@ const struct gl_format formats_snorm8[] = {
 */
 
 // BGRA 8-bit
-const struct gl_format formats_bgra8[] = {
+static const struct gl_format formats_bgra8[] = {
     {GL_RGBA8,          BGRA,  U8,  {
         .name               = "bgra8",
         .type               = PL_FMT_UNORM,
@@ -99,25 +99,25 @@ const struct gl_format formats_bgra8[] = {
 };
 
 // Basic 16-bit formats, excluding rgb16 (special cased below)
-const struct gl_format formats_norm16[] = {
+static const struct gl_format formats_norm16[] = {
     {GL_R16,            R,     U16, FMT("r16",     16, UNORM, S|L|F|V)},
     {GL_RG16,           RG,    U16, FMT("rg16",    16, UNORM, S|L|F|V)},
     {GL_RGBA16,         RGBA,  U16, FMT("rgba16",  16, UNORM, S|L|F|V)},
 };
 
 // Renderable version of rgb16
-const struct gl_format formats_rgb16_fbo[] = {
+static const struct gl_format formats_rgb16_fbo[] = {
     {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|F|V)},
 };
 
 // Non-renderable version of rgb16
-const struct gl_format formats_rgb16_fallback[] = {
+static const struct gl_format formats_rgb16_fallback[] = {
     {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|V)},
 };
 
 // Signed 16-bit variants
 /* TODO: these are broken in mesa and nvidia
-const struct gl_format formats_snorm16[] = {
+static const struct gl_format formats_snorm16[] = {
     {GL_R16_SNORM,      R,     I16, FMT("r16s",    16, SNORM, S|L|F|V)},
     {GL_RG16_SNORM,     RG,    I16, FMT("rg16s",   16, SNORM, S|L|F|V)},
     {GL_RGB16_SNORM,    RGB,   I16, FMT("rgb16s",  16, SNORM, S|L|F|V)},
@@ -126,7 +126,7 @@ const struct gl_format formats_snorm16[] = {
 */
 
 // 32-bit floating point texture formats
-const struct gl_format formats_float32[] = {
+static const struct gl_format formats_float32[] = {
     {GL_R32F,           R,     FLT, FMT("r32f",    32, FLOAT, S|L|F|V)},
     {GL_RG32F,          RG,    FLT, FMT("rg32f",   32, FLOAT, S|L|F|V)},
     {GL_RGB32F,         RGB,   FLT, FMT("rgb32f",  32, FLOAT, S|L|F|V)},
@@ -134,7 +134,7 @@ const struct gl_format formats_float32[] = {
 };
 
 // 16-bit floating point texture formats
-const struct gl_format formats_float16[] = {
+static const struct gl_format formats_float16[] = {
     {GL_R16F,           R,     FLT,  FMT("r16f",    16, FLOAT, S|L|F)},
     {GL_RG16F,          RG,    FLT,  FMT("rg16f",   16, FLOAT, S|L|F)},
     {GL_RGB16F,         RGB,   FLT,  FMT("rgb16f",  16, FLOAT, S|L|F)},
@@ -142,7 +142,7 @@ const struct gl_format formats_float16[] = {
 };
 
 // 16-bit half float texture formats
-const struct gl_format formats_half16[] = {
+static const struct gl_format formats_half16[] = {
     {GL_R16F,           R,     HALF, FMT("r16hf",   16, FLOAT, S|L|F)},
     {GL_RG16F,          RG,    HALF, FMT("rg16hf",  16, FLOAT, S|L|F)},
     {GL_RGB16F,         RGB,   HALF, FMT("rgb16hf", 16, FLOAT, S|L|F)},
@@ -150,7 +150,7 @@ const struct gl_format formats_half16[] = {
 };
 
 // Renderable 16-bit float formats (excluding rgb16f)
-const struct gl_format formats_float16_fbo[] = {
+static const struct gl_format formats_float16_fbo[] = {
     {GL_R16F,           R,     HALF, FMT("r16hf",   16, FLOAT, S|L|F)},
     {GL_RG16F,          RG,    HALF, FMT("rg16hf",  16, FLOAT, S|L|F)},
     {GL_RGB16F,         RGB,   HALF, FMT("rgb16hf", 16, FLOAT, S|L)},
@@ -162,7 +162,7 @@ const struct gl_format formats_float16_fbo[] = {
 };
 
 // Non-renderable 16-bit float formats
-const struct gl_format formats_float16_fallback[] = {
+static const struct gl_format formats_float16_fallback[] = {
     {GL_R16F,           R,     HALF, FMT("r16hf",   16, FLOAT, S|L)},
     {GL_RG16F,          RG,    HALF, FMT("rg16hf",  16, FLOAT, S|L)},
     {GL_RGB16F,         RGB,   HALF, FMT("rgb16hf", 16, FLOAT, S|L)},
@@ -174,7 +174,7 @@ const struct gl_format formats_float16_fallback[] = {
 };
 
 // (Unsigned) integer formats
-const struct gl_format formats_uint[] = {
+static const struct gl_format formats_uint[] = {
     {GL_R8UI,           RI,    U8,  FMT("r8u",      8, UINT, S|F|V)},
     {GL_RG8UI,          RGI,   U8,  FMT("rg8u",     8, UINT, S|F|V)},
     {GL_RGB8UI,         RGBI,  U8,  FMT("rgb8u",    8, UINT, S|V)},
@@ -206,7 +206,7 @@ const struct gl_format formats_uint[] = {
 */
 
 // GL2 legacy formats
-const struct gl_format formats_legacy_gl2[] = {
+static const struct gl_format formats_legacy_gl2[] = {
     {GL_RGB8,           RGB,   U8,  FMT("rgb8",     8, UNORM, S|L|V)},
     {GL_RGBA8,          RGBA,  U8,  FMT("rgba8",    8, UNORM, S|L|V)},
     {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|V)},
@@ -214,13 +214,13 @@ const struct gl_format formats_legacy_gl2[] = {
 };
 
 // GLES2 legacy formats
-const struct gl_format formats_legacy_gles2[] = {
+static const struct gl_format formats_legacy_gles2[] = {
     {GL_RGB,            RGB,   U8,  FMT("rgb",      8, UNORM, S|L)},
     {GL_RGBA,           RGBA,  U8,  FMT("rgba",     8, UNORM, S|L)},
 };
 
 // GLES BGRA
-const struct gl_format formats_bgra_gles[] = {
+static const struct gl_format formats_bgra_gles[] = {
     {GL_BGRA,           BGRA,  U8,  {
         .name               = "bgra8",
         .type               = PL_FMT_UNORM,
@@ -231,7 +231,7 @@ const struct gl_format formats_bgra_gles[] = {
 };
 
 // Fallback for vertex-only formats, as a last resort
-const struct gl_format formats_basic_vertex[] = {
+static const struct gl_format formats_basic_vertex[] = {
     {GL_R32F,           R,     FLT, FMT("r32f",    32, FLOAT, V)},
     {GL_RG32F,          RG,    FLT, FMT("rg32f",   32, FLOAT, V)},
     {GL_RGB32F,         RGB,   FLT, FMT("rgb32f",  32, FLOAT, V)},
