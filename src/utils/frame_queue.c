@@ -121,10 +121,10 @@ pl_queue pl_queue_create(pl_gpu gpu)
     pl_mutex_init(&p->lock_weak);
     int ret = pl_cond_init(&p->wakeup);
     if (ret) {
+        PL_ERR(p, "Failed to init conditional variable: %d", ret);
         pl_mutex_destroy(&p->lock_weak);
         pl_mutex_destroy(&p->lock_strong);
         pl_free(p);
-        PL_ERR(p, "Failed to init conditional variable: %d", ret);
         return NULL;
     }
     return p;
