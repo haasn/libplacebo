@@ -387,12 +387,12 @@ static void generate_shaders(pl_dispatch dp,
                  "precision mediump float;          \n"
                  "#endif                            \n");
 
-        // Always use 16-bit precision for samplers
-        ADD(pre, "precision mediump sampler2D; \n");
+        // GLSL ES returns texture lookups at the precision of the sampler
+        ADD(pre, "precision highp sampler2D; \n");
         if (gpu->limits.max_tex_1d_dim)
-            ADD(pre, "precision mediump sampler1D; \n");
+            ADD(pre, "precision highp sampler1D; \n");
         if (gpu->limits.max_tex_3d_dim && gpu->glsl.version > 100)
-            ADD(pre, "precision mediump sampler3D; \n");
+            ADD(pre, "precision highp sampler3D; \n");
 
         // Integer math has a good chance of caring about precision
         ADD(pre, "precision highp int; \n");
