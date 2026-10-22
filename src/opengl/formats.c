@@ -312,7 +312,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
         fmt->emulated = true;
 
     // Older OpenGL most likely emulates 32-bit float formats as well
-    if (p->gl_ver < 30 && fmt->component_depth[0] >= 32)
+    if (p->gl_ver && p->gl_ver < 30 && fmt->component_depth[0] >= 32)
         fmt->emulated = true;
 
     // For sanity, clear the superfluous fields
