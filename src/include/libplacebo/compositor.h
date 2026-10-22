@@ -155,9 +155,7 @@ typedef struct pl_compositor_t {
     // Disables linear light composition, rendering all inputs directly onto
     // the target frame instead. Intended for debugging purposes only.
     //
-    // Note: Linear light composition is only used when there is more than one
-    // visible input. A lone input is always rendered directly onto the target
-    // frame, exactly as `pl_render_image_mix()` would.
+    // Note: Linear light composition is only used when necessary.
     bool disable_linear_composition;
 
     // Optional callback invoked for every shader pass. `input` is set to the

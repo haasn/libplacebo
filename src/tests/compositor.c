@@ -2168,12 +2168,14 @@ static void render_params_tests(pl_log log, pl_gpu gpu)
 
 // After `pl_compositor_options_set()`, a single input covering the canvas must
 // render exactly as it would using `pl_render_image_mix()` with the same
-// options, i.e. without applying any of them twice.
+// options, i.e. without applying any of them twice. Inputs with partial alpha
+// are only rendered directly with `disable_linear_composition`.
 struct direct_case {
     const char *name;
     const struct pl_render_params *params; // options
     const struct pl_render_params *canvas; // replaces the canvas params, if set
-    bool transparent;
+    bool transparent;                       // image with an alpha channel
+    bool blended;                           // partial alpha for other reasons
 };
 
 static const struct direct_case direct_cases[] = {
@@ -2181,8 +2183,8 @@ static const struct direct_case direct_cases[] = {
     { "color adjustment", pl_render_params(.color_adjustment = &desaturate) },
     { "debanding", pl_render_params(.deband_params = &pl_deband_default_params) },
     { "cone distortion", pl_render_params(.cone_params = &pl_vision_protanomaly) },
-    { "corner rounding", pl_render_params(.corner_rounding = 0.5f) },
-    { "distortion", pl_render_params(.distort_params = &tilt) },
+    { "corner rounding", pl_render_params(.corner_rounding = 0.5f), .blended = true },
+    { "distortion", pl_render_params(.distort_params = &tilt), .blended = true },
     { "upscaler", pl_render_params(.upscaler = &pl_filter_ewa_lanczossharp,
                                    .sigmoid_params = NULL) },
     { "transparent image onto tiles", pl_render_params(.background = PL_CLEAR_TILES),
@@ -2244,6 +2246,7 @@ static int render_direct_case(pl_log log, pl_gpu gpu, const struct direct_case *
     pl_compositor comp = pl_compositor_create(log);
     pl_input in = pl_compositor_input_create(comp);
     in->fit = PL_FIT_FILL;
+    comp->disable_linear_composition = c->transparent || c->blended;
     pl_compositor_init(comp, gpu);
     pl_queue_push(in->queue, &src);
     pl_queue_push(in->queue, NULL);

@@ -861,9 +861,13 @@ bool pl_compositor_render(pl_compositor comp, const struct pl_frame *ptarget,
     int target_width, target_height;
     pl_frame_size(&target, &target_width, &target_height);
 
+    // The linear light intermediate can only be skipped for opaque single inputs
+    const bool trivial = status.num_visible == 1 &&
+                         is_opaque(status.visible[0], status.base);
+
     const struct pl_render_params *canvas = canvas_params(comp);
     const bool skip_border = get_border(canvas) == PL_CLEAR_SKIP;
-    bool use_inter = status.num_visible > 1 && !canvas->disable_fbos &&
+    bool use_inter = !trivial && !canvas->disable_fbos &&
                      !comp->disable_linear_composition &&
                      alloc_inter_fbo(p, target_width, target_height);
 
