@@ -95,7 +95,7 @@ static void set_canvas_params(struct pl_render_params *par,
                               const struct pl_render_params *canvas,
                               bool base, bool direct)
 {
-    par->background = base && direct ? get_background(canvas) : PL_CLEAR_SKIP;
+    par->background = base ? get_background(canvas) : PL_CLEAR_SKIP;
     par->border     = base ? get_border(canvas) : PL_CLEAR_SKIP;
     memcpy(par->background_color, canvas->background_color,
            sizeof(par->background_color));
@@ -912,10 +912,11 @@ bool pl_compositor_render(pl_compositor comp, const struct pl_frame *ptarget,
         target.crop = orig_target.crop = (pl_rect2df) {0};
         target.repr.alpha = PL_ALPHA_PREMULTIPLIED;
 
+        // The base layer already drew the background, in linear light
+        cpar.background = PL_CLEAR_SKIP;
+        cpar.blend_against_tiles = false;
         if (skip_border && !cpar.blend_params) {
             // Blend the canvas onto the target to preserve the border
-            cpar.background = PL_CLEAR_SKIP;
-            cpar.blend_against_tiles = false;
             cpar.blend_params = &pl_alpha_overlay;
             orig_target.repr.alpha = PL_ALPHA_INDEPENDENT;
         }
