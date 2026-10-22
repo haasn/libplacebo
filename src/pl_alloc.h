@@ -165,6 +165,8 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
             _idx += (arr).num;                                                  \
         size_t _count = (count);                                                \
         assert(_idx >= 0 && _idx + _count <= (arr).num);                        \
+        if (!_count)                                                            \
+            break;                                                              \
         memmove(&(arr).elem[_idx], &(arr).elem[_idx + _count],                  \
                 ((arr).num - _idx - _count) * sizeof((arr).elem[0]));           \
         (arr).num -= _count;                                                    \
