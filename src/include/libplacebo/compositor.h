@@ -321,6 +321,38 @@ PL_API struct pl_render_errors pl_compositor_get_errors(pl_compositor comp);
 PL_API void pl_compositor_reset_errors(pl_compositor comp,
                                        const struct pl_render_errors *errors);
 
+// A scene is a high-level wrapper around pl_compositor, that can be
+// automatically initialized from a JSON description.
+typedef const struct pl_scene_t {
+    // Note: The scene owns `pl_compositor.params`, as well as the `params` of
+    // every input. Inputs may not be added to or removed from the compositor.
+    pl_compositor comp;
+} *pl_scene;
+
+// Parse a scene graph from a provided JSON object. Returns NULL on errors.
+//
+// This does not require a GPU. The resulting compositor is uninitialized, and
+// must be initialized with `pl_compositor_init` before rendering.
+//
+// See `docs/json.md` for more information.
+PL_API pl_scene pl_scene_create_json(pl_log log, const char *json, size_t len);
+
+// Destroys a scene, including its compositor and all of its inputs.
+PL_API void pl_scene_destroy(pl_scene *scene);
+
+// Update the compositor and input parameters of `scene` to reflect the
+// current instance in time (output-referred).
+PL_API void pl_scene_update(pl_scene scene, double pts);
+
+// Helper function to both update a scene and render it.
+static inline bool pl_scene_render(pl_scene scene, const struct pl_frame *target,
+                                   const struct pl_queue_params *params,
+                                   struct pl_compositor_status *out_status)
+{
+    pl_scene_update(scene, params->pts);
+    return pl_compositor_render(scene->comp, target, params, out_status);
+}
+
 PL_API_END
 
 #endif // LIBPLACEBO_COMPOSITOR_H_
