@@ -1304,6 +1304,15 @@ static void pl_render_tests(pl_gpu gpu)
     TEST_PARAMS(dither, transfer, PL_COLOR_TRC_GAMMA22);
     target.repr.bits.color_depth = 32;
 
+    // Test dithering with dynamic constants, which must leave the step count
+    // a constant expression
+    struct pl_render_params dyn_params = pl_render_default_params;
+    dyn_params.force_dither = true;
+    dyn_params.dynamic_constants = true;
+    REQUIRE(pl_render_image(rr, &image, &target, &dyn_params));
+    pl_gpu_flush(gpu);
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+
     // Test HDR tone mapping
     image.color = pl_color_space_hdr10;
     TEST_PARAMS(color_map, visualize_lut, true);
@@ -1754,6 +1763,55 @@ static void pl_render_bits_tests(pl_gpu gpu)
                         REQUIRE_CMP(msb >> 6, ==, lsb, "d");
                 }
             }
+        }
+    }
+
+    // Dithering must land a flat gray on its exact code on average, and the
+    // chroma on the neutral code, with the codes shifted up in the texture,
+    // where their grid is not 2^depth - 1 steps. Error diffusion goes through
+    // a 16-bit float FBO, which only holds 8-bit codes exactly enough.
+    static const struct {
+        int depth;
+        const struct pl_error_diffusion_kernel *error_diffusion;
+        double tolerance;
+    } modes[] = {
+        { 10, NULL, 0.02 },
+        {  8, &pl_error_diffusion_sierra_lite, 0.2 },
+    };
+
+    const uint16_t gray = 0.6f * 0xFFFF;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            for (int c = 0; c < 4; c++)
+                src_data[y][x][c] = c < 3 ? gray : 0xFFFF;
+        }
+    }
+    REQUIRE(pl_tex_upload(gpu, pl_tex_transfer_params(.tex = src_tex, .ptr = src_data)));
+    target.planes[0].texture = msb_tex;
+
+    for (int m = 0; m < PL_ARRAY_SIZE(modes); m++) {
+        const int depth = modes[m].depth, shift = 16 - depth;
+        struct pl_render_params params = pl_render_default_params;
+        params.error_diffusion = modes[m].error_diffusion;
+        target.repr.bits.color_depth = depth;
+        target.repr.bits.bit_shift = shift;
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+        REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(.tex = msb_tex, .ptr = msb_out)));
+
+        // Limited range luma and neutral chroma, at `depth` bits
+        const double code[3] = {
+            (16 + 219 * (gray / 65535.0)) * (1 << (depth - 8)),
+            1 << (depth - 1),
+            1 << (depth - 1),
+        };
+        for (int c = 0; c < 3; c++) {
+            double error = 0.0;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++)
+                    error += (msb_out[y][x][c] >> shift) - code[c];
+            }
+            REQUIRE_CMP(fabs(error / (width * height)), <, modes[m].tolerance, "f");
         }
     }
 
