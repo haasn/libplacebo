@@ -187,9 +187,9 @@ is drawn below all inputs.
 
 ## Animations
 
-Any floating point option, whether a field of an input (such as the rects,
-`focus` or the timestamps) or one of its render options (such as `brightness`),
-can be animated by giving it an array of keyframes instead of a single value:
+Any option, whether a field of an input (such as the rects, `focus` or the
+timestamps) or one of its render options (such as `brightness`), can be
+animated by giving it an array of keyframes instead of a single value:
 
 ```json
 "dst_rect": {
@@ -210,6 +210,8 @@ Each keyframe takes the following keys:
   control points `[x1, y1, x2, y2]` of a cubic Bézier curve from `(0, 0)` to
   `(1, 1)`, like the CSS `cubic-bezier()` function. `x1` and `x2` must lie in
   the range `[0, 1]`. If omitted, the value is held until the next keyframe.
+  Only supported for floating point options; all other options always hold
+  their value until the next keyframe.
 
 Some common easing curves are:
 
@@ -234,6 +236,8 @@ value of its first keyframe.
 The values in between keyframes are clamped to the valid range of the option,
 so a curve that overshoots (with `y1` or `y2` outside of `[0, 1]`) stops at the
 limits of that range.
+
+Presets, such as `preset`, cannot be animated.
 
 Since changes to a render option may imply recompiling the affected shaders,
 animating any render option also enables `dynamic_constants` for the

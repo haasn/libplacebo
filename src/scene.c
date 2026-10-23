@@ -52,6 +52,7 @@ struct keyframe {
     double pts;
     double value;
     double easing[4]; // [x1, y1, x2, y2]
+    void *data;       // raw field value, for non-float options
 };
 
 struct animation {
@@ -127,6 +128,9 @@ static struct keyframe animation_sample(const struct animation *anim, double pts
         return *next;
 
     pl_assert(pts >= prev->pts && pts <= next->pts);
+    if (anim->opt->type != PL_OPT_FLOAT)
+        return *prev; // can't be interpolated
+
     const double t = (pts - prev->pts) / (next->pts - prev->pts);
     return (struct keyframe) {
         .pts   = pts,
@@ -138,6 +142,11 @@ static void animation_write(const struct animation *anim,
                             const struct keyframe *kf)
 {
     pl_opt opt = anim->opt;
+    if (opt->type != PL_OPT_FLOAT) {
+        memcpy(anim->value, kf->data, pl_opt_size(opt));
+        return;
+    }
+
     double value = kf->value;
     if (opt->min != opt->max)
         value = PL_CLAMP(value, opt->min, opt->max);
@@ -254,13 +263,33 @@ static bool parse_keyframe_value(struct parse_ctx *ctx, void *base, pl_opt opt,
                                  void *field, struct keyframe *kf,
                                  const struct json_value_s *val)
 {
-    if (!parse_number(ctx, val, &kf->value))
-        return false;
-    if (opt->min != opt->max && (kf->value < opt->min || kf->value > opt->max)) {
-        PL_ERR(ctx, "Value of %f for '%.*s' out of range: [%.2f, %.2f]",
-               kf->value, PL_STR_FMT(ctx->path), opt->min, opt->max);
+    if (opt->type == PL_OPT_FLOAT) {
+        if (!parse_number(ctx, val, &kf->value))
+            return false;
+        if (opt->min != opt->max && (kf->value < opt->min || kf->value > opt->max)) {
+            PL_ERR(ctx, "Value of %f for '%.*s' out of range: [%.2f, %.2f]",
+                   kf->value, PL_STR_FMT(ctx->path), opt->min, opt->max);
+            return false;
+        }
+        return true;
+    }
+
+    pl_str str;
+    if (!json_value_str(val, &str)) {
+        PL_ERR(ctx, "Invalid value type for '%.*s'. Expected string, number "
+               "or boolean.", PL_STR_FMT(ctx->path));
         return false;
     }
+
+    // Parse into a copy of the field, so it can be written later
+    const size_t size = pl_opt_size(opt);
+    kf->data = pl_memdup(ctx->scene, field, size);
+    if (!pl_opt_parse(ctx->log, base, opt, kf->data, str)) {
+        PL_ERR(ctx, "Failed parsing '%.*s' from value: '%.*s'",
+               PL_STR_FMT(ctx->path), PL_STR_FMT(str));
+        return false;
+    }
+
     return true;
 }
 
@@ -287,7 +316,13 @@ static bool parse_keyframe(struct parse_ctx *ctx, void *base, pl_opt opt,
             has_value = parse_keyframe_value(ctx, base, opt, field, kf, e->value);
             ok &= has_value;
         } else if (pl_str_equals0(key, "easing")) {
-            ok &= parse_easing(ctx, kf->easing, e->value);
+            if (opt->type != PL_OPT_FLOAT) {
+                PL_ERR(ctx, "Easing '%.*s' is only supported for floating "
+                       "point options", PL_STR_FMT(ctx->path));
+                ok = false;
+            } else {
+                ok &= parse_easing(ctx, kf->easing, e->value);
+            }
         } else {
             PL_ERR(ctx, "Unrecognized key '%.*s'", PL_STR_FMT(ctx->path));
             ok = false;
@@ -307,9 +342,8 @@ static bool parse_keyframe(struct parse_ctx *ctx, void *base, pl_opt opt,
 static bool parse_animation(struct parse_ctx *ctx, void *base, pl_opt opt,
                             void *field, const struct json_array_s *arr)
 {
-    if (opt->type != PL_OPT_FLOAT) {
-        PL_ERR(ctx, "Option '%.*s' cannot be animated, only floating point "
-               "options can", PL_STR_FMT(ctx->path));
+    if (opt->preset) {
+        PL_ERR(ctx, "Preset '%.*s' cannot be animated", PL_STR_FMT(ctx->path));
         return false;
     } else if (!arr->length) {
         PL_ERR(ctx, "Animation '%.*s' requires at least one keyframe",

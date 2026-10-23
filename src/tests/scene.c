@@ -172,7 +172,47 @@ int main(void)
     REQUIRE_CMP(in->dst_rect.x1, ==, 0.5f, "f");
     pl_scene_destroy(&scene);
 
-    require_invalid("{ \"inputs\": [ { \"fit\": [ { \"pts\": 0, \"value\": \"fill\" } ] } ] }");
+    // Non-float animations always hold their value
+    scene = create(log,
+        "{ \"inputs\": [ {"
+        "    \"fit\": ["
+        "      { \"pts\": 1, \"value\": \"cover\" },"
+        "      { \"pts\": 0, \"value\": \"fill\" } ],"
+        "    \"z_index\": [ { \"pts\": 0, \"value\": 1 }, { \"pts\": 2, \"value\": 5 } ],"
+        "    \"params\": {"
+        "      \"upscaler\": [ { \"pts\": 0, \"value\": \"bilinear\" },"
+        "                      { \"pts\": 1, \"value\": \"none\" } ],"
+        "      \"deband\": [ { \"pts\": 0, \"value\": false },"
+        "                    { \"pts\": 1, \"value\": true } ]"
+        "    }"
+        "} ] }");
+    REQUIRE(scene);
+    in = scene->comp->inputs[0];
+    par = in->params;
+    REQUIRE_CMP(in->fit, ==, PL_FIT_FILL, "d");
+    REQUIRE_CMP(in->z_index, ==, 1, "d");
+    REQUIRE(par->upscaler == &pl_filter_bilinear);
+    REQUIRE(!par->deband_params);
+
+    pl_scene_update(scene, 1.5);
+    REQUIRE_CMP(in->fit, ==, PL_FIT_COVER, "d");
+    REQUIRE_CMP(in->z_index, ==, 1, "d");
+    REQUIRE(!par->upscaler);
+    REQUIRE(par->deband_params);
+    pl_scene_update(scene, 2.0);
+    REQUIRE_CMP(in->z_index, ==, 5, "d");
+    pl_scene_update(scene, 0.5);
+    REQUIRE_CMP(in->fit, ==, PL_FIT_FILL, "d");
+    REQUIRE(par->upscaler == &pl_filter_bilinear);
+    REQUIRE(!par->deband_params);
+    pl_scene_destroy(&scene);
+
+    require_invalid("{ \"inputs\": [ { \"fit\": [ { \"pts\": 0, \"value\": \"squish\" } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"fit\": [ { \"pts\": 0, \"value\": \"fill\", "
+                     "\"easing\": [ 0, 0, 1, 1 ] } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"z_index\": [ { \"pts\": 0, \"value\": [ 1 ] } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"params\": { \"preset\": [ "
+                     "{ \"pts\": 0, \"value\": \"fast\" } ] } } ] }");
     require_invalid("{ \"inputs\": [ { \"stop_pts\": [ ] } ] }");
     require_invalid("{ \"inputs\": [ { \"params\": { \"brightness\": [ "
                      "{ \"pts\": 0, \"value\": 2 } ] } } ] }");
