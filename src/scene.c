@@ -250,8 +250,9 @@ static bool parse_easing(struct parse_ctx *ctx, double easing[4],
     return ok;
 }
 
-static bool parse_keyframe(struct parse_ctx *ctx, pl_opt opt,
-                           struct keyframe *kf, const struct json_value_s *val)
+static bool parse_keyframe(struct parse_ctx *ctx, void *base, pl_opt opt,
+                           void *field, struct keyframe *kf,
+                           const struct json_value_s *val)
 {
     const struct json_object_s *obj = json_value_as_object((void *) val);
     if (!obj) {
@@ -296,7 +297,7 @@ static bool parse_keyframe(struct parse_ctx *ctx, pl_opt opt,
     return ok;
 }
 
-static bool parse_animation(struct parse_ctx *ctx, pl_opt opt,
+static bool parse_animation(struct parse_ctx *ctx, void *base, pl_opt opt,
                             void *field, const struct json_array_s *arr)
 {
     if (opt->type != PL_OPT_FLOAT) {
@@ -317,7 +318,7 @@ static bool parse_animation(struct parse_ctx *ctx, pl_opt opt,
         const size_t len_prefix = ctx->path.len;
         pl_str_append_asprintf(ctx->tmp, &ctx->path, "[%d]", idx);
         struct keyframe kf;
-        if (parse_keyframe(ctx, opt, &kf, e->value)) {
+        if (parse_keyframe(ctx, base, opt, field, &kf, e->value)) {
             PL_ARRAY_APPEND(scene, anim.keyframes, kf);
         } else {
             ok = false;
@@ -349,7 +350,7 @@ static bool parse_value(struct parse_ctx *ctx, void *base, pl_opt opt,
                         void *field, const struct json_value_s *val)
 {
     if (val->type == json_type_array)
-        return parse_animation(ctx, opt, field, val->payload);
+        return parse_animation(ctx, base, opt, field, val->payload);
 
     pl_str str;
     if (!json_value_str(val, &str)) {
