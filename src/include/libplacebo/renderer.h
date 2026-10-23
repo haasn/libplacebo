@@ -765,6 +765,12 @@ PL_API bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
 // dramatically (e.g. when switching to a different file).
 PL_API void pl_renderer_flush_cache(pl_renderer rr);
 
+// Releases *all* GPU resources held by this renderer, including intermediate
+// textures not affected by `pl_renderer_flush_cache()`.
+//
+// Resources will be recreated as needed on subsequent use.
+PL_API void pl_renderer_reset(pl_renderer rr);
+
 // Mirrors `pl_get_detected_hdr_metadata`, giving you the current internal peak
 // detection HDR metadata (when peak detection is active). Returns false if no
 // information is available (e.g. not HDR source, peak detection disabled).

@@ -140,21 +140,19 @@ static void sampler_destroy(pl_renderer rr, struct sampler *sampler)
     pl_shader_obj_destroy(&sampler->downscaler_state);
 }
 
-void pl_renderer_destroy(pl_renderer *p_rr)
+static void renderer_uninit(pl_renderer rr)
 {
-    pl_renderer rr = *p_rr;
-    if (!rr)
-        return;
-
     // Free all intermediate FBOs
     for (int n = 0; n < PL_ARRAY_SIZE(rr->fbos); n++) {
         for (int i = 0; i < rr->fbos[n].num; i++)
             pl_tex_destroy(rr->gpu, &rr->fbos[n].elem[i]);
+        rr->fbos[n].num = 0;
     }
     for (int i = 0; i < rr->frames.num; i++)
         pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
     for (int i = 0; i < rr->frame_fbos.num; i++)
         pl_tex_destroy(rr->gpu, &rr->frame_fbos.elem[i]);
+    rr->frames.num = rr->frame_fbos.num = 0;
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->tone_map_state);
@@ -177,11 +175,34 @@ void pl_renderer_destroy(pl_renderer *p_rr)
         sampler_destroy(rr, &rr->samplers_el[i]);
 
     // Free fallback ICC profiles
-    for (int i = 0; i < PL_ARRAY_SIZE(rr->icc_fallback); i++)
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->icc_fallback); i++) {
         pl_icc_close(&rr->icc_fallback[i].icc);
+        rr->icc_fallback[i].error = 0;
+    }
 
     pl_dispatch_destroy(&rr->dp);
+}
+
+void pl_renderer_destroy(pl_renderer *p_rr)
+{
+    pl_renderer rr = *p_rr;
+    if (!rr)
+        return;
+
+    renderer_uninit(rr);
     pl_free_ptr(p_rr);
+}
+
+void pl_renderer_reset(pl_renderer rr)
+{
+    if (!rr)
+        return;
+
+    renderer_uninit(rr);
+    rr->dp = pl_dispatch_create(rr->log, rr->gpu);
+    pl_assert(rr->dp);
+
+    pl_renderer_reset_errors(rr, NULL);
 }
 
 size_t pl_renderer_save(pl_renderer rr, uint8_t *out)

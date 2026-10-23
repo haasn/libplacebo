@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '382': 'add pl_renderer_reset()',
       '381': 'add pl_render_params.transparency',
       '380': 'add <libplacebo/compositor.h>',
       '379': 'add pl_vec2d(f), pl_vec3d(f), and various pl_*_v() helpers',
