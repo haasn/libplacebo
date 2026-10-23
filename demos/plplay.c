@@ -261,8 +261,10 @@ static PL_THREAD_VOID decode_loop(void *arg)
     pl_input input = p->input;
     AVPacket *packet = av_packet_alloc();
     AVFrame *frame = av_frame_alloc();
-    if (!frame || !packet)
+    if (!frame || !packet) {
+        ret = AVERROR(ENOMEM);
         goto done;
+    }
 
     float frame_duration = av_q2d(av_inv_q(p->stream->avg_frame_rate));
     double first_pts = 0.0, base_pts = 0.0, last_pts = 0.0;
@@ -342,8 +344,10 @@ static PL_THREAD_VOID decode_loop(void *arg)
         }
     }
 
+    ret = AVERROR_EXIT;
+
 done:
-    pl_queue_push(input->queue, NULL); // Signal EOF to flush queue
+    pl_queue_set_status(input->queue, ret == AVERROR_EOF ? PL_QUEUE_EOF : PL_QUEUE_ERR);
     av_packet_free(&packet);
     av_frame_free(&frame);
     PL_THREAD_RETURN();
