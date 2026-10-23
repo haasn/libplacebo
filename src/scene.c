@@ -250,6 +250,20 @@ static bool parse_easing(struct parse_ctx *ctx, double easing[4],
     return ok;
 }
 
+static bool parse_keyframe_value(struct parse_ctx *ctx, void *base, pl_opt opt,
+                                 void *field, struct keyframe *kf,
+                                 const struct json_value_s *val)
+{
+    if (!parse_number(ctx, val, &kf->value))
+        return false;
+    if (opt->min != opt->max && (kf->value < opt->min || kf->value > opt->max)) {
+        PL_ERR(ctx, "Value of %f for '%.*s' out of range: [%.2f, %.2f]",
+               kf->value, PL_STR_FMT(ctx->path), opt->min, opt->max);
+        return false;
+    }
+    return true;
+}
+
 static bool parse_keyframe(struct parse_ctx *ctx, void *base, pl_opt opt,
                            void *field, struct keyframe *kf,
                            const struct json_value_s *val)
@@ -270,14 +284,7 @@ static bool parse_keyframe(struct parse_ctx *ctx, void *base, pl_opt opt,
             has_pts = parse_number(ctx, e->value, &kf->pts);
             ok &= has_pts;
         } else if (pl_str_equals0(key, "value")) {
-            has_value = parse_number(ctx, e->value, &kf->value);
-            if (has_value && opt->min != opt->max &&
-                (kf->value < opt->min || kf->value > opt->max))
-            {
-                PL_ERR(ctx, "Value of %f for '%.*s' out of range: [%.2f, %.2f]",
-                       kf->value, PL_STR_FMT(ctx->path), opt->min, opt->max);
-                has_value = false;
-            }
+            has_value = parse_keyframe_value(ctx, base, opt, field, kf, e->value);
             ok &= has_value;
         } else if (pl_str_equals0(key, "easing")) {
             ok &= parse_easing(ctx, kf->easing, e->value);
