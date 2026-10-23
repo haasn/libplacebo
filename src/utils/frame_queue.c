@@ -283,8 +283,8 @@ static inline void update_estimate(struct pool *pool, double cur)
 
 static void queue_push(pl_queue p, const struct pl_source_frame *src)
 {
-    if (p->status == PL_QUEUE_EOF && !src)
-        return; // ignore duplicate EOF
+    if (!src && (p->status == PL_QUEUE_EOF || p->status == PL_QUEUE_ERR))
+        return; // ignore duplicate EOF, or EOF after error
 
     if (p->status == PL_QUEUE_EOF && src) {
         PL_INFO(p, "Received frame after EOF signaled... discarding frame!");
@@ -446,6 +446,37 @@ void pl_queue_push(pl_queue p, const struct pl_source_frame *frame)
     pl_mutex_unlock(&p->lock_weak);
 }
 
+enum pl_queue_status pl_queue_get_status(pl_queue p)
+{
+    pl_mutex_lock(&p->lock_weak);
+    enum pl_queue_status status = p->status;
+    pl_mutex_unlock(&p->lock_weak);
+    return status;
+}
+
+void pl_queue_set_status(pl_queue p, enum pl_queue_status status)
+{
+    pl_mutex_lock(&p->lock_weak);
+    if (status == p->status) {
+        pl_mutex_unlock(&p->lock_weak);
+        return;
+    }
+
+    switch (status) {
+    case PL_QUEUE_OK:
+    case PL_QUEUE_MORE:
+    case PL_QUEUE_ERR:
+        p->status = status;
+        break;
+    case PL_QUEUE_EOF:
+        queue_push(p, NULL);
+        break;
+    }
+
+    pl_cond_broadcast(&p->wakeup);
+    pl_mutex_unlock(&p->lock_weak);
+}
+
 static inline bool entry_mapped(struct entry *entry)
 {
     return entry->mapped || (entry->primary && entry->primary->mapped);
@@ -475,10 +506,13 @@ bool pl_queue_push_block(pl_queue p, uint64_t timeout,
                          const struct pl_source_frame *frame)
 {
     pl_mutex_lock(&p->lock_weak);
-    if (!timeout || !frame || p->status == PL_QUEUE_EOF)
+    if (!timeout || !frame || p->status == PL_QUEUE_EOF ||
+        p->status == PL_QUEUE_ERR)
         goto skip_blocking;
 
-    while (!queue_has_room(p) && p->status != PL_QUEUE_EOF) {
+    while (!queue_has_room(p) && p->status != PL_QUEUE_EOF &&
+           p->status != PL_QUEUE_ERR)
+    {
         if (pl_cond_timedwait(&p->wakeup, &p->lock_weak, timeout) == ETIMEDOUT) {
             pl_mutex_unlock(&p->lock_weak);
             return false;
@@ -516,8 +550,8 @@ static void report_estimates(pl_queue p)
 // note: may add more than one frame, since it releases the lock
 static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *params)
 {
-    if (p->status == PL_QUEUE_EOF)
-        return PL_QUEUE_EOF;
+    if (p->status == PL_QUEUE_EOF || p->status == PL_QUEUE_ERR)
+        return p->status;
 
     if (!params->get_frame) {
         if (!params->timeout)
