@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '385': 'add pl_compositor.repr/color/chroma_location and pl_input.chroma_location',
       '384': 'add pl_scene, pl_scene_update(), pl_scene_render() and pl_scene_create_json',
       '383': 'add PL_OPT_STRUCT and pl_opt_data.path',
       '382': 'add pl_renderer_reset()',

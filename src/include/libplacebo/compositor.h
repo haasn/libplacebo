@@ -71,6 +71,10 @@ typedef struct pl_input_t {
     struct pl_color_repr repr;
     struct pl_color_space color;
 
+    // Chroma location override. If set, replaces the chroma location of the
+    // input's frames (i.e. the `shift_x/y` of their subsampled planes).
+    enum pl_chroma_location chroma_location;
+
     // Compositing order. Inputs with a higher `z_index` are drawn on top of,
     // and may obscure, inputs with a lower one. Ties are broken by the order
     // in which the inputs were attached, with later inputs drawn on top.
@@ -151,6 +155,15 @@ typedef struct pl_compositor_t {
     //
     // Optional; defaults to `&pl_render_default_params` if unset.
     const struct pl_render_params *params;
+
+    // Color space / representation overrides for the output. Any values set
+    // here override the values of the target frame passed to
+    // `pl_compositor_render()`.
+    struct pl_color_repr repr;
+    struct pl_color_space color;
+
+    // Chroma location override for the output, see `pl_input.chroma_location`.
+    enum pl_chroma_location chroma_location;
 
     // Disables linear light composition, rendering all inputs directly onto
     // the target frame instead. Intended for debugging purposes only.

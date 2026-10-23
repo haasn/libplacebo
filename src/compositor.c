@@ -375,6 +375,8 @@ enum pl_queue_status pl_input_update(pl_input input,
             pl_color_space_merge(&color, &frame->color);
             frame->repr  = repr;
             frame->color = color;
+            if (input->chroma_location)
+                pl_frame_set_chroma_location(frame, input->chroma_location);
             // frame->rotation and frame->crop are updated by render_input()
         }
     }
@@ -850,8 +852,16 @@ bool pl_compositor_render(pl_compositor comp, const struct pl_frame *ptarget,
         return false;
     }
 
+    struct pl_frame target = *ptarget;
+    target.repr  = comp->repr;
+    target.color = comp->color;
+    pl_color_repr_merge(&target.repr, &ptarget->repr);
+    pl_color_space_merge(&target.color, &ptarget->color);
+    if (comp->chroma_location)
+        pl_frame_set_chroma_location(&target, comp->chroma_location);
+
     struct pl_compositor_status status;
-    update_inputs(comp, &status, ptarget, params);
+    update_inputs(comp, &status, &target, params);
     if (out_status)
         *out_status = status;
     if (status.status == PL_QUEUE_ERR)
@@ -861,11 +871,10 @@ bool pl_compositor_render(pl_compositor comp, const struct pl_frame *ptarget,
     get_canvas_params(&cpar, comp);
     if (!status.num_visible) {
         set_info_callback(&cpar, comp, NULL);
-        return pl_render_image(p->rr, NULL, ptarget, &cpar);
+        return pl_render_image(p->rr, NULL, &target, &cpar);
     }
 
     // Compute normalized rotated output dimensions
-    struct pl_frame target = *ptarget;
     int target_width, target_height;
     pl_frame_size(&target, &target_width, &target_height);
 
