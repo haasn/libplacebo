@@ -109,12 +109,12 @@ static double cubic_bezier(double t, double v0, double v1, const double p[4])
     return v0 + (v1 - v0) * y;
 }
 
-static double animation_sample(const struct animation *anim, double pts)
+static struct keyframe animation_sample(const struct animation *anim, double pts)
 {
     pl_assert(anim && anim->keyframes.num > 0);
     const struct keyframe *next = &anim->keyframes.elem[0], *prev = NULL;
     if (pts < next->pts)
-        return next->value;
+        return *next;
 
     for (int i = 1; i < anim->keyframes.num; i++) {
         prev = next;
@@ -124,16 +124,21 @@ static double animation_sample(const struct animation *anim, double pts)
     }
 
     if (pts >= next->pts)
-        return next->value;
+        return *next;
 
     pl_assert(pts >= prev->pts && pts <= next->pts);
     const double t = (pts - prev->pts) / (next->pts - prev->pts);
-    return cubic_bezier(t, prev->value, next->value, prev->easing);
+    return (struct keyframe) {
+        .pts   = pts,
+        .value = cubic_bezier(t, prev->value, next->value, prev->easing),
+    };
 }
 
-static void animation_write(const struct animation *anim, double value)
+static void animation_write(const struct animation *anim,
+                            const struct keyframe *kf)
 {
     pl_opt opt = anim->opt;
+    double value = kf->value;
     if (opt->min != opt->max)
         value = PL_CLAMP(value, opt->min, opt->max);
 
@@ -150,7 +155,8 @@ void pl_scene_update(pl_scene scene, const double pts)
     struct priv *p = PL_PRIV(scene);
     for (int i = 0; i < p->animations.num; i++) {
         const struct animation *anim = &p->animations.elem[i];
-        animation_write(anim, animation_sample(anim, pts));
+        const struct keyframe kf = animation_sample(anim, pts);
+        animation_write(anim, &kf);
     }
 }
 
@@ -333,7 +339,7 @@ static bool parse_animation(struct parse_ctx *ctx, pl_opt opt,
     }
 
     // Hold the first value until the first pl_scene_update()
-    animation_write(&anim, anim.keyframes.elem[0].value);
+    animation_write(&anim, &anim.keyframes.elem[0]);
     struct priv *p = PL_PRIV(scene);
     PL_ARRAY_APPEND(scene, p->animations, anim);
     return true;
