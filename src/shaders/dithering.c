@@ -110,13 +110,20 @@ void pl_shader_dither(pl_shader sh, int new_depth,
                       pl_shader_obj *dither_state,
                       const struct pl_dither_params *params)
 {
-    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
-        return;
-
     if (new_depth <= 0 || new_depth > 256) {
         PL_WARN(sh, "Invalid dither depth: %d.. ignoring", new_depth);
         return;
     }
+
+    sh_dither(sh, new_depth, ldexpf(1.0f, new_depth) - 1.0f, dither_state, params);
+}
+
+void sh_dither(pl_shader sh, int new_depth, float steps,
+               pl_shader_obj *dither_state,
+               const struct pl_dither_params *params)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
 
     sh_describef(sh, "dithering (%d bits)", new_depth);
     GLSL("// pl_shader_dither \n"
@@ -235,7 +242,12 @@ done: ;
     }
 
     // Scale factor for dither rounding
-    GLSL("const float scale = %llu.0; \n", (1LLU << new_depth) - 1);
+    GLSL("const float scale = "$"; \n", sh_const(sh, (struct pl_shader_const) {
+        .type         = PL_VAR_FLOAT,
+        .name         = "steps",
+        .data         = &steps,
+        .compile_time = true,
+    }));
 
     // Don't let the dither pattern lift true black off zero. Clamp small noise
     // near zero, which is likely produced by floating point inaccuracies.
@@ -329,6 +341,17 @@ size_t pl_error_diffusion_shmem_req(const struct pl_error_diffusion_kernel *kern
 
 bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_params *params)
 {
+    if (params->new_depth <= 0 || params->new_depth > 256) {
+        PL_WARN(sh, "Invalid dither depth: %d.. ignoring", params->new_depth);
+        return false;
+    }
+
+    return sh_error_diffusion(sh, params, ldexpf(1.0f, params->new_depth) - 1.0f);
+}
+
+bool sh_error_diffusion(pl_shader sh, const struct pl_error_diffusion_params *params,
+                        float steps)
+{
     const int width = params->input_tex->params.w, height = params->input_tex->params.h;
     const struct pl_glsl_version glsl = sh_glsl(sh);
     const struct pl_error_diffusion_kernel *kernel =
@@ -338,11 +361,6 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
     pl_assert(params->output_tex->params.h == height);
     if (!sh_require(sh, PL_SHADER_SIG_NONE, width, height))
         return false;
-
-    if (params->new_depth <= 0 || params->new_depth > 256) {
-        PL_WARN(sh, "Invalid dither depth: %d.. ignoring", params->new_depth);
-        return false;
-    }
 
     // The parallel error diffusion works by applying the shift mapping first.
     // Taking the Floyd and Steinberg algorithm for example. After applying
@@ -444,7 +462,12 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
          in_tex);
 
     // The dithering will quantize pixel value into multiples of 1/dither_quant.
-    int dither_quant = (1 << params->new_depth) - 1;
+    ident_t dither_quant = sh_const(sh, (struct pl_shader_const) {
+        .type         = PL_VAR_FLOAT,
+        .name         = "steps",
+        .data         = &steps,
+        .compile_time = true,
+    });
 
     // We encode errors in RGB components into a single 32-bit unsigned integer.
     // The error we propagate from the current pixel is in range of
@@ -473,12 +496,12 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
     GLSL(// Add the error previously propagated into current pixel, and clear
          // it in the ring buffer.
          "uint err_u32 = atomicExchange(err_rgb8[idx], 0u) + %uu;               \n"
-         "pix = pix * %d.0 + vec3(int((err_u32 >> %d) & 0xFFu) - 128,           \n"
+         "pix = pix * "$" + vec3(int((err_u32 >> %d) & 0xFFu) - 128,            \n"
          "                        int((err_u32 >> %d) & 0xFFu) - 128,           \n"
          "                        int( err_u32        & 0xFFu) - 128) / %d.0;   \n"
          // Write the dithered pixel.
          "vec3 dithered = round(pix);                                           \n"
-         "imageStore("$", ivec2(x, y), vec4(dithered / %d.0, pix_orig.a));      \n"
+         "imageStore("$", ivec2(x, y), vec4(dithered / "$", pix_orig.a));       \n"
          // Prepare for error propagation pass
          "vec3 err_divided = (pix - dithered) * %d.0 / %d.0;                    \n"
          "ivec3 tmp;                                                            \n",

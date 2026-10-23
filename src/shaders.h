@@ -297,6 +297,16 @@ void *sh_alloc_obj(pl_gpu gpu, pl_shader_obj *ptr,
 // If `temporal` is set, the PRNG will vary across frames.
 ident_t sh_prng(pl_shader sh, bool temporal, ident_t *state);
 
+// Like `pl_shader_dither` and `pl_shader_error_diffusion`, but quantizing to
+// `steps` steps per unit instead of 2^new_depth - 1
+struct pl_dither_params;
+struct pl_error_diffusion_params;
+void sh_dither(pl_shader sh, int new_depth, float steps,
+               pl_shader_obj *dither_state,
+               const struct pl_dither_params *params);
+bool sh_error_diffusion(pl_shader sh, const struct pl_error_diffusion_params *params,
+                        float steps);
+
 // Backing memory type
 enum sh_lut_type {
     SH_LUT_AUTO = 0, // pick whatever makes the most sense
