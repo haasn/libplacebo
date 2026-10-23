@@ -242,10 +242,35 @@ static bool parse_number(struct parse_ctx *ctx, const struct json_value_s *val,
 static bool parse_easing(struct parse_ctx *ctx, double easing[4],
                          const struct json_value_s *val)
 {
+    static const struct {
+        const char *name;
+        double easing[4];
+    } curves[] = {
+        { "linear",      { 0.0,  0.0, 1.0,  1.0 } },
+        { "ease",        { 0.25, 0.1, 0.25, 1.0 } },
+        { "ease-in",     { 0.42, 0.0, 1.0,  1.0 } },
+        { "ease-out",    { 0.0,  0.0, 0.58, 1.0 } },
+        { "ease-in-out", { 0.42, 0.0, 0.58, 1.0 } },
+    };
+
+    if (val->type == json_type_string) {
+        const pl_str name = json_str(val->payload);
+        for (int i = 0; i < PL_ARRAY_SIZE(curves); i++) {
+            if (pl_str_equals0(name, curves[i].name)) {
+                memcpy(easing, curves[i].easing, sizeof(curves[i].easing));
+                return true;
+            }
+        }
+
+        PL_ERR(ctx, "Unrecognized easing curve '%.*s' for '%.*s'",
+               PL_STR_FMT(name), PL_STR_FMT(ctx->path));
+        return false;
+    }
+
     const struct json_array_s *arr = json_value_as_array((void *) val);
     if (!arr || arr->length != 4) {
-        PL_ERR(ctx, "Expected an array of four numbers [x1, y1, x2, y2] for "
-               "'%.*s'", PL_STR_FMT(ctx->path));
+        PL_ERR(ctx, "Expected a curve name or an array of four numbers "
+               "[x1, y1, x2, y2] for '%.*s'", PL_STR_FMT(ctx->path));
         return false;
     }
 

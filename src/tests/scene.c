@@ -134,7 +134,7 @@ int main(void)
         "        { \"pts\": 0, \"value\": \"1/2\", \"easing\": [0, 0, 1, 1] }"
         "      ],"
         "      \"y1\": ["
-        "        { \"pts\": 0, \"value\": 0, \"easing\": [0.42, 0, 1, 1] },"
+        "        { \"pts\": 0, \"value\": 0, \"easing\": \"ease-in\" },"
         "        { \"pts\": 2, \"value\": 1 }"
         "      ]"
         "    },"
@@ -231,6 +231,8 @@ int main(void)
     require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0 } ] } ] }");
     require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0, \"value\": 1, "
                      "\"easing\": [ 1.5, 0, 1, 1 ] } ] } ] }");
+    require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0, \"value\": 1, "
+                     "\"easing\": \"ease-sideways\" } ] } ] }");
     require_invalid("{ \"inputs\": [ { \"stop_pts\": [ { \"pts\": 0, \"value\": 1, "
                      "\"nope\": 1 } ] } ] }");
 

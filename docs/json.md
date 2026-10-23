@@ -208,15 +208,16 @@ Each keyframe takes the following keys:
   value of the option. Required.
 - `easing`: How to transition from this keyframe to the next one, as the
   control points `[x1, y1, x2, y2]` of a cubic Bézier curve from `(0, 0)` to
-  `(1, 1)`, like the CSS `cubic-bezier()` function. `x1` and `x2` must lie in
-  the range `[0, 1]`. If omitted, the value is held until the next keyframe.
+  `(1, 1)`, like the CSS `cubic-bezier()` function, or as the name of one of
+  the predefined curves below. `x1` and `x2` must lie in the range `[0, 1]`.
+  If omitted, the value is held until the next keyframe.
   Only supported for numeric options, with the values of integer options
   rounded to the nearest integer; all other options always hold their value
   until the next keyframe.
 
-Some common easing curves are:
+The predefined easing curves are:
 
-| Curve         | `easing`                 |
+| Name          | Control points           |
 |---------------|--------------------------|
 | linear        | `[0, 0, 1, 1]`           |
 | ease          | `[0.25, 0.1, 0.25, 1]`   |
