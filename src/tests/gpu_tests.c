@@ -583,6 +583,9 @@ static void pl_shader_tests(pl_gpu gpu)
             { 1.0f, 0.0f, 0.0f, 1.0f }, // red
             { 0.0f, 1.0f, 0.0f, 1.0f }, // green
             { 0.0f, 0.0f, 1.0f, 1.0f }, // blue
+            { 0.5f, 0.5f, 0.5f, 1.0f }, // grays
+            { 0.01f, 0.01f, 0.01f, 1.0f },
+            { 0.0f, 0.0f, 0.0f, 1.0f },
         };
 
         static const float clip_ref[][3] = {
@@ -627,9 +630,6 @@ static void pl_shader_tests(pl_gpu gpu)
             else if (pl_gamut_map_functions[g] == &pl_gamut_map_saturation)
                 ref = sat_ref;
 
-            if (!ref)
-                continue;
-
             pl_shader_obj gmap_state = NULL;
             sh = pl_dispatch_begin(dp);
             pl_shader_sample_nearest(sh, pl_sample_src( .tex = bt2020_tex ));
@@ -658,10 +658,19 @@ static void pl_shader_tests(pl_gpu gpu)
             }));
 
             for (int i = 0; i < N; i++) {
-                float *c = &p3_out[i * 4];
-                REQUIRE_FEQ(c[0], ref[i][0], 1e-4f);
-                REQUIRE_FEQ(c[1], ref[i][1], 1e-4f);
-                REQUIRE_FEQ(c[2], ref[i][2], 1e-4f);
+                const float *c = &p3_out[i * 4], *in = bt2020_in[i];
+                if (ref && i < PL_ARRAY_SIZE(clip_ref)) {
+                    REQUIRE_FEQ(c[0], ref[i][0], 1e-4f);
+                    REQUIRE_FEQ(c[1], ref[i][1], 1e-4f);
+                    REQUIRE_FEQ(c[2], ref[i][2], 1e-4f);
+                }
+
+                // Grays stay neutral and scale like white in every mapping
+                if (in[0] == in[1] && in[1] == in[2]) {
+                    REQUIRE_FEQ(c[0], c[1], 1e-4f);
+                    REQUIRE_FEQ(c[1], c[2], 1e-4f);
+                    REQUIRE_FEQ(c[1], in[1] * p3_out[1], 2e-3f);
+                }
             }
         }
 
