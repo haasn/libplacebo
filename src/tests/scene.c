@@ -172,7 +172,7 @@ int main(void)
     REQUIRE_CMP(in->dst_rect.x1, ==, 0.5f, "f");
     pl_scene_destroy(&scene);
 
-    // Non-float animations always hold their value
+    // Integer animations are rounded, other non-float animations hold
     scene = create(log,
         "{ \"inputs\": [ {"
         "    \"fit\": ["
@@ -183,7 +183,11 @@ int main(void)
         "      \"upscaler\": [ { \"pts\": 0, \"value\": \"bilinear\" },"
         "                      { \"pts\": 1, \"value\": \"none\" } ],"
         "      \"deband\": [ { \"pts\": 0, \"value\": false },"
-        "                    { \"pts\": 1, \"value\": true } ]"
+        "                    { \"pts\": 1, \"value\": true } ],"
+        "      \"deband_iterations\": ["
+        "        { \"pts\": 0, \"value\": 0, \"easing\": [0, 0, 1, 1] },"
+        "        { \"pts\": 2, \"value\": 4, \"easing\": [0, 3, 1, 3] },"
+        "        { \"pts\": 3, \"value\": 16 } ]"
         "    }"
         "} ] }");
     REQUIRE(scene);
@@ -199,8 +203,16 @@ int main(void)
     REQUIRE_CMP(in->z_index, ==, 1, "d");
     REQUIRE(!par->upscaler);
     REQUIRE(par->deband_params);
+    REQUIRE_CMP(par->deband_params->iterations, ==, 3, "d");
+    pl_scene_update(scene, 1.25);
+    REQUIRE_CMP(par->deband_params->iterations, ==, 3, "d"); // 2.5 rounds up
+    pl_scene_update(scene, 1.1);
+    REQUIRE_CMP(par->deband_params->iterations, ==, 2, "d");
     pl_scene_update(scene, 2.0);
     REQUIRE_CMP(in->z_index, ==, 5, "d");
+    REQUIRE_CMP(par->deband_params->iterations, ==, 4, "d");
+    pl_scene_update(scene, 2.5);
+    REQUIRE_CMP(par->deband_params->iterations, ==, 16, "d"); // clamped
     pl_scene_update(scene, 0.5);
     REQUIRE_CMP(in->fit, ==, PL_FIT_FILL, "d");
     REQUIRE(par->upscaler == &pl_filter_bilinear);

@@ -210,8 +210,9 @@ Each keyframe takes the following keys:
   control points `[x1, y1, x2, y2]` of a cubic Bézier curve from `(0, 0)` to
   `(1, 1)`, like the CSS `cubic-bezier()` function. `x1` and `x2` must lie in
   the range `[0, 1]`. If omitted, the value is held until the next keyframe.
-  Only supported for floating point options; all other options always hold
-  their value until the next keyframe.
+  Only supported for numeric options, with the values of integer options
+  rounded to the nearest integer; all other options always hold their value
+  until the next keyframe.
 
 Some common easing curves are:
 

@@ -15,6 +15,7 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <limits.h>
 #include <math.h>
 
 #include "common.h"
@@ -52,7 +53,7 @@ struct keyframe {
     double pts;
     double value;
     double easing[4]; // [x1, y1, x2, y2]
-    void *data;       // raw field value, for non-float options
+    void *data;       // raw field value, for non-numeric options
 };
 
 struct animation {
@@ -110,6 +111,11 @@ static double cubic_bezier(double t, double v0, double v1, const double p[4])
     return v0 + (v1 - v0) * y;
 }
 
+static inline bool opt_is_numeric(pl_opt opt)
+{
+    return opt->type == PL_OPT_FLOAT || opt->type == PL_OPT_INT;
+}
+
 static struct keyframe animation_sample(const struct animation *anim, double pts)
 {
     pl_assert(anim && anim->keyframes.num > 0);
@@ -128,7 +134,7 @@ static struct keyframe animation_sample(const struct animation *anim, double pts
         return *next;
 
     pl_assert(pts >= prev->pts && pts <= next->pts);
-    if (anim->opt->type != PL_OPT_FLOAT)
+    if (!opt_is_numeric(anim->opt))
         return *prev; // can't be interpolated
 
     const double t = (pts - prev->pts) / (next->pts - prev->pts);
@@ -142,7 +148,7 @@ static void animation_write(const struct animation *anim,
                             const struct keyframe *kf)
 {
     pl_opt opt = anim->opt;
-    if (opt->type != PL_OPT_FLOAT) {
+    if (!opt_is_numeric(opt)) {
         memcpy(anim->value, kf->data, pl_opt_size(opt));
         return;
     }
@@ -150,6 +156,11 @@ static void animation_write(const struct animation *anim,
     double value = kf->value;
     if (opt->min != opt->max)
         value = PL_CLAMP(value, opt->min, opt->max);
+
+    if (opt->type == PL_OPT_INT) {
+        *(int *) anim->value = lround(PL_CLAMP(value, INT_MIN, INT_MAX));
+        return;
+    }
 
     switch (pl_opt_size(opt)) {
     case sizeof(float):  *(float *)  anim->value = value; return;
@@ -290,6 +301,8 @@ static bool parse_keyframe_value(struct parse_ctx *ctx, void *base, pl_opt opt,
         return false;
     }
 
+    if (opt->type == PL_OPT_INT)
+        kf->value = *(int *) kf->data;
     return true;
 }
 
@@ -316,9 +329,9 @@ static bool parse_keyframe(struct parse_ctx *ctx, void *base, pl_opt opt,
             has_value = parse_keyframe_value(ctx, base, opt, field, kf, e->value);
             ok &= has_value;
         } else if (pl_str_equals0(key, "easing")) {
-            if (opt->type != PL_OPT_FLOAT) {
-                PL_ERR(ctx, "Easing '%.*s' is only supported for floating "
-                       "point options", PL_STR_FMT(ctx->path));
+            if (!opt_is_numeric(opt)) {
+                PL_ERR(ctx, "Easing '%.*s' is only supported for numeric "
+                       "options", PL_STR_FMT(ctx->path));
                 ok = false;
             } else {
                 ok &= parse_easing(ctx, kf->easing, e->value);
