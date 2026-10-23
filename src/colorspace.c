@@ -696,7 +696,7 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
         // OOTF
         float luma = coef[0] * color[0] + coef[1] * color[1] + coef[2] * color[2];
         luma = powf(fmaxf(luma / 12, 0), y - 1);
-        MAP3(luma * X / 12);
+        MAP3(csp_max * luma * X / 12);
         goto scale_out;
     }
     case PL_COLOR_TRC_V_LOG:
