@@ -208,7 +208,8 @@ typedef const struct opt_ctx_t {
     pl_log log; // as a convenience, only needed when parsing
     pl_opt opt;
     void *alloc; // for printing only
-    void *base; // current struct base ptr
+    void *base; // top-level struct base ptr
+    const char *path; // current path
 } *opt_ctx;
 
 struct enum_val {
@@ -240,34 +241,57 @@ typedef const struct opt_priv_t {
 } *opt_priv;
 
 // Returns the offset of the option relative to the struct base
-static pl_opt resolve(const struct pl_opt_t *list, pl_str key,
+static pl_opt resolve(const struct pl_opt_t *list, pl_str path,
                       ptrdiff_t *out_offset)
 {
-    for (pl_opt opt = list; opt->key; opt++) {
-        if (!pl_str_equals0(key, opt->key))
-            continue;
+    ptrdiff_t offset = 0;
 
-        opt_priv priv = opt->priv;
+    while (path.len) {
+        pl_str rest;
+        pl_str key = pl_str_split_char(path, '.', &rest);
+
+        pl_opt match = NULL;
+        for (pl_opt opt = list; opt->key; opt++) {
+            if (pl_str_equals0(key, opt->key)) {
+                match = opt;
+                break;
+            }
+        }
+
+        if (!match)
+            break;
+
+        opt_priv priv = match->priv;
+        offset += priv->offset;
+
+        if (match->type == PL_OPT_STRUCT) {
+            list = match->fields;
+            path = rest;
+            continue;
+        } else if (rest.len) {
+            break; // path continues past leaf option
+        }
+
         if (out_offset)
-            *out_offset = priv->offset;
-        return opt;
+            *out_offset = offset;
+        return match;
     }
 
     return NULL;
 }
 
-static pl_opt_data get_opt_data(opt_ctx ctx)
+static pl_opt_data get_opt_data(opt_ctx ctx, const void *val)
 {
     pl_options opts = ctx->base;
     struct priv *p = PL_PRIV(opts);
     opt_priv priv = ctx->opt->priv;
-    const void *val = (const char *) ctx->base + priv->offset;
 
     p->data_text.len = 0;
     priv->print(ctx, &p->data_text, val);
     p->data = (struct pl_opt_data_t) {
         .opts  = opts,
         .opt   = ctx->opt,
+        .path  = PL_DEF(ctx->path, ctx->opt->key),
         .value = val,
         .text  = (char *) p->data_text.buf,
     };
@@ -279,52 +303,77 @@ pl_opt_data pl_options_get(pl_options opts, const char *key)
 {
     struct priv *p = PL_PRIV(opts);
 
-    pl_opt opt = pl_find_option(key);
+    ptrdiff_t offset;
+    pl_opt opt = resolve(pl_option_list, pl_str0(key), &offset);
     if (!opt || opt->preset) {
         PL_ERR(p, "Unrecognized or invalid option '%s'", key);
         return NULL;
     }
 
-    return get_opt_data(&(struct opt_ctx_t) {
+    struct opt_ctx_t ctx = {
         .alloc = opts,
         .base  = opts,
         .opt   = opt,
-    });
+        .path  = key,
+    };
+
+    return get_opt_data(&ctx, (const char *) opts + offset);
+}
+
+static void iterate(struct opt_ctx_t *ctx, const struct pl_opt_t *list,
+                    ptrdiff_t base, char *buf, int size,
+                    void (*cb)(void *priv, pl_opt_data data),
+                    void *cb_priv)
+{
+    for (pl_opt opt = list; opt->key; opt++) {
+        if (opt->preset)
+            continue;
+
+        opt_priv priv = opt->priv;
+        ptrdiff_t offset = base + priv->offset;
+
+        const char *sep = opt->type == PL_OPT_STRUCT ? "." : "";
+        const int n = snprintf(buf, size, "%s%s", opt->key, sep);
+        pl_assert(n > 0 && n < size);
+
+        if (opt->type == PL_OPT_STRUCT) {
+            iterate(ctx, opt->fields, offset, buf + n, size - n, cb, cb_priv);
+            continue;
+        }
+
+        ctx->opt = opt;
+
+        const void *val = (const char *) ctx->base + offset;
+        const void *ref = (const char *) &default_options + offset;
+        int cmp = priv->compare ? priv->compare(ctx, val, ref)
+                                : memcmp(val, ref, priv->size);
+        if (cmp != 0)
+            cb(cb_priv, get_opt_data(ctx, val));
+    }
 }
 
 void pl_options_iterate(pl_options opts,
                         void (*cb)(void *priv, pl_opt_data data),
                         void *cb_priv)
 {
-    for (pl_opt opt = pl_option_list; opt->key; opt++) {
-        if (opt->preset)
-            continue;
+    char path[256];
+    struct opt_ctx_t ctx = {
+        .alloc = opts,
+        .base  = opts,
+        .path  = path,
+    };
 
-        struct opt_ctx_t ctx = {
-            .alloc = opts,
-            .base  = opts,
-            .opt   = opt,
-        };
-
-        opt_priv priv = opt->priv;
-        const void *val = (void *) ((uintptr_t) opts + priv->offset);
-        const void *ref = (void *) ((uintptr_t) &default_options + priv->offset);
-        int cmp = priv->compare ? priv->compare(&ctx, val, ref)
-                                : memcmp(val, ref, priv->size);
-        if (cmp != 0)
-            cb(cb_priv, get_opt_data(&ctx));
-    }
+    iterate(&ctx, pl_option_list, 0, path, sizeof(path), cb, cb_priv);
 }
 
 static void save_cb(void *priv, pl_opt_data data)
 {
-    pl_opt opt = data->opt;
     void *alloc = data->opts;
     pl_str *out = priv;
 
     if (out->len)
         pl_str_append_raw(alloc, out, ",", 1);
-    pl_str_append_raw(alloc, out, opt->key, strlen(opt->key));
+    pl_str_append(alloc, out, pl_str0(data->path));
     pl_str_append_raw(alloc, out, "=", 1);
     pl_str_append(alloc, out, pl_str0(data->text));
 }
@@ -352,9 +401,9 @@ static bool option_set_raw(pl_options opts, pl_str k, pl_str v)
         return false;
     }
 
-    PL_TRACE(p, "Parsing option '%s' = '%.*s'", opt->key, PL_STR_FMT(v));
+    PL_TRACE(p, "Parsing option '%.*s' = '%.*s'", PL_STR_FMT(k), PL_STR_FMT(v));
     if (opt->deprecated)
-        PL_WARN(p, "Option '%s' is deprecated", opt->key);
+        PL_WARN(p, "Option '%.*s' is deprecated", PL_STR_FMT(k));
 
     struct opt_ctx_t ctx = {
         .log  = p->log,
@@ -898,6 +947,20 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
                 pl_static_assert(SIZEOF(SCALER) ==                              \
                                  sizeof(struct pl_filter_config));              \
             }),                                                                 \
+        },                                                                      \
+        __VA_ARGS__                                                             \
+    }
+
+#define OPT_STRUCT(KEY, NAME, FIELD, LIST, ...)                                 \
+    {                                                                           \
+        .key        = KEY,                                                      \
+        .name       = NAME,                                                     \
+        .type       = PL_OPT_STRUCT,                                            \
+        .fields     = LIST,                                                     \
+        .num_fields = PL_ARRAY_SIZE(LIST) - 1,                                  \
+        .priv = &(struct opt_priv_t) {                                          \
+            .offset = offsetof(STRUCT_BASE, FIELD),                             \
+            .size   = SIZEOF(FIELD),                                            \
         },                                                                      \
         __VA_ARGS__                                                             \
     }

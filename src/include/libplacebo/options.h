@@ -82,6 +82,9 @@ typedef const struct pl_opt_data_t {
     // Triggering option for this callback invocation.
     pl_opt opt;
 
+    // Full path to this option, including all parent keys for nested options.
+    const char *path;
+
     // The raw data associated with this option. Always some pointer into
     // `opts`. Note that only PL_OPT_BOOL, PL_OPT_INT and PL_OPT_FLOAT have
     // a fixed representation, for other fields its usefulness is dubious.
@@ -158,6 +161,16 @@ enum pl_option_type {
     // corresponding interpretation of pointers.
     PL_OPT_STRING,
 
+    // A nested struct, whose own options are parsed recursively, namespaced
+    // by this option's key (separated by a `.`). This option does not
+    // carry a value by itself.
+    //
+    // Note: For backwards compatability reasons, this is not used for the
+    // `params` structs in `pl_options` itself. Instead, all keys are
+    // addressed individually. See the accompanying documentation for the
+    // exact list of key names.
+    PL_OPT_STRUCT,
+
     PL_OPT_TYPE_COUNT,
 };
 
@@ -184,6 +197,10 @@ struct pl_opt_t {
     // be loaded but not saved. (The equivalent underlying options this preset
     // corresponds to will be saved instead)
     bool preset;
+
+    // For PL_OPT_STRUCT, the options of the nested struct, terminated by {0}.
+    const struct pl_opt_t *fields;
+    int num_fields; // excluding the terminating {0}
 
     // Internal implementation details (for parsing/saving), opaque to user
     const void *priv;

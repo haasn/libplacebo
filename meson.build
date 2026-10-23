@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '383': 'add PL_OPT_STRUCT and pl_opt_data.path',
       '382': 'add pl_renderer_reset()',
       '381': 'add pl_render_params.transparency',
       '380': 'add <libplacebo/compositor.h>',
