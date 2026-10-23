@@ -1020,6 +1020,15 @@ static bool parse_scaler_preset(opt_ctx p, pl_str str, void *out)
     {"up",      PL_PTS_ROUND_UP},                                               \
     {"down",    PL_PTS_ROUND_DOWN})
 
+#define CHROMA_VALUES LIST(                                                     \
+    {"auto",          PL_CHROMA_UNKNOWN},                                       \
+    {"left",          PL_CHROMA_LEFT},                                          \
+    {"center",        PL_CHROMA_CENTER},                                        \
+    {"top-left",      PL_CHROMA_TOP_LEFT},                                      \
+    {"top-center",    PL_CHROMA_TOP_CENTER},                                    \
+    {"bottom-left",   PL_CHROMA_BOTTOM_LEFT},                                   \
+    {"bottom-center", PL_CHROMA_BOTTOM_CENTER})
+
 #define SCALE_OPTS(PREFIX, NAME, FIELD)                                               \
     OPT_SCALER(PREFIX, NAME, FIELD),                                                  \
     OPT_SCALER_PRESET(PREFIX"_preset", NAME "preset", FIELD),                         \
@@ -1428,6 +1437,7 @@ const struct pl_opt_t pl_input_opts[] = {
     OPT_DOUBLE("seek_pts", "Input PTS to display at `start_pts`", seek_pts),
     OPT_STRUCT("repr", "Color representation override", repr, pl_color_repr_opts),
     OPT_STRUCT("color", "Color space override", color, pl_color_space_opts),
+    OPT_ENUM("chroma_location", "Chroma location override", chroma_location, CHROMA_VALUES),
     OPT_INT("z_index", "Compositing order", z_index),
     OPT_INT("rotation", "Extra rotation, in multiples of 90°", rotation),
     OPT_ENUM("fit", "Image placement mode", fit, LIST(
@@ -1440,6 +1450,15 @@ const struct pl_opt_t pl_input_opts[] = {
     OPT_STRUCT("src_rect", "Custom source rectangle", src_rect, pl_rect2df_opts),
     OPT_STRUCT("dst_rect", "Custom target rectangle", dst_rect, pl_rect2df_opts),
     OPT_STRUCT("focus", "Focus point", focus, pl_vec2df_opts),
+    {0},
+#undef STRUCT_BASE
+};
+
+const struct pl_opt_t pl_compositor_opts[] = {
+#define STRUCT_BASE struct pl_compositor_t
+    OPT_STRUCT("repr", "Color representation override", repr, pl_color_repr_opts),
+    OPT_STRUCT("color", "Color space override", color, pl_color_space_opts),
+    OPT_ENUM("chroma_location", "Chroma location override", chroma_location, CHROMA_VALUES),
     {0},
 #undef STRUCT_BASE
 };

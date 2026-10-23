@@ -31,11 +31,12 @@ scene.
 
 ## Structure
 
-A scene is a JSON object with two optional keys:
+A scene is a JSON object with the following optional keys:
 
 ```json
 {
     "params": { "border": "tiles", "dither": false },
+    "color": { "primaries": "bt.2020", "transfer": "pq" },
     "inputs": [
         {
             "start_pts": "1001/30000",
@@ -59,6 +60,8 @@ A scene is a JSON object with two optional keys:
 - `inputs`: an array with one object per input, describing its timing,
   placement and frame property overrides, as well as its own `params`. See
   [inputs](#inputs).
+- `color`, `repr`, `chroma_location`: overrides for the color space,
+  representation and chroma location of the target frame. See [color overrides](#color-overrides).
 
 ## Values
 
@@ -97,6 +100,7 @@ documented in full on the corresponding fields of `pl_input`.
 | `focus`      | `{ "x", "y" }`         | `0.5, 0.5` | Focus point, deciding how the image is aligned within `dst_rect` |
 | `color`      | [color space](#color-overrides) | unset | Overrides the color space of the input's frames |
 | `repr`       | [color repr](#color-overrides)  | unset | Overrides the color representation of the input's frames |
+| `chroma_location` | [chroma location](#color-overrides) | unset | Overrides the chroma location of the input's frames |
 | `params`     | [render options](#render-options) | `pl_render_default_params` | Render options for this input |
 
 `start_pts` and `stop_pts` are given in the output timeline, while `seek_pts`
@@ -123,8 +127,9 @@ half. Swapping `x0` and `x1` (or `y0` and `y1`) mirrors the image.
 
 ### Color overrides
 
-Any value set in `color` or `repr` replaces the corresponding value reported by
-the input's frames; unset values (or `auto`) leave them as they are.
+Any value set in `color`, `repr` or `chroma_location` replaces the corresponding value reported by
+the input's frames (or, at the top level, of the target frame); unset values
+(or `auto`) leave them as they are.
 
 `color` takes the following keys:
 
@@ -146,6 +151,9 @@ the input's frames; unset values (or `auto`) leave them as they are.
 - `alpha`: `unknown`, `independent`, `premultiplied`, `none`
 - `bits`: an object with the keys `sample_depth`, `color_depth` and
   `bit_shift`
+
+`chroma_location` takes one of `auto`, `left`, `center`, `top-left`,
+`top-center`, `bottom-left` or `bottom-center`.
 
 ## Render options
 

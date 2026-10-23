@@ -583,8 +583,8 @@ static bool parse_scene(struct parse_ctx *ctx, struct pl_scene_t *scene,
         } else if (pl_str_equals0(key, "inputs")) {
             ok &= parse_inputs(ctx, scene, e->value);
         } else {
-            PL_ERR(ctx, "Unrecognized key '%.*s'", PL_STR_FMT(ctx->path));
-            ok = false;
+            ok &= parse_key(ctx, scene->comp, pl_compositor_opts, scene->comp,
+                            key, e->value);
         }
         ctx->path.len = 0;
     }
