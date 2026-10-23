@@ -163,6 +163,28 @@ struct parse_ctx {
     struct pl_scene_t *scene;
 };
 
+static bool json_value_str(const struct json_value_s *val, pl_str *out)
+{
+    switch (val->type) {
+    case json_type_string:
+        *out = json_str(val->payload);
+        return true;
+    case json_type_number: {
+        const struct json_number_s *num = val->payload;
+        *out = (pl_str) { (uint8_t *) num->number, num->number_size };
+        return true;
+    }
+    case json_type_true:
+        *out = pl_str0("yes");
+        return true;
+    case json_type_false:
+        *out = pl_str0("no");
+        return true;
+    default:
+        return false;
+    }
+}
+
 static bool parse_number(struct parse_ctx *ctx, const struct json_value_s *val,
                          double *out)
 {
@@ -320,31 +342,14 @@ static bool parse_animation(struct parse_ctx *ctx, pl_opt opt,
 static bool parse_value(struct parse_ctx *ctx, void *base, pl_opt opt,
                         void *field, const struct json_value_s *val)
 {
-    pl_str str;
-    switch (val->type) {
-    case json_type_string:
-        str = json_str(val->payload);
-        break;
-    case json_type_number: {
-        const struct json_number_s *num = val->payload;
-        str = (pl_str) { (uint8_t *) num->number, num->number_size };
-        break;
-    }
-    case json_type_true:
-        str = pl_str0("yes");
-        break;
-    case json_type_false:
-        str = pl_str0("no");
-        break;
-    case json_type_array:
+    if (val->type == json_type_array)
         return parse_animation(ctx, opt, field, val->payload);
-    case json_type_object:
-    case json_type_null:
+
+    pl_str str;
+    if (!json_value_str(val, &str)) {
         PL_ERR(ctx, "Invalid value type for option '%.*s'. Expected string, "
                "number, boolean or array.", PL_STR_FMT(ctx->path));
         return false;
-    default:
-        pl_unreachable();
     }
 
     if (!pl_opt_parse(ctx->log, base, opt, field, str)) {
