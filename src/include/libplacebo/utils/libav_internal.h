@@ -336,6 +336,8 @@ PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
                 .white.x = av_q2d(data->mdm->white_point[0]),
                 .white.y = av_q2d(data->mdm->white_point[1]),
             };
+            if (!pl_primaries_valid(&out->prim))
+                out->prim = (struct pl_raw_primaries) {0}; /* sanity */
         }
     }
 

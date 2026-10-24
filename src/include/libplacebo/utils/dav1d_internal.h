@@ -321,6 +321,8 @@ PL_DAV1D_API void pl_frame_from_dav1dpicture(struct pl_frame *out,
             .white.x = pl_fixed0_16(md->white_point[0]),
             .white.y = pl_fixed0_16(md->white_point[1]),
         };
+        if (!pl_primaries_valid(&out->color.hdr.prim))
+            out->color.hdr.prim = (struct pl_raw_primaries) {0}; /* sanity */
     }
 
     if (picture->frame_hdr->film_grain.present) {
