@@ -72,7 +72,7 @@ struct vk_slab {
     uint64_t spacemap;      // bitset of available pages
     size_t pagesize;        // size in bytes per page
     size_t used;            // number of bytes actually in use
-    uint64_t age;           // timestamp of last use
+    uint64_t age;           // garbage collections since last use
 
     // optional, depends on the memory type:
     VkBuffer buffer;        // buffer spanning the entire slab
@@ -101,7 +101,6 @@ struct vk_malloc {
     size_t maximum_page_size;
     size_t max_mapped_vram; // maximum allocation size from host-visible VRAM
     PL_ARRAY(struct vk_pool *) pools;
-    uint64_t age;
 };
 
 static inline float efficiency(size_t used, size_t total)
@@ -382,7 +381,6 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
     struct vk_ctx *vk = ma->vk;
     struct vk_slab *slab = pl_alloc_ptr(NULL, slab);
     *slab = (struct vk_slab) {
-        .age = ma->age,
         .size = params->reqs.size,
         .handle_type = params->export_handle,
         .debug_tag = params->debug_tag,
@@ -602,14 +600,13 @@ void vk_malloc_garbage_collect(struct vk_malloc *ma)
     struct vk_ctx *vk = ma->vk;
 
     pl_mutex_lock(&ma->lock);
-    ma->age++;
 
     for (int i = 0; i < ma->pools.num; i++) {
         struct vk_pool *pool = ma->pools.elem[i];
         for (int n = 0; n < pool->slabs.num; n++) {
             struct vk_slab *slab = pool->slabs.elem[n];
             pl_mutex_lock(&slab->lock);
-            if (slab->used || (ma->age - slab->age) <= MAXIMUM_SLAB_AGE) {
+            if (slab->used || ++slab->age <= MAXIMUM_SLAB_AGE) {
                 pl_mutex_unlock(&slab->lock);
                 continue;
             }
@@ -659,7 +656,7 @@ void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice)
     int page_idx = slice->offset / slab->pagesize;
     slab->spacemap |= 0x1LLU << page_idx;
     slab->used -= slice->size;
-    slab->age = ma->age;
+    slab->age = 0;
 
     pl_mutex_unlock(&slab->lock);
 
@@ -740,7 +737,7 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
 
         slab->spacemap ^= 0x1LLU << page_idx;
         *offset = page_idx * slab->pagesize;
-        slab->age = ma->age;
+        slab->age = 0;
         return slab;
     }
 
