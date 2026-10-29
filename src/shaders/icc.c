@@ -294,7 +294,7 @@ static bool detect_contrast(struct pl_icc_object_t *icc,
     float max_luma = params->max_luma;
     p->white = cmsReadTag(p->profile, cmsSigLuminanceTag);
     if (max_luma <= 0)
-        max_luma = p->white ? p->white->Y : PL_COLOR_SDR_WHITE;
+        max_luma = p->white && p->white->Y > 0 ? p->white->Y : PL_COLOR_SDR_WHITE;
 
     hdr->max_luma = max_luma;
     hdr->min_luma = p->black.Y * max_luma;
