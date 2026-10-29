@@ -225,22 +225,17 @@ void pl_queue_reset(pl_queue p)
             pl_tex_destroy(p->gpu, &p->cache.elem[n].tex[i]);
     }
 
-    *p = (struct pl_queue_t) {
-        .gpu = p->gpu,
-        .log = p->log,
-
-        // Reuse lock objects
-        .lock_strong = p->lock_strong,
-        .lock_weak = p->lock_weak,
-        .wakeup = p->wakeup,
-
-        // Explicitly preserve allocations
-        .queue.elem = p->queue.elem,
-        .tmp_sig.elem = p->tmp_sig.elem,
-        .tmp_ts.elem = p->tmp_ts.elem,
-        .tmp_frame.elem = p->tmp_frame.elem,
-        .cache.elem = p->cache.elem,
-    };
+    // Reuse lock objects and preserve allocations, reset only the state
+    p->queue.num = 0;
+    p->signature = 0;
+    p->threshold_frames = 0;
+    p->total_fields = 0;
+    p->status = PL_QUEUE_OK;
+    p->vps = p->fps = (struct pool) {0};
+    p->reported_vps = p->reported_fps = 0;
+    p->prev_pts = p->pts_offset = 0;
+    p->tmp_sig.num = p->tmp_ts.num = p->tmp_frame.num = 0;
+    p->cache.num = 0;
 
     pl_cond_signal(&p->wakeup);
     pl_mutex_unlock(&p->lock_weak);
