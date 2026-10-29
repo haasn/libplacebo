@@ -899,6 +899,7 @@ bool sh_require(pl_shader sh, enum pl_shader_sig insig, int w, int h)
     static const char *names[] = {
         [PL_SHADER_SIG_NONE]  = "PL_SHADER_SIG_NONE",
         [PL_SHADER_SIG_COLOR] = "PL_SHADER_SIG_COLOR",
+        [PL_SHADER_SIG_SAMPLER] = "PL_SHADER_SIG_SAMPLER",
     };
 
     // If we require an input, but there is none available - just get it from
