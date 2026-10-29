@@ -202,7 +202,7 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
 
             // Otherwise, try and match this component
             int size = data->component_size[i];
-            if (size && (idx >= 4 || fmt->host_bits[idx] != size))
+            if (idx >= 4 || (size && fmt->host_bits[idx] != size))
                 goto next_fmt;
             map[idx++] = data->component_map[i];
         }
