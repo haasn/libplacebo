@@ -699,11 +699,16 @@ static void pl_shader_tests(pl_gpu gpu)
             epsilon = 1e-5;
             break;
 
-        case PL_COLOR_SYSTEM_BT_2100_PQ:
         case PL_COLOR_SYSTEM_BT_2100_HLG:
-            // These seem to be horrifically noisy and prone to breaking on
-            // edge cases for some reason
-            // TODO: figure out why!
+            // R and B near black come out of the square root segment of HLG,
+            // which turns the float rounding of the decode into up to 5e-4
+            epsilon = 1e-3;
+            break;
+
+        case PL_COLOR_SYSTEM_BT_2100_PQ:
+            // Float evaluation of the ST 2084 curves loses up to 0.1 of signal
+            // near black, where R and B are small differences of large L, M
+            // and S and the curve is steepest
             continue;
 
         default: epsilon = 1e-6; break;
