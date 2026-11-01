@@ -412,9 +412,9 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_SCRGB:
     case PL_COLOR_TRC_PQ:       return 10000.0 / PL_COLOR_SDR_WHITE;
     case PL_COLOR_TRC_HLG:      return 12.0 / HLG_75;
-    case PL_COLOR_TRC_V_LOG:    return 46.0855;
-    case PL_COLOR_TRC_S_LOG1:   return 6.52;
-    case PL_COLOR_TRC_S_LOG2:   return 9.212;
+    case PL_COLOR_TRC_V_LOG:    return 46.085527956740347;
+    case PL_COLOR_TRC_S_LOG1:   return 6.5199911877014845;
+    case PL_COLOR_TRC_S_LOG2:   return 9.2121165813330652;
     case PL_COLOR_TRC_COUNT: break;
     }
 
