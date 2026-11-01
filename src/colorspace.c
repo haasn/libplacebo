@@ -800,7 +800,7 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
         MAP3(SLOG_A * log10f(X + SLOG_B) + SLOG_C);
         return;
     case PL_COLOR_TRC_S_LOG2:
-        MAP3(X >= 0 ? SLOG_A * log10f(SLOG_B * X + SLOG_C)
+        MAP3(X >= 0 ? SLOG_A * log10f(SLOG_K2 * X + SLOG_B) + SLOG_C
                     : SLOG_P * X + SLOG_Q);
         return;
     case PL_COLOR_TRC_SCRGB:
