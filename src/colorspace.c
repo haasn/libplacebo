@@ -704,7 +704,8 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
                          : (X - 0.125f) / 5.6f);
         goto scale_out;
     case PL_COLOR_TRC_S_LOG1:
-        MAP3(powf(10, (X - SLOG_C) / SLOG_A) - SLOG_B);
+        MAP3(X >= SLOG_Q ? powf(10, (X - SLOG_C) / SLOG_A) - SLOG_B
+                         : (X - SLOG_Q) / 5);
         goto scale_out;
     case PL_COLOR_TRC_S_LOG2:
         MAP3(X >= SLOG_Q ? (powf(10, (X - SLOG_C) / SLOG_A) - SLOG_B) / SLOG_K2
@@ -797,7 +798,8 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
                         : 5.6f * X + 0.125f);
         return;
     case PL_COLOR_TRC_S_LOG1:
-        MAP3(SLOG_A * log10f(X + SLOG_B) + SLOG_C);
+        MAP3(X >= 0 ? SLOG_A * log10f(X + SLOG_B) + SLOG_C
+                    : 5 * X + SLOG_Q);
         return;
     case PL_COLOR_TRC_S_LOG2:
         MAP3(X >= 0 ? SLOG_A * log10f(SLOG_K2 * X + SLOG_B) + SLOG_C
