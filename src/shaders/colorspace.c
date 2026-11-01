@@ -953,7 +953,7 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(16.0),                        \n"
              "                pow(color.rgb, vec3(1.0/1.8)),                 \n"
-             "                lessThanEqual(vec3(0.001953), color.rgb));     \n");
+             "                lessThanEqual(vec3(0.001953125), color.rgb));  \n");
         return;
     case PL_COLOR_TRC_PQ: {
         ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);

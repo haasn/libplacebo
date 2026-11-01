@@ -771,7 +771,7 @@ void pl_color_delinearize(const struct pl_color_space *csp, float color[3])
         MAP3(powf(X * 48/52.37f, 1/2.6f));
         return;
     case PL_COLOR_TRC_PRO_PHOTO:
-        MAP3(X >= 0.001953f ? powf(X, 1/1.8f) : 16 * X);
+        MAP3(X >= 0.001953125f ? powf(X, 1/1.8f) : 16 * X);
         return;
     case PL_COLOR_TRC_PQ:
         MAP3(powf(X * PL_COLOR_SDR_WHITE / 10000, PQ_M1));
