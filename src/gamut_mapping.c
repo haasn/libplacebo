@@ -318,9 +318,9 @@ static inline struct IPT rgb2ipt(struct RGB c, struct gamut gamut)
 
 static inline struct RGB ipt2rgb(struct IPT c, struct gamut gamut)
 {
-    const float Lp = c.I + 0.0975689f * c.P + 0.205226f * c.T;
-    const float Mp = c.I - 0.1138760f * c.P + 0.133217f * c.T;
-    const float Sp = c.I + 0.0326151f * c.P - 0.676887f * c.T;
+    const float Lp = c.I + 0.097568930514613919f * c.P + 0.2052264331645916f * c.T;
+    const float Mp = c.I - 0.11387648547314712f * c.P + 0.13321715836999806f * c.T;
+    const float Sp = c.I + 0.032615109917066409f * c.P - 0.67688718306917931f * c.T;
     const float L = pq_eotf(Lp);
     const float M = pq_eotf(Mp);
     const float S = pq_eotf(Sp);
@@ -339,9 +339,9 @@ static inline struct RGB ipt2rgb(struct IPT c, struct gamut gamut)
 
 static inline bool ingamut(struct IPT c, struct gamut gamut)
 {
-    const float Lp = c.I + 0.0975689f * c.P + 0.205226f * c.T;
-    const float Mp = c.I - 0.1138760f * c.P + 0.133217f * c.T;
-    const float Sp = c.I + 0.0326151f * c.P - 0.676887f * c.T;
+    const float Lp = c.I + 0.097568930514613919f * c.P + 0.2052264331645916f * c.T;
+    const float Mp = c.I - 0.11387648547314712f * c.P + 0.13321715836999806f * c.T;
+    const float Sp = c.I + 0.032615109917066409f * c.P - 0.67688718306917931f * c.T;
     if (Lp < gamut.min_luma || Lp > gamut.max_luma ||
         Mp < gamut.min_luma || Mp > gamut.max_luma ||
         Sp < gamut.min_luma || Sp > gamut.max_luma)

@@ -1474,9 +1474,9 @@ const pl_matrix3x3 pl_ipt_lms2ipt = {{
 
 // Numerically inverted from the matrix above
 const pl_matrix3x3 pl_ipt_ipt2lms = {{
-    { 1.0,  0.0975689,  0.205226 },
-    { 1.0, -0.1138760,  0.133217 },
-    { 1.0,  0.0326151, -0.676887 },
+    { 1.0,  0.097568930514613919,  0.2052264331645916 },
+    { 1.0, -0.11387648547314712,   0.13321715836999806 },
+    { 1.0,  0.032615109917066409, -0.67688718306917931 },
 }};
 
 const struct pl_cone_params pl_vision_normal        = {PL_CONE_NONE, 1.0};
