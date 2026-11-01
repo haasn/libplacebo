@@ -1834,23 +1834,22 @@ pl_transform3x3 pl_color_repr_decode_ex(struct pl_color_repr *repr,
         break;
     case PL_COLOR_SYSTEM_BT_2100_PQ: {
         // Reversed from the matrix in the spec, hard-coded for efficiency
-        // and precision reasons. Exact values truncated from ITU-T H-series
-        // Supplement 18.
-        static const float lm_t = 0.008609, lm_p = 0.111029625;
+        // and precision reasons
+        static const float lm_t = 0.0086090370379327566, lm_p = 0.11102962500302596;
         m = (pl_matrix3x3) {{
             {1.0,  lm_t,  lm_p},
             {1.0, -lm_t, -lm_p},
-            {1.0, 0.560031, -0.320627},
+            {1.0, 0.56003133571067912, -0.32062717498731885},
         }};
         break;
     }
     case PL_COLOR_SYSTEM_BT_2100_HLG: {
-        // Similar to BT.2100 PQ, exact values truncated from WolframAlpha
-        static const float lm_t = 0.01571858011, lm_p = 0.2095810681;
+        // Similar to BT.2100 PQ
+        static const float lm_t = 0.015718580108730413, lm_p = 0.2095810681164055;
         m = (pl_matrix3x3) {{
             {1.0,  lm_t,  lm_p},
             {1.0, -lm_t, -lm_p},
-            {1.0, 1.02127108, -0.605274491},
+            {1.0, 1.0212710798422343, -0.60527449099243151},
         }};
         break;
     }
