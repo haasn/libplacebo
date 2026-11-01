@@ -427,7 +427,7 @@ const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
         .red   = {0.708,    0.292},
         .green = {0.170,    0.797},
         .blue  = {0.131,    0.046},
-        .white = {0.31271,  0.32902},
+        .white = {0.3127,   0.3290},
     },
     .min_luma = 0,
     .max_luma = 10000,
