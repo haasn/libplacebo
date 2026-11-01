@@ -1822,7 +1822,7 @@ pl_transform3x3 pl_color_repr_decode_ex(struct pl_color_repr *repr,
     switch (repr->sys) {
     case PL_COLOR_SYSTEM_BT_709:     m = luma_coeffs(0.2126, 0.7152, 0.0722); break;
     case PL_COLOR_SYSTEM_BT_601:     m = luma_coeffs(0.2990, 0.5870, 0.1140); break;
-    case PL_COLOR_SYSTEM_SMPTE_240M: m = luma_coeffs(0.2122, 0.7013, 0.0865); break;
+    case PL_COLOR_SYSTEM_SMPTE_240M: m = luma_coeffs(0.2120, 0.7010, 0.0870); break;
     case PL_COLOR_SYSTEM_BT_2020_NC: m = luma_coeffs(0.2627, 0.6780, 0.0593); break;
     case PL_COLOR_SYSTEM_BT_2020_C:
         // Note: This outputs into the [-0.5,0.5] range for chroma information.
