@@ -550,9 +550,9 @@ void pl_shader_decode_color_ex(pl_shader sh,
         // Dolby Vision always outputs BT.2020-referred HPE LMS, so hard-code
         // the inverse LMS->RGB matrix corresponding to this color space.
         pl_matrix3x3 dovi_lms2rgb = {{
-            { 3.06441879, -2.16597676,  0.10155818},
-            {-0.65612108,  1.78554118, -0.12943749},
-            { 0.01736321, -0.04725154,  1.03004253},
+            { 3.064396767855625,    -2.165961226711146,     0.1015574148869036},
+            {-0.65613130540261551,   1.7855694129834121,   -0.12943951030147041},
+            { 0.017360633500538487, -0.047244531564539943,  1.0298894699757705},
         }};
 
         pl_matrix3x3_mul(&dovi_lms2rgb, &repr->dovi->linear);
