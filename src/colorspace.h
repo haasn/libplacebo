@@ -50,8 +50,8 @@ static const float VLOG_B = 0.00873,
 static const float SLOG_A = 0.432699,
                    SLOG_B = 0.037584,
                    SLOG_C = 0.616596 + 0.03,
-                   SLOG_P = 3.538813,
-                   SLOG_Q = 0.030001,
+                   SLOG_P = 3.53881278538813,
+                   SLOG_Q = 0.030001222851889303,
                    SLOG_K2 = 155.0 / 219.0;
 
 // Factor from a texture sample to the integer code it holds, and the depth of
