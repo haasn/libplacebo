@@ -389,7 +389,7 @@ const char *pl_color_transfer_name(enum pl_color_transfer trc)
 }
 
 // HLG 75% value (scene-referred)
-#define HLG_75 3.17955
+#define HLG_75 3.1795507250520861
 
 float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
 {

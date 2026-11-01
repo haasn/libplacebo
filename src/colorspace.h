@@ -38,7 +38,7 @@ static const float PQ_M1 = 2610./4096 * 1./4,
 // Common constants for ARIB STD-B67 (HLG)
 static const float HLG_A = 0.17883277,
                    HLG_B = 0.28466892,
-                   HLG_C = 0.55991073,
+                   HLG_C = 0.55991072952956202,
                    HLG_REF = 1000.0 / PL_COLOR_SDR_WHITE;
 
 // Common constants for Panasonic V-Log
