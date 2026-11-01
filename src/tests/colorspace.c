@@ -76,17 +76,12 @@ int main()
             if (!pl_color_space_is_hdr(&csp) && trc != PL_COLOR_TRC_ST428)
                 REQUIRE_CMP(color[0] - 1e-6f, <=, peak, "f");
 
-            switch (trc) {
-            case PL_COLOR_TRC_V_LOG:
-            case PL_COLOR_TRC_S_LOG1:
-            case PL_COLOR_TRC_S_LOG2:
-                // FIXME: these don't currently round-trip on subzero values
-                break;
-            default:
-                pl_color_delinearize(&csp, color);
-                REQUIRE_FEQ(color[0], x, 1e-5f);
-                break;
-            }
+            // The log curves decode signals below their black to
+            // negative light, which the encodes clamp
+            if (color[0] < 0.0f)
+                continue;
+            pl_color_delinearize(&csp, color);
+            REQUIRE_FEQ(color[0], x, 1e-5f);
         }
 
         // Absolute black stays finite and below a dark gray, also with the
