@@ -478,20 +478,21 @@ void pl_shader_decode_color_ex(pl_shader sh,
     switch (orig_sys) {
     case PL_COLOR_SYSTEM_BT_2020_C:
         // Conversion for C'rcY'cC'bc via the BT.2020 CL system:
-        // C'bc = (B'-Y'c) / 1.9404  | C'bc <= 0
-        //      = (B'-Y'c) / 1.5816  | C'bc >  0
+        // C'bc = (B'-Y'c) / (2 Nb)  | C'bc <= 0
+        //      = (B'-Y'c) / (2 Pb)  | C'bc >  0
         //
-        // C'rc = (R'-Y'c) / 1.7184  | C'rc <= 0
-        //      = (R'-Y'c) / 0.9936  | C'rc >  0
+        // C'rc = (R'-Y'c) / (2 Nr)  | C'rc <= 0
+        //      = (R'-Y'c) / (2 Pr)  | C'rc >  0
         //
-        // as per the BT.2020 specification, table 4. This is a non-linear
-        // transformation because (constant) luminance receives non-equal
-        // contributions from the three different channels.
-        GLSL("// constant luminance conversion                              \n"
-             "color.br = color.br * mix(vec2(1.5816, 0.9936),               \n"
-             "                          vec2(1.9404, 1.7184),               \n"
-             "                          lessThanEqual(color.br, vec2(0.0))) \n"
-             "           + color.gg;                                        \n");
+        // with Nb = OETF(1 - Kb), Pb = 1 - OETF(Kb), Nr = OETF(1 - Kr) and
+        // Pr = 1 - OETF(Kr), as per the BT.2020-2 specification, table 4.
+        // This is a non-linear transformation because (constant) luminance
+        // receives non-equal contributions from the three different channels.
+        GLSL("// constant luminance conversion                                         \n"
+             "color.br = color.br * mix(vec2(1.5819708492989484, 0.99382959526841756), \n"
+             "                          vec2(1.9403433056341009, 1.7182419845671139),  \n"
+             "                          lessThanEqual(color.br, vec2(0.0)))            \n"
+             "           + color.gg;                                                   \n");
         // Expand channels to camera-linear light, through the BT.2020 gamma
         // function with the exact alpha and beta of BT.2020-2, which its 10
         // and 12-bit values approximate
@@ -649,10 +650,10 @@ void pl_shader_encode_color_ex(pl_shader sh, const struct pl_color_encode_args *
              "              0.018053968510807807 <= color.g);                              \n");
 
         // Compute C'bc and C'rc into color.br
-        GLSL("color.br = color.br - color.gg;                       \n"
-             "color.br *= mix(vec2(1.0/1.5816, 1.0/0.9936),         \n"
-             "                vec2(1.0/1.9404, 1.0/1.7184),         \n"
-             "                lessThanEqual(color.br, vec2(0.0)));  \n");
+        GLSL("color.br = color.br - color.gg;                                        \n"
+             "color.br *= mix(vec2(1.0/1.5819708492989484, 1.0/0.99382959526841756), \n"
+             "                vec2(1.0/1.9403433056341009, 1.0/1.7182419845671139),  \n"
+             "                lessThanEqual(color.br, vec2(0.0)));                   \n");
         break;
 
     case PL_COLOR_SYSTEM_BT_2100_PQ: {
