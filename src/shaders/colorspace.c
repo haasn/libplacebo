@@ -661,9 +661,9 @@ void pl_shader_encode_color_ex(pl_shader sh, const struct pl_color_encode_args *
         ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
 #pragma GLSL                                                                    \
         color.rgb = $pq_eotf(color.rgb);                                        \
-        color.rgb = mat3(0.412109, 0.166748, 0.024170,                          \
-                         0.523925, 0.720459, 0.075440,                          \
-                         0.063965, 0.112793, 0.900394) * color.rgb;             \
+        color.rgb = mat3(0.412109375,   0.166748046875, 0.024169921875,         \
+                         0.52392578125, 0.720458984375, 0.075439453125,         \
+                         0.06396484375, 0.11279296875,  0.900390625) * color.rgb; \
         color.rgb = $pq_eotf_inv(color.rgb);
         break;
     }
@@ -673,9 +673,9 @@ void pl_shader_encode_color_ex(pl_shader sh, const struct pl_color_encode_args *
         ident_t hlg_oetf = sh_hlg_oetf(sh, 3);
 #pragma GLSL                                                                    \
         color.rgb = $hlg_oetf_inv(color.rgb);                                   \
-        color.rgb = mat3(0.412109, 0.166748, 0.024170,                          \
-                         0.523925, 0.720459, 0.075440,                          \
-                         0.063965, 0.112793, 0.900394) * color.rgb;             \
+        color.rgb = mat3(0.412109375,   0.166748046875, 0.024169921875,         \
+                         0.52392578125, 0.720458984375, 0.075439453125,         \
+                         0.06396484375, 0.11279296875,  0.900390625) * color.rgb; \
         color.rgb = $hlg_oetf(color.rgb);
         break;
     }
