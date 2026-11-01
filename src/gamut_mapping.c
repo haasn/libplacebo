@@ -249,9 +249,9 @@ static inline float pq_eotf(float x)
 
 static inline float pq_oetf(float x)
 {
-    x = powf(fmaxf(x, 0.0f), PQ_M1);
-    x = (PQ_C1 + PQ_C2 * x) / (1.0f + PQ_C3 * x);
-    return powf(x, PQ_M2);
+    double t = pow(fmax(x, 0.0), PQ_M1);
+    t = (PQ_C1 + PQ_C2 * t) / (1.0 + PQ_C3 * t);
+    return pow(t, PQ_M2);
 }
 
 // Helper struct containing pre-computed cached values describing a gamut
