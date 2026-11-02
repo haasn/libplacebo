@@ -844,9 +844,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         csp->transfer != PL_COLOR_TRC_HLG &&
         (csp_max != 1 || csp_min != 0))
     {
-        GLSL("color.rgb = "$" * color.rgb + vec3("$"); \n",
-             SH_FLOAT(1 / (csp_max - csp_min)),
-             SH_FLOAT(-csp_min / (csp_max - csp_min)));
+        GLSL("color.rgb = "$" * (color.rgb - vec3("$")); \n",
+             SH_FLOAT(1 / (csp_max - csp_min)), SH_FLOAT(csp_min));
     }
 
     if (csp->transfer != PL_COLOR_TRC_SCRGB)
