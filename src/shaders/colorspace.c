@@ -121,6 +121,20 @@ ident_t sh_hlg_oetf(pl_shader sh, int comps)
     return fun;
 }
 
+// System gamma of the HLG OOTF, the extended range formula of ITU-R
+// BT.2100-3 table 5, note 5f, for every peak. BT.2390-12 says it as good
+// as the log10 formula between 400 and 2000 cd/m2 too, so use it.
+static float hlg_system_gamma(float peak)
+{
+    return 1.2f * powf(1.111f, log2f(peak / HLG_REF));
+}
+
+// HLG black lift (ITU-R BT.2100 table 5)
+static float hlg_black_lift(float min, float max, float y)
+{
+    return sqrtf(3 * powf(min / max, 1 / y));
+}
+
 #ifdef PL_HAVE_DOVI
 static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
                                int min_order, int max_order)
@@ -812,8 +826,8 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         return;
     }
     case PL_COLOR_TRC_HLG: {
-        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
-        const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
+        const float y = hlg_system_gamma(csp_max);
+        const float b = hlg_black_lift(csp_min, csp_max, y);
         ident_t hlg_oetf_inv = sh_hlg_oetf_inv(sh, 3);
         // OETF^-1
 #pragma GLSL                                                                    \
@@ -946,8 +960,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         return;
     }
     case PL_COLOR_TRC_HLG: {
-        const float y = 1.2f * powf(1.111f, log2f(csp_max / HLG_REF));
-        const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
+        const float y = hlg_system_gamma(csp_max);
+        const float b = hlg_black_lift(csp_min, csp_max, y);
         // OOTF^-1
         GLSL("color.rgb *= 1.0 / "$";                                       \n"
              "color.rgb *= 12.0 * pow(max(1e-6, dot("$", color.rgb)), "$"); \n",
