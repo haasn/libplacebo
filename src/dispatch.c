@@ -29,6 +29,7 @@
 
 enum {
     TMP_PRELUDE,   // GLSL version, global definitions, etc.
+    TMP_SAMPLERS,  // samplers, unused by the generated vertex shader
     TMP_MAIN,      // main GLSL shader body
     TMP_VERT_HEAD, // vertex shader inputs/outputs
     TMP_VERT_BODY, // vertex shader body
@@ -304,6 +305,7 @@ static void generate_shaders(pl_dispatch dp,
     pl_str_builder shader_body = sh_finalize_internal(sh);
 
     pl_str_builder pre = dp->tmp[TMP_PRELUDE];
+    pl_str_builder samplers = dp->tmp[TMP_SAMPLERS];
     ADD(pre, "#version %d%s\n", gpu->glsl.version,
         (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
     if (pass_params->type == PL_PASS_COMPUTE)
@@ -491,12 +493,12 @@ static void generate_shaders(pl_dispatch dp,
             // Vulkan requires explicit bindings; GL always sets the
             // bindings manually to avoid relying on the user doing so
             if (gpu->glsl.vulkan) {
-                ADD(pre, "layout(binding=%d) uniform %c%s "$";\n",
+                ADD(samplers, "layout(binding=%d) uniform %c%s "$";\n",
                     desc->binding, prefix, type, id);
             } else if (gpu->glsl.gles) {
-                ADD(pre, "uniform highp %c%s "$";\n", prefix, type, id);
+                ADD(samplers, "uniform highp %c%s "$";\n", prefix, type, id);
             } else {
-                ADD(pre, "uniform %c%s "$";\n", prefix, type, id);
+                ADD(samplers, "uniform %c%s "$";\n", prefix, type, id);
             }
             break;
         }
@@ -559,8 +561,8 @@ static void generate_shaders(pl_dispatch dp,
             pl_buf buf = sd->binding.object;
             char prefix = sampler_prefixes[buf->params.format->type];
             if (gpu->glsl.vulkan)
-                ADD(pre, "layout(binding=%d) ", desc->binding);
-            ADD(pre, "uniform %csamplerBuffer "$";\n", prefix,
+                ADD(samplers, "layout(binding=%d) ", desc->binding);
+            ADD(samplers, "uniform %csamplerBuffer "$";\n", prefix,
                 sh_ident_unpack(desc->name));
             break;
         }
@@ -607,6 +609,7 @@ static void generate_shaders(pl_dispatch dp,
 
     pl_str_builder glsl = dp->tmp[TMP_MAIN];
     ADD_CAT(glsl, pre);
+    ADD_CAT(glsl, samplers);
 
     switch(pass_params->type) {
     case PL_PASS_RASTER: {
