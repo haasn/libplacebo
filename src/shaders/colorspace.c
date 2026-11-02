@@ -48,6 +48,79 @@ void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
     }
 }
 
+// SMPTE ST 2084 EOTF
+ident_t sh_pq_eotf(pl_shader sh, int comps)
+{
+    const uint8_t mask = (1 << comps) - 1;
+    ident_t fun = sh_fresh(sh, "pq_eotf");
+#pragma GLSLH                                                                   \
+    ${vecType: mask} $fun(${vecType: mask} x)                                   \
+    {                                                                           \
+        x = pow(clamp(x, 0.0, 1.0),                                             \
+                ${vecType: mask}(1.0 / ${const float: PQ_M2}));                 \
+        x = max(x - ${const float: PQ_C1}, 0.0)                                 \
+            / (${const float: PQ_C2} - ${const float: PQ_C3} * x);              \
+        return pow(x, ${vecType: mask}(1.0 / ${const float: PQ_M1}));           \
+    }
+    return fun;
+}
+
+// SMPTE ST 2084 inverse EOTF
+ident_t sh_pq_eotf_inv(pl_shader sh, int comps)
+{
+    const uint8_t mask = (1 << comps) - 1;
+    ident_t fun = sh_fresh(sh, "pq_eotf_inv");
+#pragma GLSLH                                                                   \
+    ${vecType: mask} $fun(${vecType: mask} x)                                   \
+    {                                                                           \
+        x = pow(max(x, 0.0), ${vecType: mask}(${const float: PQ_M1}));          \
+        x = (${const float: PQ_C1} + ${const float: PQ_C2} * x)                 \
+            / (1.0 + ${const float: PQ_C3} * x);                                \
+        return pow(x, ${vecType: mask}(${const float: PQ_M2}));                 \
+    }
+    return fun;
+}
+
+// ITU-R BT.2100 HLG inverse OETF
+ident_t sh_hlg_oetf_inv(pl_shader sh, int comps)
+{
+    const uint8_t mask = (1 << comps) - 1;
+    ident_t fun = sh_fresh(sh, "hlg_oetf_inv");
+#pragma GLSLH                                                                   \
+    ${vecType: mask} $fun(${vecType: mask} x)                                   \
+    {                                                                           \
+        ${vecType: mask} lo = 4.0 * x * x;                                      \
+        ${vecType: mask} hi = exp((x - ${const float: HLG_C})                   \
+                                  * (1.0 / ${const float: HLG_A}))              \
+                              + ${const float: HLG_B};                          \
+    @if (comps > 1)                                                             \
+        return mix(lo, hi, lessThan(${vecType: mask}(0.5), x));                 \
+    @else                                                                       \
+        return mix(lo, hi, 0.5 < x);                                            \
+    }
+    return fun;
+}
+
+// ITU-R BT.2100 HLG OETF
+ident_t sh_hlg_oetf(pl_shader sh, int comps)
+{
+    const uint8_t mask = (1 << comps) - 1;
+    ident_t fun = sh_fresh(sh, "hlg_oetf");
+#pragma GLSLH                                                                   \
+    ${vecType: mask} $fun(${vecType: mask} x)                                   \
+    {                                                                           \
+        ${vecType: mask} lo = 0.5 * sqrt(x);                                    \
+        ${vecType: mask} hi = ${const float: HLG_A}                             \
+                              * log(x - ${const float: HLG_B})                  \
+                              + ${const float: HLG_C};                          \
+    @if (comps > 1)                                                             \
+        return mix(lo, hi, lessThan(${vecType: mask}(1.0), x));                 \
+    @else                                                                       \
+        return mix(lo, hi, 1.0 < x);                                            \
+    }
+    return fun;
+}
+
 #ifdef PL_HAVE_DOVI
 static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
                                int min_order, int max_order)

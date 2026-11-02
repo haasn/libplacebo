@@ -254,6 +254,11 @@ struct pl_dovi_metadata;
 void sh_dovi_compose_nlq(pl_shader sh, const struct pl_dovi_metadata *data,
                          ident_t el_signal);
 
+ident_t sh_pq_eotf(pl_shader sh, int comps);
+ident_t sh_pq_eotf_inv(pl_shader sh, int comps);
+ident_t sh_hlg_oetf(pl_shader sh, int comps);
+ident_t sh_hlg_oetf_inv(pl_shader sh, int comps);
+
 // Shader resources
 
 enum pl_shader_obj_type {
