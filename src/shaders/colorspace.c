@@ -508,26 +508,26 @@ void pl_shader_decode_color_ex(pl_shader sh,
 
         ident_t pq_eotf = sh_pq_eotf(sh, 3);
         ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb);                                   \n"
-             // LMS matrix
-             "color.rgb = mat3( 3.43661, -0.79133, -0.0259499,              \n"
-             "                 -2.50645,  1.98360, -0.0989137,              \n"
-             "                  0.06984, -0.192271, 1.12486) * color.rgb;   \n"
-             "color.rgb = "$"(color.rgb);                                   \n",
-             pq_eotf, pq_eotf_inv);
+#pragma GLSL                                                                    \
+        color.rgb = $pq_eotf(color.rgb);                                        \
+        /* LMS matrix */                                                        \
+        color.rgb = mat3( 3.43661, -0.79133, -0.0259499,                        \
+                         -2.50645,  1.98360, -0.0989137,                        \
+                          0.06984, -0.192271, 1.12486) * color.rgb;             \
+        color.rgb = $pq_eotf_inv(color.rgb);
         break;
     }
 
     case PL_COLOR_SYSTEM_BT_2100_HLG: {
         ident_t hlg_oetf_inv = sh_hlg_oetf_inv(sh, 3);
         ident_t hlg_oetf = sh_hlg_oetf(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb);                                       \n"
-             // LMS matrix
-             "color.rgb = mat3( 3.43661, -0.79133, -0.0259499,                  \n"
-             "                 -2.50645,  1.98360, -0.0989137,                  \n"
-             "                  0.06984, -0.192271, 1.12486) * color.rgb;       \n"
-             "color.rgb = "$"(color.rgb);                                       \n",
-             hlg_oetf_inv, hlg_oetf);
+#pragma GLSL                                                                    \
+        color.rgb = $hlg_oetf_inv(color.rgb);                                   \
+        /* LMS matrix */                                                        \
+        color.rgb = mat3( 3.43661, -0.79133, -0.0259499,                        \
+                         -2.50645,  1.98360, -0.0989137,                        \
+                          0.06984, -0.192271, 1.12486) * color.rgb;             \
+        color.rgb = $hlg_oetf(color.rgb);
         break;
     }
 
@@ -549,10 +549,11 @@ void pl_shader_decode_color_ex(pl_shader sh,
 
         ident_t pq_eotf = sh_pq_eotf(sh, 3);
         ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb); \n", pq_eotf);
-        // LMS matrix
-        GLSL("color.rgb = "$" * color.rgb; \n", mat);
-        GLSL("color.rgb = "$"(color.rgb); \n", pq_eotf_inv);
+#pragma GLSL                                                                    \
+        color.rgb = $pq_eotf(color.rgb);                                        \
+        /* LMS matrix */                                                        \
+        color.rgb = $mat * color.rgb;                                           \
+        color.rgb = $pq_eotf_inv(color.rgb);
         break;
 #else
         SH_FAIL(sh, "libplacebo was compiled without support for dolbyvision reshaping");
@@ -644,24 +645,24 @@ void pl_shader_encode_color_ex(pl_shader sh, const struct pl_color_encode_args *
     case PL_COLOR_SYSTEM_BT_2100_PQ: {
         ident_t pq_eotf = sh_pq_eotf(sh, 3);
         ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb);                                   \n"
-             "color.rgb = mat3(0.412109, 0.166748, 0.024170,                \n"
-             "                 0.523925, 0.720459, 0.075440,                \n"
-             "                 0.063965, 0.112793, 0.900394) * color.rgb;   \n"
-             "color.rgb = "$"(color.rgb);                                   \n",
-             pq_eotf, pq_eotf_inv);
+#pragma GLSL                                                                    \
+        color.rgb = $pq_eotf(color.rgb);                                        \
+        color.rgb = mat3(0.412109, 0.166748, 0.024170,                          \
+                         0.523925, 0.720459, 0.075440,                          \
+                         0.063965, 0.112793, 0.900394) * color.rgb;             \
+        color.rgb = $pq_eotf_inv(color.rgb);
         break;
     }
 
     case PL_COLOR_SYSTEM_BT_2100_HLG: {
         ident_t hlg_oetf_inv = sh_hlg_oetf_inv(sh, 3);
         ident_t hlg_oetf = sh_hlg_oetf(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb);                                       \n"
-             "color.rgb = mat3(0.412109, 0.166748, 0.024170,                    \n"
-             "                 0.523925, 0.720459, 0.075440,                    \n"
-             "                 0.063965, 0.112793, 0.900394) * color.rgb;       \n"
-             "color.rgb = "$"(color.rgb);                                       \n",
-             hlg_oetf_inv, hlg_oetf);
+#pragma GLSL                                                                    \
+        color.rgb = $hlg_oetf_inv(color.rgb);                                   \
+        color.rgb = mat3(0.412109, 0.166748, 0.024170,                          \
+                         0.523925, 0.720459, 0.075440,                          \
+                         0.063965, 0.112793, 0.900394) * color.rgb;             \
+        color.rgb = $hlg_oetf(color.rgb);
         break;
     }
 
@@ -803,11 +804,11 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         goto scale_out;
     case PL_COLOR_TRC_PQ: {
         ident_t pq_eotf = sh_pq_eotf(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb);                       \n"
-             // PQ's output range is 0-10000, but we need it to be relative to
-             // to PL_COLOR_SDR_WHITE instead, so rescale
-             "color.rgb *= vec3(%f);                            \n",
-             pq_eotf, 10000.0 / PL_COLOR_SDR_WHITE);
+        // PQ's output range is 0-10000, but we need it to be relative to
+        // to PL_COLOR_SDR_WHITE instead, so rescale
+#pragma GLSL                                                                    \
+        color.rgb = $pq_eotf(color.rgb);                                        \
+        color.rgb *= ${const float: 10000.0 / PL_COLOR_SDR_WHITE};
         return;
     }
     case PL_COLOR_TRC_HLG: {
@@ -815,9 +816,9 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
         ident_t hlg_oetf_inv = sh_hlg_oetf_inv(sh, 3);
         // OETF^-1
-        GLSL("color.rgb = "$" * color.rgb + vec3("$");                  \n"
-             "color.rgb = "$"(color.rgb);                               \n",
-             SH_FLOAT(1 - b), SH_FLOAT(b), hlg_oetf_inv);
+#pragma GLSL                                                                    \
+        color.rgb = ${float: 1 - b} * color.rgb + ${float: b};                  \
+        color.rgb = $hlg_oetf_inv(color.rgb);
         // OOTF
         GLSL("color.rgb *= 1.0 / 12.0;                                      \n"
              "color.rgb *= "$" * pow(max(dot("$", color.rgb), 0.0), "$");   \n",
@@ -939,9 +940,9 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         return;
     case PL_COLOR_TRC_PQ: {
         ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
-        GLSL("color.rgb *= vec3(1.0/%f);                         \n"
-             "color.rgb = "$"(color.rgb);                        \n",
-             10000 / PL_COLOR_SDR_WHITE, pq_eotf_inv);
+#pragma GLSL                                                                    \
+        color.rgb *= 1.0 / ${const float: 10000 / PL_COLOR_SDR_WHITE};          \
+        color.rgb = $pq_eotf_inv(color.rgb);
         return;
     }
     case PL_COLOR_TRC_HLG: {
@@ -955,10 +956,9 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
              SH_FLOAT((1 - y) / y));
         // OETF
         ident_t hlg_oetf = sh_hlg_oetf(sh, 3);
-        GLSL("color.rgb = "$"(color.rgb);                                       \n"
-             "color.rgb = "$" * color.rgb + vec3("$");                          \n",
-             hlg_oetf,
-             SH_FLOAT(1 / (1 - b)), SH_FLOAT(-b / (1 - b)));
+#pragma GLSL                                                                    \
+        color.rgb = $hlg_oetf(color.rgb);                                       \
+        color.rgb = ${float: 1 / (1 - b)} * color.rgb + ${float: -b / (1 - b)};
         return;
     }
     case PL_COLOR_TRC_V_LOG:
@@ -1646,18 +1646,18 @@ void pl_shader_extract_features(pl_shader sh, struct pl_color_space csp)
 
     sh_describe(sh, "feature extraction");
     pl_shader_linearize(sh, &csp);
+    ident_t rgb2lms = SH_MAT3(pl_ipt_rgb2lms(pl_raw_primaries_get(csp.primaries)));
     ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
-    GLSL("// pl_shader_extract_features             \n"
-         "{                                         \n"
-         "vec3 lms = %f * "$" * color.rgb;          \n"
-         "lms = "$"(lms);                           \n"
-         "float I = dot(vec3(%f, %f, %f), lms);     \n"
-         "color.rgb = vec3(I, 0.0, 0.0);            \n"
-         "}                                         \n",
-         PL_COLOR_SDR_WHITE / 10000,
-         SH_MAT3(pl_ipt_rgb2lms(pl_raw_primaries_get(csp.primaries))),
-         pq_eotf_inv,
-         pl_ipt_lms2ipt.m[0][0], pl_ipt_lms2ipt.m[0][1], pl_ipt_lms2ipt.m[0][2]);
+#pragma GLSL /* pl_shader_extract_features */                                   \
+    {                                                                           \
+    vec3 lms = ${const float: PL_COLOR_SDR_WHITE / 10000} * $rgb2lms            \
+               * color.rgb;                                                     \
+    lms = $pq_eotf_inv(lms);                                                    \
+    float I = dot(vec3(${const float: pl_ipt_lms2ipt.m[0][0]},                  \
+                       ${const float: pl_ipt_lms2ipt.m[0][1]},                  \
+                       ${const float: pl_ipt_lms2ipt.m[0][2]}), lms);           \
+    color.rgb = vec3(I, 0.0, 0.0);                                              \
+    }
 }
 
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
@@ -1838,16 +1838,13 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
 static void ipt_convert(pl_shader sh, ident_t rgb2lms, ident_t lms2ipt,
                         bool declare)
 {
-    const char *v = declare ? "vec3 " : "";
     ident_t pq_eotf_inv = sh_pq_eotf_inv(sh, 3);
-    GLSL("%s""lms = "$" * color.rgb;                \n"
-         "%s""lmspq = %f * lms;                     \n"
-         "lmspq = "$"(lmspq);                       \n"
-         "%s""ipt = "$" * lmspq;                    \n",
-         v, rgb2lms,
-         v, PL_COLOR_SDR_WHITE / 10000,
-         pq_eotf_inv,
-         v, lms2ipt);
+#pragma GLSL                                                                    \
+    @if (declare)                                                               \
+        vec3 lms, lmspq, ipt;                                                   \
+    lms = $rgb2lms * color.rgb;                                                 \
+    lmspq = $pq_eotf_inv(${const float: PL_COLOR_SDR_WHITE / 10000} * lms);     \
+    ipt = $lms2ipt * lmspq;
 }
 
 static void sample_feature_map(pl_shader sh, pl_tex feature_map)
@@ -2442,14 +2439,11 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
     // Convert IPT back to linear RGB
     ident_t pq_eotf = sh_pq_eotf(sh, 3);
-    GLSL("lmspq = "$" * ipt;                        \n"
-         "lms = "$"(lmspq);                         \n"
-         "lms *= %f;                                \n"
-         "color.rgb = "$" * lms;                    \n",
-         ipt2lms,
-         pq_eotf,
-         10000 / PL_COLOR_SDR_WHITE,
-         SH_MAT3(lms2rgb));
+#pragma GLSL                                                                    \
+    lmspq = $ipt2lms * ipt;                                                     \
+    lms = $pq_eotf(lmspq);                                                      \
+    lms *= ${const float: 10000 / PL_COLOR_SDR_WHITE};                          \
+    color.rgb = ${SH_MAT3(lms2rgb)} * lms;
 
     if (params->show_clipping) {
         GLSL("if (clip_hi) {                                                \n"
