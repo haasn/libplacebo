@@ -142,7 +142,7 @@ static inline double random_f64(void)
     float _vb = (b);                                                            \
     float _delta = (epsilon) * fmax(1.0, fabs(_va));                            \
                                                                                 \
-    if (fabs(_va - _vb) > _delta) {                                             \
+    if (!(fabs(_va - _vb) <= _delta)) {                                         \
         fprintf(stderr, "=== FAILED: '"#a" ≈ "#b"' at "__FILE__":%d\n"          \
                         " %-31s = %f\n"                                         \
                         " %-31s = %f\n"                                         \
