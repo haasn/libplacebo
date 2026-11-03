@@ -835,9 +835,12 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         color.rgb = $hlg_oetf_inv(color.rgb);
         // OOTF
         GLSL("color.rgb *= 1.0 / 12.0;                                      \n"
-             "color.rgb *= "$" * pow(max(dot("$", color.rgb), 0.0), "$");   \n",
-             SH_FLOAT(csp_max),
+             "{                                                             \n"
+             "float luma = dot("$", color.rgb);                             \n"
+             "color.rgb *= luma > 0.0 ? "$" * pow(luma, "$") : 0.0;         \n"
+             "}                                                             \n",
              sh_luma_coeffs(sh, pl_raw_primaries_get(csp->primaries)),
+             SH_FLOAT(csp_max),
              SH_FLOAT(y - 1));
         return;
     }
