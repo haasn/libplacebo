@@ -695,7 +695,7 @@ void pl_color_linearize(const struct pl_color_space *csp, float color[3])
                       : 4 * X * X);
         // OOTF
         float luma = coef[0] * color[0] + coef[1] * color[1] + coef[2] * color[2];
-        luma = powf(fmaxf(luma / 12, 0), y - 1);
+        luma = luma > 0 ? powf(luma / 12, y - 1) : 0;
         MAP3(csp_max * luma * X / 12);
         goto scale_out;
     }
