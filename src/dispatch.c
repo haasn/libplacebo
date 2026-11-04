@@ -29,7 +29,7 @@
 
 enum {
     TMP_PRELUDE,   // GLSL version, global definitions, etc.
-    TMP_SAMPLERS,  // samplers, unused by the generated vertex shader
+    TMP_VARS,      // variables, also declared by the vertex shader
     TMP_MAIN,      // main GLSL shader body
     TMP_VERT_HEAD, // vertex shader inputs/outputs
     TMP_VERT_BODY, // vertex shader body
@@ -305,7 +305,7 @@ static void generate_shaders(pl_dispatch dp,
     pl_str_builder shader_body = sh_finalize_internal(sh);
 
     pl_str_builder pre = dp->tmp[TMP_PRELUDE];
-    pl_str_builder samplers = dp->tmp[TMP_SAMPLERS];
+    pl_str_builder vars = dp->tmp[TMP_VARS];
     ADD(pre, "#version %d%s\n", gpu->glsl.version,
         (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
     if (pass_params->type == PL_PASS_COMPUTE)
@@ -442,8 +442,8 @@ static void generate_shaders(pl_dispatch dp,
             });
         }
 
-        ADD(pre, "layout(std430, push_constant) uniform PushC ");
-        add_buffer_vars(dp, tmp, pre, pc_bvars.elem, pc_bvars.num);
+        ADD(vars, "layout(std430, push_constant) uniform PushC ");
+        add_buffer_vars(dp, tmp, vars, pc_bvars.elem, pc_bvars.num);
     }
 
     // Add all of the specialization constants
@@ -493,12 +493,12 @@ static void generate_shaders(pl_dispatch dp,
             // Vulkan requires explicit bindings; GL always sets the
             // bindings manually to avoid relying on the user doing so
             if (gpu->glsl.vulkan) {
-                ADD(samplers, "layout(binding=%d) uniform %c%s "$";\n",
+                ADD(pre, "layout(binding=%d) uniform %c%s "$";\n",
                     desc->binding, prefix, type, id);
             } else if (gpu->glsl.gles) {
-                ADD(samplers, "uniform highp %c%s "$";\n", prefix, type, id);
+                ADD(pre, "uniform highp %c%s "$";\n", prefix, type, id);
             } else {
-                ADD(samplers, "uniform %c%s "$";\n", prefix, type, id);
+                ADD(pre, "uniform %c%s "$";\n", prefix, type, id);
             }
             break;
         }
@@ -535,15 +535,18 @@ static void generate_shaders(pl_dispatch dp,
             break;
         }
 
-        case PL_DESC_BUF_UNIFORM:
+        case PL_DESC_BUF_UNIFORM: {
+            bool pass_ubo = i == pass->ubo_index && sh_buf_desc_size(&pass->ubo_desc);
+            pl_str_builder ubo = pass_ubo ? vars : pre;
             if (gpu->glsl.vulkan) {
-                ADD(pre, "layout(std140, binding=%d) ", desc->binding);
+                ADD(ubo, "layout(std140, binding=%d) ", desc->binding);
             } else {
-                ADD(pre, "layout(std140) ");
+                ADD(ubo, "layout(std140) ");
             }
-            ADD(pre, "uniform "$" ", sh_ident_unpack(desc->name));
-            add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
+            ADD(ubo, "uniform "$" ", sh_ident_unpack(desc->name));
+            add_buffer_vars(dp, tmp, ubo, sd->buffer_vars, sd->num_buffer_vars);
             break;
+        }
 
         case PL_DESC_BUF_STORAGE:
             if (gpu->glsl.version >= 140)
@@ -561,8 +564,8 @@ static void generate_shaders(pl_dispatch dp,
             pl_buf buf = sd->binding.object;
             char prefix = sampler_prefixes[buf->params.format->type];
             if (gpu->glsl.vulkan)
-                ADD(samplers, "layout(binding=%d) ", desc->binding);
-            ADD(samplers, "uniform %csamplerBuffer "$";\n", prefix,
+                ADD(pre, "layout(binding=%d) ", desc->binding);
+            ADD(pre, "uniform %csamplerBuffer "$";\n", prefix,
                 sh_ident_unpack(desc->name));
             break;
         }
@@ -603,13 +606,13 @@ static void generate_shaders(pl_dispatch dp,
         const struct pass_var *pv = &pass->vars[i];
         if (pv->type != PASS_VAR_GLOBAL)
             continue;
-        ADD(pre, "uniform ");
-        add_var(pre, var);
+        ADD(vars, "uniform ");
+        add_var(vars, var);
     }
 
     pl_str_builder glsl = dp->tmp[TMP_MAIN];
     ADD_CAT(glsl, pre);
-    ADD_CAT(glsl, samplers);
+    ADD_CAT(glsl, vars);
 
     switch(pass_params->type) {
     case PL_PASS_RASTER: {
@@ -621,7 +624,9 @@ static void generate_shaders(pl_dispatch dp,
         bool has_loc = gpu->glsl.version >= 430;
 
         // Set up a trivial vertex shader
-        ADD_CAT(vert_head, pre);
+        ADD(vert_head, "#version %d%s\n", gpu->glsl.version,
+            (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
+        ADD_CAT(vert_head, vars);
         ADD(vert_body, "void main() {\n");
         for (int i = 0; i < sh->vas.num; i++) {
             const struct pl_vertex_attrib *va = &pass_params->vertex_attribs[i];
