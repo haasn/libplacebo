@@ -566,9 +566,9 @@ retry:
 
         window_poll(p->win, false);
 
-        // In content-timed mode (frame mixing disabled), delay rendering
-        // until the next frame should become visible
-        if (!opts->params.frame_mixer) {
+        // In content-timed mode (frame mixing and interpolation disabled),
+        // delay rendering until the next frame should become visible
+        if (!opts->params.frame_mixer && !opts->params.frame_interp_params) {
             struct pl_source_frame next;
             for (int i = 0;; i++) {
                 if (!pl_queue_peek(p->input->queue, i, &next))
