@@ -3928,6 +3928,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
 
     // Clear out fields only relevant to pl_render_image_mix
     CLEAR(params.frame_mixer);
+    CLEAR(params.frame_interp_params);
     CLEAR(params.preserve_mixing_cache);
     CLEAR(params.skip_caching_single_frame);
 

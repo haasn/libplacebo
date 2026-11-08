@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '389': 'add pl_frame_interp_params and pl_render_params.frame_interp_params',
       '388': 'add <libplacebo/shaders/motion.h>, motion estimation API',
       '387': 'change the units of pl_dovi_metadata.comp.pivots and pl_dovi_metadata.nlq, add pl_dovi_nlq_data.hdr_in_max',
       '386': 'add pl_queue_set_status() and pl_queue_get_status()',

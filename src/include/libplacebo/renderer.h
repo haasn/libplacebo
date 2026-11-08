@@ -28,6 +28,7 @@
 #include <libplacebo/shaders/film_grain.h>
 #include <libplacebo/shaders/icc.h>
 #include <libplacebo/shaders/lut.h>
+#include <libplacebo/shaders/motion.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/shaders/custom.h>
 #include <libplacebo/swapchain.h>
@@ -53,6 +54,7 @@ enum pl_render_error {
     PL_RENDER_ERR_HOOKS             = 1 << 10,
     PL_RENDER_ERR_CONTRAST_RECOVERY = 1 << 11,
     PL_RENDER_ERR_BLUR              = 1 << 12,
+    PL_RENDER_ERR_FRAME_INTERPOLATION = 1 << 13,
 };
 
 // Struct describing current renderer state, including internal processing errors,
@@ -164,7 +166,18 @@ struct pl_render_params {
     // `pl_render_image_mix` will use nearest-neighbour semantics. (Note that
     // this still goes through the redraw cache, unless you also enable
     // `skip_caching_single_frame`)
+    //
+    // Note: When `frame_interp_params` is set, this is only used as a fallback
+    // for vsyncs that have no pair of frames to interpolate between, or when
+    // frame interpolation fails.
     const struct pl_filter_config *frame_mixer;
+
+    // Configures frame interpolation (when using `pl_render_image_mix`). Does
+    // not require `frame_mixer` to be set, and takes precedence over it.
+    //
+    // If NULL, frame interpolation is disabled, and frames are mixed depending
+    // on `frame_mixer`.
+    const struct pl_frame_interp_params *frame_interp_params;
 
     // Configures the settings used to deband source textures. Leaving this as
     // NULL, or setting both `iterations` and `grain` to 0, disables debanding.

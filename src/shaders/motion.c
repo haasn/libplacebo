@@ -29,6 +29,10 @@ const struct pl_motion_estimate_params pl_motion_estimate_default_params = {
     PL_MOTION_ESTIMATE_DEFAULTS
 };
 
+const struct pl_frame_interp_params pl_frame_interp_default_params = {
+    PL_FRAME_INTERP_DEFAULTS
+};
+
 // One texture per level of an image pyramid, coarsest level last.
 typedef PL_ARRAY(pl_tex) tex_pyramid_t;
 

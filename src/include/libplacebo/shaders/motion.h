@@ -218,6 +218,35 @@ PL_API bool pl_motion_get_global(pl_shader_obj state,
                                  enum pl_motion_direction dir, float *out_x,
                                  float *out_y, float *out_confidence);
 
+// Algorithm used for frame interpolation when enabled.
+enum pl_frame_interp_algo {
+    // A modified frame mixing algorithm that offsets a sample by global
+    // motion.
+    PL_FRAME_INTERP_GLOBAL_MOTION = 0,
+
+    PL_FRAME_INTERP_ALGO_COUNT,
+};
+
+// Tunable parameters. Kept separate from the per-call inputs so that callers
+// can reuse unchanging configurations.
+struct pl_frame_interp_params {
+    // Frame interpolation algorithm to use.
+    enum pl_frame_interp_algo algo;
+
+    // Motion estimation parameters.
+    struct pl_motion_estimate_params motion;
+};
+
+#define PL_FRAME_INTERP_DEFAULTS                                               \
+    .algo = PL_FRAME_INTERP_GLOBAL_MOTION,                                     \
+    .motion = {PL_MOTION_ESTIMATE_DEFAULTS},
+
+#define pl_frame_interp_params(...)                                            \
+    (&(struct pl_frame_interp_params) {PL_FRAME_INTERP_DEFAULTS __VA_ARGS__})
+
+PL_API extern const struct pl_frame_interp_params
+    pl_frame_interp_default_params;
+
 PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_MOTION_H_

@@ -127,6 +127,7 @@ static void get_canvas_params(struct pl_render_params *par, pl_compositor comp)
 
     // Image processing only applies to the inputs
     par->frame_mixer        = NULL;
+    par->frame_interp_params = NULL;
     par->deband_params      = NULL;
     par->sigmoid_params     = NULL;
     par->color_adjustment   = NULL;
