@@ -3960,6 +3960,71 @@ static struct params_info render_params_info(const struct pl_render_params *para
 
 #define MAX_MIX_FRAMES 16
 
+// Do not interpolate two frames that are more `MAX_INTERP_SPAN` frame durations
+// away from each other, as this likely resulted from a seek, dropped frames, or
+// a restart. Fall back to `frame_mixer` in this vsync.
+#define MAX_INTERP_SPAN 3.0
+
+// Find the pair of frames that appear before and after the current vsync. This
+// pair will be used for frame interpolation. `out_t` is a value in [0,1]
+// that represents the time t that this vsync is occurring between the two
+// frames.
+//
+// Returns false if `images` does not contain a frame occurring before and
+// after this vsync, or if that pair can't be interpolated between.
+//
+// Assumes `images->timestamps` is sorted.
+static bool find_interp_pair(const struct pl_frame_mix *images, int *out_a,
+                             int *out_b, float *out_t)
+{
+    int a = -1;
+    for (int i = 0; i < images->num_frames; i++) {
+        if (images->timestamps[i] > 0.0)
+            break;
+        a = i;
+    }
+
+    if (a < 0 || a + 1 >= images->num_frames)
+        return false;
+
+    const double ts_a = images->timestamps[a];
+    const double ts_b = images->timestamps[a + 1];
+    const double frame_duration = ts_b - ts_a;
+    if (frame_duration <= 0.0 || frame_duration > MAX_INTERP_SPAN)
+        return false;
+
+    // A repeated frame has no motion to interpolate, so use `frame_mixer` for
+    // this vsync instead.
+    if (images->signatures[a] == images->signatures[a + 1])
+        return false;
+
+    // `pl_render_image_mix` can't combine frames with different rotations.
+    if (pl_rotation_normalize(images->frames[a]->rotation -
+                              images->frames[a + 1]->rotation))
+        return false;
+
+    *out_a = a;
+    *out_b = a + 1;
+    *out_t = PL_CLAMP(-ts_a / frame_duration, 0.0, 1.0);
+    return true;
+}
+
+// Helper to convert to the frame interpolation input type from a cached_frame.
+static struct pl_motion_estimate_frame interp_frame(const struct cached_frame *f,
+                                                    const struct pl_color_space *mix_csp)
+{
+    struct pl_motion_estimate_frame frame = {
+        .tex   = f->tex,
+        .sig   = f->signature,
+        .repr  = f->repr,
+        .color = f->color,
+    };
+
+    // Ignore differences in HDR metadata, as for frame mixing
+    frame.color.hdr = mix_csp->hdr;
+    return frame;
+}
+
 bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                          const struct pl_frame *ptarget,
                          const struct pl_render_params *params)
@@ -3999,6 +4064,10 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (!out_w || !out_h)
         goto fallback;
 
+    // Jumped back to when frame interpolation fails late. This sets
+    // PL_RENDER_ERR_FRAME_INTERPOLATION first, so `interp` is false on restart
+    // and the frames are selected for `frame_mixer` instead.
+restart: ;
     int fidx = 0;
     struct cached_frame frames[MAX_MIX_FRAMES];
     float weights[MAX_MIX_FRAMES];
@@ -4025,8 +4094,20 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         }
     }
 
+    int interp_a = 0, interp_b = 0;
+    float interp_t = 0.0f;
+    // Check if we are doing interpolation and find the frames we are interpolating
+    // between, and the time t between them that the current frame exists.
+    // Frame interpolation takes precedence over `frame_mixer`, which is only
+    // used as a fallback when there is no pair of frames to interpolate, or
+    // interpolation fails.
+    bool interp = params->frame_interp_params && images->num_frames > 1 &&
+                  !(rr->errors & PL_RENDER_ERR_FRAME_INTERPOLATION) &&
+                  find_interp_pair(images, &interp_a, &interp_b, &interp_t);
+
     // Traverse the input frames and determine/prepare the ones we need
-    bool single_frame = !params->frame_mixer || images->num_frames == 1;
+    bool single_frame = (!interp && !params->frame_mixer) ||
+                        images->num_frames == 1;
 retry:
     for (int i = 0; i < images->num_frames; i++) {
         uint64_t sig = images->signatures[i];
@@ -4051,6 +4132,14 @@ retry:
                 PL_TRACE(rr, "  -> Skipping: no frame mixer");
                 continue;
             }
+
+        } else if (interp) {
+
+            if (!(i == interp_a || i == interp_b)) {
+                PL_TRACE(rr, "  -> Skipping: this frame not relevant to interpolation");
+                continue;
+            }
+            weight = 1.0;
 
         // For backwards compatibility, treat !kernel as oversample
         } else if (!mixer.kernel || mixer.kernel == &pl_filter_function_oversample) {
@@ -4138,6 +4227,11 @@ retry:
                         f->params_hash == par_info.hash &&
                         pl_color_space_equal(&f->color, &target->color) &&
                         pl_icc_profile_equal(&f->profile, &target->profile);
+        } else if (can_reuse && interp) {
+            // Motion estimation and frame interpolation need both frames at
+            // the same size, if frames have resized we need to re-render.
+            can_reuse = f->tex->params.w == out_w &&
+                        f->tex->params.h == out_h;
         }
 
         if (!can_reuse && skip_cache) {
@@ -4267,6 +4361,7 @@ inter_pass_error:
     if (!fidx) {
         pl_assert(!single_frame);
         single_frame = true;
+        interp = false;
         goto retry;
     }
 
@@ -4285,6 +4380,30 @@ inter_pass_error:
     int comps = 0;
 
     pl_shader sh = pl_dispatch_begin(rr->dp);
+    if (interp) {
+        pl_assert(fidx == 2);
+        bool ok = pl_shader_frame_interp(sh, pl_frame_interp_input(
+            .gpu       = rr->gpu,
+            .dispatch  = rr->dp,
+            .a         = interp_frame(&frames[0], &mix_csp),
+            .b         = interp_frame(&frames[1], &mix_csp),
+            .t         = interp_t,
+            .out_color = mix_csp,
+            .state     = &rr->motion_state,
+        ), params->frame_interp_params);
+
+        if (!ok) {
+            PL_ERR(rr, "Could not interpolate frame.. disabling frame "
+                   "interpolation!");
+            rr->errors |= PL_RENDER_ERR_FRAME_INTERPOLATION;
+            pl_dispatch_abort(rr->dp, &sh);
+            goto restart;
+        }
+
+        comps = PL_MAX(frames[0].comps, frames[1].comps);
+        goto mixed;
+    }
+
     sh_describef(sh, "frame mixing (%d frame%s)", fidx, fidx > 1 ? "s" : "");
     sh->output = PL_SHADER_SIG_COLOR;
     sh->output_w = out_w;
@@ -4338,6 +4457,7 @@ inter_pass_error:
         GLSL("color = mix_color; \n");
     GLSL("} \n");
 
+mixed:
     // Dispatch this to the destination
     pass.img = (struct img) {
         .sh = sh,
