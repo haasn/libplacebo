@@ -418,6 +418,24 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_tree_pop(nk);
         }
 
+        if (nk_tree_push(nk, NK_TREE_NODE, "Frame interpolation", NK_MINIMIZED)) {
+            struct pl_frame_interp_params *ipar = &opts->frame_interp_params;
+            struct pl_motion_estimate_params *mpar = &ipar->motion;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->frame_interp_params = nk_check_label(nk, "Enable", par->frame_interp_params) ? ipar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *ipar = pl_frame_interp_default_params;
+
+            nk_label(nk, "Pyramid levels:", NK_TEXT_LEFT);
+            auto_property_int(nk, 0, 0, &mpar->pyramid_levels, 16, 1, 1);
+            nk_property_int(nk, "Block size", 1, &mpar->block_size, 64, 1, 1);
+            nk_property_int(nk, "Coarse search radius", 0,
+                            &mpar->search_radius_coarse, 32, 1, 1);
+            nk_property_int(nk, "Fine search radius", 0,
+                            &mpar->search_radius_fine, 32, 1, 1);
+            nk_tree_pop(nk);
+        }
+
         if (nk_tree_push(nk, NK_TREE_NODE, "Deinterlacing", NK_MINIMIZED)) {
             struct pl_deinterlace_params *dpar = &opts->deinterlace_params;
             nk_layout_row_dynamic(nk, 24, 2);
