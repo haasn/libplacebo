@@ -45,6 +45,7 @@ typedef struct pl_options_t {
     struct pl_blend_params blend_params;
     struct pl_deinterlace_params deinterlace_params;
     struct pl_distort_params distort_params;
+    struct pl_frame_interp_params frame_interp_params;
 
     // Backing storage for "custom" scalers. `params.upscaler` etc. will
     // always be a pointer either to a built-in pl_filter_config, or one of

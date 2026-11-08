@@ -51,6 +51,7 @@ static const struct pl_options_t default_options = {
     .cone_params        = { PL_CONE_NONE, 1.0 },
     .deinterlace_params = { PL_DEINTERLACE_DEFAULTS },
     .distort_params     = { PL_DISTORT_DEFAULTS },
+    .frame_interp_params = { PL_FRAME_INTERP_DEFAULTS },
     .upscaler = {
         .name           = "custom",
         .description    = "Custom upscaler",
@@ -116,6 +117,7 @@ static inline void redirect_params(pl_options opts)
     REDIRECT_PARAMS(cone_params);
     REDIRECT_PARAMS(deinterlace_params);
     REDIRECT_PARAMS(distort_params);
+    REDIRECT_PARAMS(frame_interp_params);
 }
 
 void pl_options_reset(pl_options opts, const struct pl_render_params *preset)
@@ -1257,6 +1259,21 @@ const struct pl_opt_t pl_option_list[] = {
              {"independent",   PL_ALPHA_INDEPENDENT},
              {"premultiplied", PL_ALPHA_PREMULTIPLIED},
              {"none",          PL_ALPHA_NONE})),
+
+    // Frame interpolation
+    OPT_ENABLE_PARAMS("frame_interp", "Enable frame interpolation", frame_interp_params),
+    OPT_PRESET("frame_interp_preset", "Frame interpolation preset", frame_interp_params, LIST(
+               {"default", &pl_frame_interp_default_params})),
+    OPT_ENUM("frame_interp_algo", "Frame interpolation algorithm", frame_interp_params.algo, LIST(
+             {"global_motion", PL_FRAME_INTERP_GLOBAL_MOTION})),
+    OPT_INT("motion_block_size", "Motion estimation block size",
+            frame_interp_params.motion.block_size, .min = 1, .max = 64),
+    OPT_INT("motion_pyramid_levels", "Requested motion estimation pyramid levels",
+            frame_interp_params.motion.pyramid_levels, .max = 16),
+    OPT_INT("motion_search_radius_coarse", "Motion estimation search radius",
+            frame_interp_params.motion.search_radius_coarse, .max = 32),
+    OPT_INT("motion_search_radius_fine", "Motion estimation search radius (fine)",
+            frame_interp_params.motion.search_radius_fine, .max = 32),
 
     // Misc renderer settings
     OPT_NAMED("error_diffusion", "Error diffusion kernel", params.error_diffusion,
