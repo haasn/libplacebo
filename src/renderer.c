@@ -4275,6 +4275,15 @@ inter_pass_error:
     pass.info.count = fidx;
     pl_assert(fidx > 0);
 
+    // With a single frame there is nothing to mix, so we can skip the
+    // linearize/delinearize roundtrip.
+    bool mixing = fidx > 1;
+    bool linear_xyz = target_encodes_linear_xyz(target);
+    struct pl_color_space mix_csp = target->color;
+    if (mixing || linear_xyz)
+        mix_csp.transfer = PL_COLOR_TRC_LINEAR;
+    int comps = 0;
+
     pl_shader sh = pl_dispatch_begin(rr->dp);
     sh_describef(sh, "frame mixing (%d frame%s)", fidx, fidx > 1 ? "s" : "");
     sh->output = PL_SHADER_SIG_COLOR;
@@ -4285,17 +4294,9 @@ inter_pass_error:
          "// pl_render_image_mix        \n"
          "{                             \n");
 
-    // With a single frame there is nothing to mix, so we can skip the
-    // linearize/delinearize roundtrip.
-    bool mixing = fidx > 1;
-    bool linear_xyz = target_encodes_linear_xyz(target);
-    struct pl_color_space mix_csp = target->color;
-    if (mixing || linear_xyz)
-        mix_csp.transfer = PL_COLOR_TRC_LINEAR;
     if (mixing)
         GLSL("vec4 mix_color = vec4(0.0); \n");
 
-    int comps = 0;
     for (int i = 0; i < fidx; i++) {
         const struct pl_tex_params *tpars = &frames[i].tex->params;
 
