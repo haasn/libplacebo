@@ -64,10 +64,12 @@ class Macro(object):
 
     # yields output lines
     @staticmethod
-    def process_file(lines, strip=False):
+    def process_file(lines, filename, strip=False):
         macro = None
         macros = []
 
+        quoted = filename.replace('\\', '\\\\').replace('"', '\\"')
+        yield f'#line 1 "{quoted}"\n'
         for linenr, line_orig in enumerate(lines, start=1):
             line = line_orig.rstrip()
 

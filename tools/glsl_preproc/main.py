@@ -13,5 +13,5 @@ args = parser.parse_args()
 
 with open(args.input, encoding='utf-8') as infile:
     with open(args.output, 'w', encoding='utf-8') as outfile:
-        for line in Macro.process_file(infile, strip=args.strip):
+        for line in Macro.process_file(infile, args.input, strip=args.strip):
             outfile.write(line)
