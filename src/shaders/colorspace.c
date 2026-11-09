@@ -109,7 +109,7 @@ ident_t sh_hlg_oetf(pl_shader sh, int comps)
 #pragma GLSLH                                                                   \
     ${vecType: mask} $fun(${vecType: mask} x)                                   \
     {                                                                           \
-        ${vecType: mask} lo = 0.5 * sqrt(x);                                    \
+        ${vecType: mask} lo = 0.5 * sqrt(max(x, 0.0));                          \
         ${vecType: mask} hi = ${const float: HLG_A}                             \
                               * log(x - ${const float: HLG_B})                  \
                               + ${const float: HLG_C};                          \
