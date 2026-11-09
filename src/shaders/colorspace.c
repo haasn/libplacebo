@@ -967,7 +967,10 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         const float b = hlg_black_lift(csp_min, csp_max, y);
         // OOTF^-1
         GLSL("color.rgb *= 1.0 / "$";                                       \n"
-             "color.rgb *= 12.0 * pow(max(1e-6, dot("$", color.rgb)), "$"); \n",
+             "{                                                             \n"
+             "float luma = dot("$", color.rgb);                             \n"
+             "color.rgb *= luma > 0.0 ? 12.0 * pow(luma, "$") : 0.0;        \n"
+             "}                                                             \n",
              SH_FLOAT(csp_max),
              sh_luma_coeffs(sh, pl_raw_primaries_get(csp->primaries)),
              SH_FLOAT((1 - y) / y));
