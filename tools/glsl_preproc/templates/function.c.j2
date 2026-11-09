@@ -2,6 +2,7 @@
 #line {{ macro.linenr }}
 static size_t {{ macro.name }}_fn(void *alloc, pl_str *buf, const uint8_t *ptr)
 {
+#ifdef {{ macro.name }}_used
 {% if macro.vars %}
 {{ macro.render_struct() }} {{ Var.STRUCT_NAME }};
 memcpy(&{{ Var.STRUCT_NAME }}, ptr, sizeof({{ Var.STRUCT_NAME }}));
@@ -16,4 +17,7 @@ return sizeof({{ Var.STRUCT_NAME }});
 {% else %}
 return 0;
 {% endif %}
+#else
+return 0;
+#endif
 }
