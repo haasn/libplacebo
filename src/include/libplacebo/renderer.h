@@ -111,6 +111,7 @@ enum pl_clear_mode {
 enum pl_render_stage {
     PL_RENDER_STAGE_FRAME,  // full frame redraws, for fresh/uncached frames
     PL_RENDER_STAGE_BLEND,  // the output blend pass (only for pl_render_image_mix)
+    PL_RENDER_STAGE_MOTION, // the motion estimation pass
     PL_RENDER_STAGE_COUNT,
 };
 

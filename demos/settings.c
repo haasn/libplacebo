@@ -1134,6 +1134,11 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                         draw_shader_pass(nk, &p->blend_info[j][i]);
                 }
 
+                nk_layout_row_dynamic(nk, 26, 1);
+                nk_label(nk, "Motion estimation:", NK_TEXT_LEFT);
+                for (int i = 0; i < p->num_motion_passes; i++)
+                    draw_shader_pass(nk, &p->motion_info[i]);
+
                 nk_tree_pop(nk);
             }
 

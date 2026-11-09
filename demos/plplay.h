@@ -10,6 +10,7 @@
 #define MAX_FRAME_PASSES 256
 #define MAX_BLEND_PASSES 8
 #define MAX_BLEND_FRAMES 8
+#define MAX_MOTION_PASSES 32
 
 struct plplay_args {
     const struct pl_render_params *preset;
@@ -74,8 +75,10 @@ struct plplay {
     // pass metadata
     struct pl_dispatch_info blend_info[MAX_BLEND_FRAMES][MAX_BLEND_PASSES];
     struct pl_dispatch_info frame_info[MAX_FRAME_PASSES];
+    struct pl_dispatch_info motion_info[MAX_MOTION_PASSES];
     int num_frame_passes;
     int num_blend_passes[MAX_BLEND_FRAMES];
+    int num_motion_passes;
 
     // playback statistics
     struct {

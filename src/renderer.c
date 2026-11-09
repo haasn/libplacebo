@@ -4382,6 +4382,15 @@ inter_pass_error:
     pl_shader sh = pl_dispatch_begin(rr->dp);
     if (interp) {
         pl_assert(fidx == 2);
+        struct pass_state motion_pass = {
+            .rr = rr,
+            .params = pass.params,
+            .info.stage = PL_RENDER_STAGE_MOTION,
+        };
+
+        // Attribute the passes dispatched by motion estimation to their own
+        // stage
+        pl_dispatch_callback(rr->dp, &motion_pass, info_callback);
         bool ok = pl_shader_frame_interp(sh, pl_frame_interp_input(
             .gpu       = rr->gpu,
             .dispatch  = rr->dp,
@@ -4391,6 +4400,7 @@ inter_pass_error:
             .out_color = mix_csp,
             .state     = &rr->motion_state,
         ), params->frame_interp_params);
+        pl_dispatch_callback(rr->dp, &pass, info_callback);
 
         if (!ok) {
             PL_ERR(rr, "Could not interpolate frame.. disabling frame "

@@ -56,6 +56,8 @@ static void uninit(struct plplay *p)
         for (int i = 0; i < MAX_BLEND_PASSES; i++)
             pl_shader_info_deref(&p->blend_info[j][i].shader);
     }
+    for (int i = 0; i < MAX_MOTION_PASSES; i++)
+        pl_shader_info_deref(&p->motion_info[i].shader);
 
     free(p->shader_hooks);
     free(p->shader_paths);
@@ -609,6 +611,13 @@ static void info_callback(void *priv, pl_input input,
             return;
         p->num_blend_passes[info->count] = info->index + 1;
         pl_dispatch_info_move(&p->blend_info[info->count][info->index], info->pass);
+        return;
+
+    case PL_RENDER_STAGE_MOTION:
+        if (info->index >= MAX_MOTION_PASSES)
+            return;
+        p->num_motion_passes = info->index + 1;
+        pl_dispatch_info_move(&p->motion_info[info->index], info->pass);
         return;
 
     case PL_RENDER_STAGE_COUNT:
