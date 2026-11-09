@@ -247,6 +247,50 @@ struct pl_frame_interp_params {
 PL_API extern const struct pl_frame_interp_params
     pl_frame_interp_default_params;
 
+// Per-call inputs.
+struct pl_frame_interp_input {
+    // Must be the same GPU `dispatch` was created with.
+    pl_gpu gpu;
+
+    // Used to allocate and execute motion estimation passes.
+    pl_dispatch dispatch;
+
+    // The pair of frames to synthesize an intermediate frame between. These
+    // are directly sampled when generating the intermediate frame.
+    struct pl_motion_estimate_frame a; // earlier frame
+    struct pl_motion_estimate_frame b; // later frame
+
+    // Position of the synthesized frame between `a` and `b`, in [0, 1]. 0.0
+    // corresponds to `a`, 1.0 corresponds to `b`.
+    float t;
+
+    // Color space to emit the synthesized frame in. Both frames are converted
+    // to this color space before being combined, so this should generally be
+    // a linear light space.
+    struct pl_color_space out_color;
+
+    // Motion estimation state, as for `pl_motion_estimate_input.state`. After
+    // a successful call, the motion estimation results can be retrieved from
+    // this state.
+    pl_shader_obj *state;
+};
+
+#define pl_frame_interp_input(...)                                             \
+    (&(struct pl_frame_interp_input) {__VA_ARGS__})
+
+// Synthesize the frame at `input->t` between `input->a` and `input->b`,
+// estimating motion between the two frames as needed. Repeated calls for the
+// same pair of frames reuse the motion estimate.
+//
+// Appends a shader writing `vec4 color` in `input->out_color`, with
+// premultiplied alpha. The output size matches that of the input textures.
+//
+// Returns false on failure. Unless `sh` itself is unsuitable for appending a
+// sampling operation, it is left untouched in this case.
+PL_API bool pl_shader_frame_interp(pl_shader sh,
+                                   const struct pl_frame_interp_input *input,
+                                   const struct pl_frame_interp_params *params);
+
 PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_MOTION_H_

@@ -1854,3 +1854,143 @@ error:
     invalidate_temporal(gpu, obj, "estimation failed");
     return false;
 }
+
+// Mixes the two frames, each sampled at the position offset by the global
+// motion, scaled by the frame's distance in time to the intermediate frame.
+static bool frame_interp_global(pl_shader sh,
+                                const struct pl_frame_interp_input *input,
+                                const struct pl_color_space *out_color)
+{
+    pl_shader_obj state = *input->state;
+    if (!pl_motion_get_global_buf(state, PL_MOTION_FORWARD)) {
+        PL_ERR(sh, "pl_shader_frame_interp: no global motion estimate "
+               "available!");
+        return false;
+    }
+
+    const struct pl_tex_params *tpars = &input->a.tex->params;
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
+        return false;
+
+    sh_describe(sh, "frame interpolation (global motion)");
+    ident_t gm = sh_motion_global(sh, state, PL_MOTION_FORWARD);
+    pl_assert(gm);
+
+    const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
+    const struct pl_motion_estimate_frame *frames[2] = { &input->a, &input->b };
+
+    // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (global motion) */                       \
+    vec4 color;                                                                 \
+    {                                                                           \
+    vec4 mix_color = vec4(0.0);                                                 \
+    vec4 mix_clamped = vec4(0.0);  /* fallback for when global motion offset is \
+                                      out of frame for both frames */           \
+    float mix_inside = 0.0;  /* sum of weights of the pixels with valid global  \
+                                motion offset */                                \
+    vec2 gm_pos;  /* pixel position offset by global motion, scaled by t */     \
+    float gm_inside;  /* 0 if gm_pos is out of bounds, 1 otherwise */
+    // clang-format on
+
+    for (int i = 0; i < 2; i++) {
+        pl_tex tex = frames[i]->tex;
+        enum pl_tex_sample_mode sample_mode = PL_TEX_SAMPLE_NEAREST;
+        if (tex->params.format->caps & PL_FMT_CAP_LINEAR)
+            sample_mode = PL_TEX_SAMPLE_LINEAR; // offsets are fractional
+
+        ident_t pos, pt, frame = sh_bind(sh, tex, PL_TEX_ADDRESS_CLAMP,
+                                         sample_mode, "frame", NULL, &pos, &pt);
+        if (!frame)
+            return false;
+
+        // A pixel in the intermediate frame finds its corresponding pixel in
+        // frame `a` at (x,y) - t*gm, and in frame `b` at (x,y) + (1-t)*gm.
+        const float offset = i == 0 ? -t : 1.0f - t;
+        ident_t weight = SH_FLOAT_DYN(i == 0 ? 1.0f - t : t);
+
+        // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (global motion) */                       \
+        gm_pos = $pos + ${dynamic float: offset} * $gm.xy * $pt;                \
+        gm_inside = all(greaterThanEqual(gm_pos, vec2(0.0))) &&                 \
+                    all(lessThanEqual(gm_pos, vec2(1.0))) ? 1.0 : 0.0;          \
+        color = textureLod($frame, gm_pos, 0.0);
+        // clang-format on
+
+        struct pl_color_repr repr = frames[i]->repr;
+        struct pl_color_space csp = frames[i]->color;
+        pl_color_space_infer(&csp);
+        if (!pl_color_space_equal(&csp, out_color)) {
+            pl_shader_set_alpha(sh, &repr, PL_ALPHA_INDEPENDENT);
+            pl_shader_color_map_ex(sh, NULL, pl_color_map_args(csp, *out_color));
+        }
+        pl_shader_set_alpha(sh, &repr, PL_ALPHA_PREMULTIPLIED);
+
+        // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (global motion) */                       \
+        mix_clamped += $weight * color;                                         \
+        /* Discard pixels that are out of frame. */                             \
+        mix_color += gm_inside * $weight * color;                               \
+        mix_inside += gm_inside * $weight;
+        // clang-format on
+    }
+
+    // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (global motion) */                       \
+    /* Reweight contributions of pixels to only consider those that are in      \
+     * frame. */                                                                \
+    color = mix_inside > 0.0 ? mix_color / mix_inside : mix_clamped;            \
+    }
+    // clang-format on
+
+    return true;
+}
+
+bool pl_shader_frame_interp(pl_shader sh,
+                            const struct pl_frame_interp_input *input,
+                            const struct pl_frame_interp_params *params)
+{
+    params = PL_DEF(params, &pl_frame_interp_default_params);
+    if (!input || !input->state)
+        return false;
+
+    enum pl_motion_direction me_dir;
+    bool me_global = false;
+    switch (params->algo) {
+    case PL_FRAME_INTERP_GLOBAL_MOTION:
+        me_dir = PL_MOTION_FORWARD;
+        me_global = true;
+        break;
+    case PL_FRAME_INTERP_ALGO_COUNT:
+    default:
+        PL_ERR(sh, "pl_shader_frame_interp: invalid algorithm %d!",
+               (int) params->algo);
+        return false;
+    }
+
+    // A no-op if the motion between this pair of frames is already known.
+    bool ok = pl_motion_estimate(pl_motion_estimate_input(
+        .gpu       = input->gpu,
+        .dispatch  = input->dispatch,
+        .a         = input->a,
+        .b         = input->b,
+        .direction = me_dir,
+        .estimate_global = me_global,
+        .state     = input->state,
+    ), &params->motion);
+    if (!ok)
+        return false;
+
+    struct pl_color_space out_color = input->out_color;
+    pl_color_space_infer(&out_color);
+
+    // Each algorithm must fail before modifying `sh` where possible, see
+    // `pl_shader_frame_interp` documentation
+    switch (params->algo) {
+    case PL_FRAME_INTERP_GLOBAL_MOTION:
+        return frame_interp_global(sh, input, &out_color);
+    case PL_FRAME_INTERP_ALGO_COUNT:
+        break;
+    }
+
+    pl_unreachable(); // rejected above
+}
