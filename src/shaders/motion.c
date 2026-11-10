@@ -1083,6 +1083,26 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         }                                                                       \
     @}                                                                          \
                                                                                 \
+    /* Sum of squared differences between reference block `b` and the block     \
+     * at `offset` within its search window in shared memory. */                \
+    uint window_ssd(int b, ivec2 offset) {                                      \
+        int bx = b % ${const int: bpgx};                                        \
+        int by = b / ${const int: bpgx};                                        \
+        uint ssd = 0u;                                                          \
+        for (int i = 0; i < ${const int: bs}; i++) {                            \
+            int ref_row = (by * ${const int: bs} + i) * ${const int: ref_w}     \
+                        + bx * ${const int: bs};                                \
+            int tgt_row = b * ${const int: block_stride}                        \
+                        + (offset.y + i) * ${const int: win_stride}             \
+                        + offset.x;                                             \
+            for (int j = 0; j < ${const int: bs}; j++) {                        \
+                int diff = int(sRef[ref_row + j]) - int(sTgt[tgt_row + j]);     \
+                ssd += uint(diff * diff);                                       \
+            }                                                                   \
+        }                                                                       \
+        return ssd;                                                             \
+    }                                                                           \
+                                                                                \
     /* Returns the seed candidate that a thread `i` is responsible for          \
      * scoring. */                                                              \
     ivec2 seed_candidate(ivec2 blk, int i) {                                    \
@@ -1227,18 +1247,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         ivec2 cand_offset = $cand(c);                                           \
         /* Change the candidate offset into coordinates within the window */    \
         cand_offset += ${const int: r};                                         \
-        uint ssd = 0u;                                                          \
-        for (int i = 0; i < ${const int: bs}; i++) {                            \
-            int ref_row = (by * ${const int: bs} + i) * ${const int: ref_w}     \
-                        + bx * ${const int: bs};                                \
-            int tgt_row = b * ${const int: block_stride}                        \
-                        + (cand_offset.y + i) * ${const int: win_stride}        \
-                        + cand_offset.x;                                        \
-            for (int j = 0; j < ${const int: bs}; j++) {                        \
-                int diff = int(sRef[ref_row + j]) - int(sTgt[tgt_row + j]);     \
-                ssd += uint(diff * diff);                                       \
-            }                                                                   \
-        }                                                                       \
+        uint ssd = window_ssd(b, cand_offset);                                  \
         /* For when a thread computes SSD of multiple candidates. */            \
         /* Strictly lower, so the order of candidates breaks ties. */           \
         if (ssd < best) {                                                       \
