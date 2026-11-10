@@ -96,6 +96,51 @@ struct sh_motion_obj {
     int w, h;
 };
 
+// Binds `tex` for use with `texelFetch`.
+static ident_t bind_tex(pl_shader sh, const char *name, pl_tex tex)
+{
+    return sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name = name,
+            .type = PL_DESC_SAMPLED_TEX,
+        },
+        .binding = {
+            .object      = tex,
+            .sample_mode = PL_TEX_SAMPLE_NEAREST,
+        },
+    });
+}
+
+// Binds `tex` as a write-only storage image.
+static ident_t bind_img(pl_shader sh, const char *name, pl_tex tex)
+{
+    return sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name   = name,
+            .type   = PL_DESC_STORAGE_IMG,
+            .access = PL_DESC_ACCESS_WRITEONLY,
+        },
+        .binding.object = tex,
+    });
+}
+
+// Binds `buf` as a storage buffer holding `vars`.
+static void bind_buf(pl_shader sh, const char *name, pl_buf buf,
+                     enum pl_desc_access access,
+                     const struct pl_buffer_var *vars, int num_vars)
+{
+    sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name   = name,
+            .type   = PL_DESC_BUF_STORAGE,
+            .access = access,
+        },
+        .binding.object  = buf,
+        .buffer_vars     = (struct pl_buffer_var *) vars,
+        .num_buffer_vars = num_vars,
+    });
+}
+
 // Don't reduce image pyramid to a size that is too small to recover motion.
 #define MIN_COARSE_BLOCKS 8
 
@@ -633,16 +678,7 @@ ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
     if (!flow)
         return NULL_IDENT;
 
-    return sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name = "motion_flow",
-            .type = PL_DESC_SAMPLED_TEX,
-        },
-        .binding = {
-            .object      = flow,
-            .sample_mode = PL_TEX_SAMPLE_NEAREST,
-        },
-    });
+    return bind_tex(sh, "motion_flow", flow);
 }
 
 pl_buf pl_motion_get_global_buf(pl_shader_obj state,
@@ -709,17 +745,8 @@ ident_t sh_motion_global(pl_shader sh, pl_shader_obj state,
 
     pl_assert(global->params.size >= sizeof(struct global_buf_data));
 
-    sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name   = "global_motion_desc",
-            .type   = PL_DESC_BUF_STORAGE,
-            .access = PL_DESC_ACCESS_READONLY,
-        },
-        .binding.object  = global,
-        .buffer_vars =
-            (struct pl_buffer_var *) pl_motion_global_buf_vars[dir],
-        .num_buffer_vars = PL_MOTION_GLOBAL_BUF_NUM_VARS,
-    });
+    bind_buf(sh, "global_motion_desc", global, PL_DESC_ACCESS_READONLY,
+             pl_motion_global_buf_vars[dir], PL_MOTION_GLOBAL_BUF_NUM_VARS);
 
     ident_t gm = sh_fresh(sh, "global_motion");
     // clang-format off
@@ -951,36 +978,9 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     }
 
     // Describe the textures for the reference frames and motion vector output.
-    ident_t ref = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name = "ref",
-            .type = PL_DESC_SAMPLED_TEX,
-        },
-        .binding = {
-            .object      = p->ref,
-            .sample_mode = PL_TEX_SAMPLE_NEAREST,
-        },
-    });
-
-    ident_t tgt = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name = "tgt",
-            .type = PL_DESC_SAMPLED_TEX,
-        },
-        .binding = {
-            .object      = p->tgt,
-            .sample_mode = PL_TEX_SAMPLE_NEAREST,
-        },
-    });
-
-    ident_t out = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name   = "out_mv",
-            .type   = PL_DESC_STORAGE_IMG,
-            .access = PL_DESC_ACCESS_WRITEONLY,
-        },
-        .binding.object = p->out_mv,
-    });
+    ident_t ref = bind_tex(sh, "ref", p->ref);
+    ident_t tgt = bind_tex(sh, "tgt", p->tgt);
+    ident_t out = bind_img(sh, "out_mv", p->out_mv);
 
     // Bind the flow field of the previous motion search image pyramid level,
     // unless this is the coarsest (first) level of the motion search.
@@ -992,16 +992,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int rank_y = geom->seeds.rank[MOTION_SEED_PARENT_Y];
     ident_t parent = NULL_IDENT;
     if (has_parent) {
-        parent = sh_desc(sh, (struct pl_shader_desc) {
-            .desc = {
-                .name = "parent",
-                .type = PL_DESC_SAMPLED_TEX,
-            },
-            .binding = {
-                .object      = p->parent,
-                .sample_mode = PL_TEX_SAMPLE_NEAREST,
-            },
-        });
+        parent = bind_tex(sh, "parent", p->parent);
     }
 
     // Bind the flow field of the same motion search image pyramid level from
@@ -1014,16 +1005,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int rank_prior = geom->seeds.rank[MOTION_SEED_PRIOR];
     ident_t prior = NULL_IDENT;
     if (has_prior) {
-        prior = sh_desc(sh, (struct pl_shader_desc) {
-            .desc = {
-                .name = "prior",
-                .type = PL_DESC_SAMPLED_TEX,
-            },
-            .binding = {
-                .object      = p->prior,
-                .sample_mode = PL_TEX_SAMPLE_NEAREST,
-            },
-        });
+        prior = bind_tex(sh, "prior", p->prior);
     }
 
     // clang-format off
@@ -1336,25 +1318,8 @@ static bool motion_median_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
         goto error;
     }
 
-    ident_t src = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name = "flow_in",
-            .type = PL_DESC_SAMPLED_TEX,
-        },
-        .binding = {
-            .object      = in,
-            .sample_mode = PL_TEX_SAMPLE_NEAREST,
-        },
-    });
-
-    ident_t dst = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name   = "flow_out",
-            .type   = PL_DESC_STORAGE_IMG,
-            .access = PL_DESC_ACCESS_WRITEONLY,
-        },
-        .binding.object = out,
-    });
+    ident_t src = bind_tex(sh, "flow_in", in);
+    ident_t dst = bind_img(sh, "flow_out", out);
 
     // clang-format off
 #pragma GLSLH /* motion_median_pass */                                          \
@@ -1484,27 +1449,9 @@ static bool motion_global_hist_pass(pl_gpu gpu, pl_dispatch dispatch,
         goto error;
     }
 
-    ident_t src = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name = "flow_in",
-            .type = PL_DESC_SAMPLED_TEX,
-        },
-        .binding = {
-            .object      = flow,
-            .sample_mode = PL_TEX_SAMPLE_NEAREST,
-        },
-    });
-
-    sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name   = "global_hist_buf",
-            .type   = PL_DESC_BUF_STORAGE,
-            .access = PL_DESC_ACCESS_READWRITE,
-        },
-        .binding.object  = hist,
-        .buffer_vars     = (struct pl_buffer_var *) &global_hist_var,
-        .num_buffer_vars = 1,
-    });
+    ident_t src = bind_tex(sh, "flow_in", flow);
+    bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
+             &global_hist_var, 1);
 
     // clang-format off
 #pragma GLSLH /* motion_global_hist_pass */                                     \
@@ -1574,28 +1521,10 @@ static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
         goto error;
     }
 
-    sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name   = "global_hist_buf",
-            .type   = PL_DESC_BUF_STORAGE,
-            .access = PL_DESC_ACCESS_READWRITE,
-        },
-        .binding.object  = hist,
-        .buffer_vars     = (struct pl_buffer_var *) &global_hist_var,
-        .num_buffer_vars = 1,
-    });
-
-    sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name   = "global_motion_out",
-            .type   = PL_DESC_BUF_STORAGE,
-            .access = PL_DESC_ACCESS_WRITEONLY,
-        },
-        .binding.object  = out,
-        .buffer_vars =
-            (struct pl_buffer_var *) pl_motion_global_buf_vars[dir],
-        .num_buffer_vars = PL_MOTION_GLOBAL_BUF_NUM_VARS,
-    });
+    bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
+             &global_hist_var, 1);
+    bind_buf(sh, "global_motion_out", out, PL_DESC_ACCESS_WRITEONLY,
+             pl_motion_global_buf_vars[dir], PL_MOTION_GLOBAL_BUF_NUM_VARS);
 
     // clang-format off
 #pragma GLSLH /* motion_global_median_pass */                                   \
