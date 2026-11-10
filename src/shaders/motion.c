@@ -1079,7 +1079,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
             ivec2 p = clamp(blk, ivec2(0),                                      \
                             ivec2(${const int: prior_w},                        \
                                   ${const int: prior_h}) - 1);                  \
-            return ivec2(texelFetch($prior, p, 0).xy);                          \
+            return ivec2(round(texelFetch($prior, p, 0).xy));                   \
         }                                                                       \
     @}                                                                          \
                                                                                 \
