@@ -177,6 +177,7 @@ struct motion_geometry {
                        // level
     int bpgx, bpgy;    // dimensions of tile
     int threads_block; // threads per block in the tile
+    bool subpixel;     // refine the vectors to a fraction of a pixel
 
     // The seed candidates every block of this level scores before searching.
     struct motion_seeds seeds;
@@ -206,7 +207,7 @@ struct motion_shmem_layout {
 // TODO: consider if we can pack multiple pixels into a single shared memory bank.
 static struct motion_shmem_layout
 motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
-                            int nseed)
+                            int nseed, bool subpixel)
 {
     const int win = block_size + 2 * radius;
     const int win_stride = win | 1;
@@ -222,6 +223,7 @@ motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
         + (size_t) blocks * block_stride        // search windows
         + 2 * (size_t) blocks                   // cost and rank
         + 2 * (size_t) blocks                   // seed
+        + (subpixel ? 4 : 0) * (size_t) blocks  // cost around the winner
         + score;                                // seed candidate scores
 
     return (struct motion_shmem_layout) {
@@ -263,8 +265,8 @@ static void cand_fill(int radius, int *out)
 // the motion estimation. Iteratively reduces the tile size that each workgroup
 // will process until a size is found that fits in shared memory.
 static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
-                        struct motion_seeds seeds, int grid_w, int grid_h,
-                        struct motion_geometry *out)
+                        struct motion_seeds seeds, bool subpixel, int grid_w,
+                        int grid_h, struct motion_geometry *out)
 {
     const int ncand = PL_SQUARE(2 * radius + 1);
     const int max_group = gpu->glsl.max_group_threads;
@@ -281,7 +283,7 @@ static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
 
     while (bpgx > 1 || bpgy > 1) {
         const struct motion_shmem_layout shmem = motion_compute_shmem_layout(
-            block_size, radius, bpgx, bpgy, seeds.num);
+            block_size, radius, bpgx, bpgy, seeds.num, subpixel);
 
         if (bpgx * bpgy * threads_block <= max_threads &&
             shmem.size <= gpu->glsl.max_shmem_size)
@@ -293,8 +295,8 @@ static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
             bpgy--;
     }
 
-    const struct motion_shmem_layout shmem =
-        motion_compute_shmem_layout(block_size, radius, bpgx, bpgy, seeds.num);
+    const struct motion_shmem_layout shmem = motion_compute_shmem_layout(
+        block_size, radius, bpgx, bpgy, seeds.num, subpixel);
 
     if (bpgx * bpgy * threads_block > max_threads) {
         PL_ERR(gpu,
@@ -322,6 +324,7 @@ static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
         .bpgx = bpgx,
         .bpgy = bpgy,
         .threads_block = threads_block,
+        .subpixel = subpixel,
         .seeds = seeds,
         .cand = cand,
     };
@@ -413,8 +416,8 @@ static bool pyramid_recreate(pl_gpu gpu, void *alloc, tex_pyramid_t *pyramid,
 }
 
 // Format for motion vector fields, holding `vec3(mv.x, mv.y, confidence)`,
-// with an empty fourth element for padding. mv.x and mv.y are whole number
-// floats. Prefer 16 bit floats but fall back to 32 bits.
+// with an empty fourth element for padding. Prefer 16 bit floats but fall back
+// to 32 bits.
 static pl_fmt flow_fmt(pl_gpu gpu)
 {
     static const enum pl_fmt_caps caps = PL_FMT_CAP_STORABLE |
@@ -893,12 +896,13 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int threads = bpg * tpb;
     const int ncand   = PL_SQUARE(2 * r + 1);
     const int nseed = geom->seeds.num;
+    const bool subpixel = geom->subpixel;
 
     // Total size of tile.
     const int ref_w = bpgx * bs, ref_h = bpgy * bs;
 
     const struct motion_shmem_layout shmem =
-        motion_compute_shmem_layout(bs, r, bpgx, bpgy, nseed);
+        motion_compute_shmem_layout(bs, r, bpgx, bpgy, nseed, subpixel);
     const int win = shmem.win;
     const int win_stride = shmem.win_stride;
     const int block_stride = shmem.block_stride;
@@ -1036,6 +1040,11 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     shared uint best_cost[${const int: bpg}];                                   \
     /* Deterministic tie breaking rank. */                                      \
     shared uint best_rank[${const int: bpg}];                                   \
+    @if (subpixel) {                                                            \
+        /* Cost one pixel before and after the winner of each block, on x and   \
+         * then on y. */                                                        \
+        shared uint near_cost[${const int: 4 * bpg}];                           \
+    @}                                                                          \
     /* Displacement into the target image that each block's search window will  \
      * be centered upon or seeded with. */                                      \
     shared ivec2 s_seed[${const int: bpg}];                                     \
@@ -1119,7 +1128,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         return ivec2(0);                                                        \
     }                                                                           \
                                                                                 \
-    @if (nseed > 1) {                                                           \
+    @if (nseed > 1 || subpixel) {                                               \
         /* Sum of squared differences between reference block `b` and the       \
          * corresponding block in the target frame, but displaced by `d`. */    \
         uint seed_score(int b, ivec2 blk, ivec2 d) {                            \
@@ -1257,10 +1266,37 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     if (best == best_cost[b])                                                   \
         atomicMin(best_rank[b], rank);                                          \
     barrier();                                                                  \
+    ivec2 winner = $cand(int(best_rank[b]));                                    \
+    @if (subpixel) {                                                            \
+        for (int i = c0; i < 4; i += ${const int: tpb}) {                       \
+            ivec2 adj = winner;                                                 \
+            adj[i / 2] += 2 * (i % 2) - 1;                                      \
+            /* The search window does not extend beyond the candidates. */      \
+            if (max(abs(adj.x), abs(adj.y)) <= ${const int: r}) {               \
+                near_cost[4 * b + i] = window_ssd(b, adj + ${const int: r});    \
+            } else {                                                            \
+                near_cost[4 * b + i] = seed_score(b, blk, s_seed[b] + adj);     \
+            }                                                                   \
+        }                                                                       \
+        barrier();                                                              \
+    @}                                                                          \
     if (c0 == 0 && blk.x < ${const int: grid_w} &&                              \
         blk.y < ${const int: grid_h})                                           \
-        imageStore($out, blk,                                                   \
-                   vec4(vec2(seed + $cand(int(best_rank[b]))), 1.0, 0.0));
+    {                                                                           \
+        vec2 mv = vec2(seed + winner);                                          \
+        @if (subpixel) {                                                        \
+            /* Move to the vertex of the parabola through the cost of the       \
+             * winner and of its two neighbours, separately for each axis. It   \
+             * is within half a pixel if the winner is the lowest of the three, \
+             * which the neighbours outside of the search need not respect. */  \
+            vec2 prev = vec2(near_cost[4 * b], near_cost[4 * b + 2]);           \
+            vec2 next = vec2(near_cost[4 * b + 1], near_cost[4 * b + 3]);       \
+            vec2 curv = prev + next - vec2(2.0 * float(best_cost[b]));          \
+            vec2 off = 0.5 * (prev - next) / max(curv, vec2(1.0));              \
+            mv += clamp(off, vec2(-0.5), vec2(0.5));                            \
+        @}                                                                      \
+        imageStore($out, blk, vec4(mv, 1.0, 0.0));                              \
+    }
     // clang-format on
 
     return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
@@ -1808,7 +1844,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             struct motion_geometry geom;
             ok = motion_plan(gpu, tmp, params->block_size, radius,
                              motion_seeds_plan(parent != NULL, prior != NULL),
-                             out->params.w, out->params.h, &geom);
+                             i == 0, out->params.w, out->params.h, &geom);
             if (!ok)
                 break;
 
