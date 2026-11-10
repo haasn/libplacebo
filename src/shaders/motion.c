@@ -15,6 +15,7 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1945,6 +1946,86 @@ static bool frame_interp_global(pl_shader sh,
     return true;
 }
 
+// Draws the forward flow with the Middlebury color wheel
+static bool frame_interp_visualize(pl_shader sh,
+                                   const struct pl_frame_interp_input *input,
+                                   const struct pl_color_space *out_color)
+{
+    const struct pl_tex_params *tpars = &input->a.tex->params;
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
+        return false;
+
+    ident_t flow = sh_motion_flow(sh, *input->state, PL_MOTION_FORWARD);
+    if (!flow) {
+        PL_ERR(sh, "pl_shader_frame_interp: no flow field available!");
+        return false;
+    }
+
+    ident_t pos, frame = sh_bind(sh, input->a.tex, PL_TEX_ADDRESS_CLAMP,
+                                 PL_TEX_SAMPLE_NEAREST, "frame", NULL, &pos,
+                                 NULL);
+    if (!frame)
+        return false;
+
+    sh_describe(sh, "frame interpolation (visualize motion)");
+
+    // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (visualize motion) */                    \
+    vec4 color;                                                                 \
+    {                                                                           \
+    color = textureLod($frame, $pos, 0.0);
+    // clang-format on
+
+    struct pl_color_repr repr = input->a.repr;
+    struct pl_color_space frame_csp = input->a.color;
+    pl_color_space_infer(&frame_csp);
+    if (!pl_color_space_equal(&frame_csp, out_color)) {
+        pl_shader_set_alpha(sh, &repr, PL_ALPHA_INDEPENDENT);
+        pl_shader_color_map_ex(sh, NULL,
+                               pl_color_map_args(frame_csp, *out_color));
+    }
+    pl_shader_set_alpha(sh, &repr, PL_ALPHA_PREMULTIPLIED);
+
+    // The wheel is piecewise linear between red, yellow, green, cyan, blue and
+    // magenta, with segment lengths 15, 6, 4, 11, 13, 6. As in the original
+    // implementation, the hue spans only [0, 54], leaving the last segment
+    // incomplete.
+    // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (visualize motion) */                    \
+    vec4 frame_color = color;                                                   \
+    const vec3 R = vec3(1.0, 0.0, 0.0), Y = vec3(1.0, 1.0, 0.0),                \
+               G = vec3(0.0, 1.0, 0.0), C = vec3(0.0, 1.0, 1.0),                \
+               B = vec3(0.0, 0.0, 1.0), M = vec3(1.0, 0.0, 1.0);                \
+    vec3 mv = textureLod($flow, $pos, 0.0).xyz;                                 \
+    vec2 uv = mv.xy;                                                            \
+    float rad = length(uv);                                                     \
+    vec3 col = vec3(1.0);                                                       \
+    if (rad > 0.0) {                                                            \
+        float fk = (atan(-uv.y, -uv.x) / ${const float: M_PI} + 1.0) * 27.0;    \
+        if (fk < 15.0)      col = mix(R, Y, fk / 15.0);                         \
+        else if (fk < 21.0) col = mix(Y, G, (fk - 15.0) / 6.0);                 \
+        else if (fk < 25.0) col = mix(G, C, (fk - 21.0) / 4.0);                 \
+        else if (fk < 36.0) col = mix(C, B, (fk - 25.0) / 11.0);                \
+        else if (fk < 49.0) col = mix(B, M, (fk - 36.0) / 13.0);                \
+        else                col = mix(M, R, (fk - 49.0) / 6.0);                 \
+        col = vec3(1.0) - rad / (rad + 4.0) * (vec3(1.0) - col);                \
+    }                                                                           \
+    color = vec4(mv.z * col, 1.0);
+    // clang-format on
+
+    struct pl_color_space csp = pl_color_space_srgb;
+    pl_color_space_infer(&csp);
+    pl_shader_color_map_ex(sh, NULL, pl_color_map_args(csp, *out_color));
+
+    // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (visualize motion) */                    \
+    color = mix(frame_color, color, 0.95);                                      \
+    }
+    // clang-format on
+
+    return true;
+}
+
 bool pl_shader_frame_interp(pl_shader sh,
                             const struct pl_frame_interp_input *input,
                             const struct pl_frame_interp_params *params)
@@ -1959,6 +2040,9 @@ bool pl_shader_frame_interp(pl_shader sh,
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         me_dir = PL_MOTION_FORWARD;
         me_global = true;
+        break;
+    case PL_FRAME_INTERP_VISUALIZE:
+        me_dir = PL_MOTION_FORWARD;
         break;
     case PL_FRAME_INTERP_ALGO_COUNT:
     default:
@@ -1988,6 +2072,8 @@ bool pl_shader_frame_interp(pl_shader sh,
     switch (params->algo) {
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         return frame_interp_global(sh, input, &out_color);
+    case PL_FRAME_INTERP_VISUALIZE:
+        return frame_interp_visualize(sh, input, &out_color);
     case PL_FRAME_INTERP_ALGO_COUNT:
         break;
     }

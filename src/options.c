@@ -1265,7 +1265,8 @@ const struct pl_opt_t pl_option_list[] = {
     OPT_PRESET("frame_interp_preset", "Frame interpolation preset", frame_interp_params, LIST(
                {"default", &pl_frame_interp_default_params})),
     OPT_ENUM("frame_interp_algo", "Frame interpolation algorithm", frame_interp_params.algo, LIST(
-             {"global_motion", PL_FRAME_INTERP_GLOBAL_MOTION})),
+             {"global_motion", PL_FRAME_INTERP_GLOBAL_MOTION},
+             {"visualize", PL_FRAME_INTERP_VISUALIZE})),
     OPT_INT("motion_block_size", "Motion estimation block size",
             frame_interp_params.motion.block_size, .min = 1, .max = 64),
     OPT_INT("motion_pyramid_levels", "Requested motion estimation pyramid levels",

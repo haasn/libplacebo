@@ -224,6 +224,11 @@ enum pl_frame_interp_algo {
     // motion.
     PL_FRAME_INTERP_GLOBAL_MOTION = 0,
 
+    // Debugging aid: instead of interpolating, draws the forward motion
+    // vectors between the two frames with the Middlebury color wheel, on top
+    // of the earlier frame and as opaque as the vectors are confident.
+    PL_FRAME_INTERP_VISUALIZE,
+
     PL_FRAME_INTERP_ALGO_COUNT,
 };
 
