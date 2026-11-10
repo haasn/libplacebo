@@ -426,6 +426,15 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             if (nk_button_label(nk, "Reset settings"))
                 *ipar = pl_frame_interp_default_params;
 
+            static const char *interp_algos[PL_FRAME_INTERP_ALGO_COUNT] = {
+                [PL_FRAME_INTERP_GLOBAL_MOTION] = "Global motion",
+                [PL_FRAME_INTERP_VISUALIZE]     = "Visualize motion vectors",
+            };
+
+            nk_label(nk, "Algorithm", NK_TEXT_LEFT);
+            ipar->algo = nk_combo(nk, interp_algos, PL_FRAME_INTERP_ALGO_COUNT,
+                                  ipar->algo, 16, nk_vec2(nk_widget_width(nk), 300));
+
             nk_label(nk, "Pyramid levels:", NK_TEXT_LEFT);
             auto_property_int(nk, 0, 0, &mpar->pyramid_levels, 16, 1, 1);
             nk_property_int(nk, "Block size", 1, &mpar->block_size, 64, 1, 1);
