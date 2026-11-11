@@ -133,10 +133,8 @@ pl_static_assert(MOTION_GLOBAL_WORKGROUP_DIM *MOTION_GLOBAL_WORKGROUP_DIM ==
 enum motion_seed_kind {
     MOTION_SEED_ZERO,
     MOTION_SEED_PARENT,
-    MOTION_SEED_PARENT_LEFT,
-    MOTION_SEED_PARENT_RIGHT,
-    MOTION_SEED_PARENT_UP,
-    MOTION_SEED_PARENT_DOWN,
+    MOTION_SEED_PARENT_X, // the parent's horizontal neighbour nearest the block
+    MOTION_SEED_PARENT_Y, // the parent's vertical neighbour nearest the block
     MOTION_SEED_PRIOR,
     MOTION_SEED_NUM,
 };
@@ -161,10 +159,8 @@ static struct motion_seeds motion_seeds_plan(bool has_parent, bool has_prior)
 
     if (has_parent) {
         seeds.rank[MOTION_SEED_PARENT] = seeds.num++;
-        seeds.rank[MOTION_SEED_PARENT_LEFT] = seeds.num++;
-        seeds.rank[MOTION_SEED_PARENT_RIGHT] = seeds.num++;
-        seeds.rank[MOTION_SEED_PARENT_UP] = seeds.num++;
-        seeds.rank[MOTION_SEED_PARENT_DOWN] = seeds.num++;
+        seeds.rank[MOTION_SEED_PARENT_X] = seeds.num++;
+        seeds.rank[MOTION_SEED_PARENT_Y] = seeds.num++;
     }
 
     if (has_prior)
@@ -988,10 +984,8 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int parent_w = has_parent ? p->parent->params.w : 0;
     const int parent_h = has_parent ? p->parent->params.h : 0;
     const int rank_parent = geom->seeds.rank[MOTION_SEED_PARENT];
-    const int rank_left = geom->seeds.rank[MOTION_SEED_PARENT_LEFT];
-    const int rank_right = geom->seeds.rank[MOTION_SEED_PARENT_RIGHT];
-    const int rank_up = geom->seeds.rank[MOTION_SEED_PARENT_UP];
-    const int rank_down = geom->seeds.rank[MOTION_SEED_PARENT_DOWN];
+    const int rank_x = geom->seeds.rank[MOTION_SEED_PARENT_X];
+    const int rank_y = geom->seeds.rank[MOTION_SEED_PARENT_Y];
     ident_t parent = NULL_IDENT;
     if (has_parent) {
         parent = sh_desc(sh, (struct pl_shader_desc) {
@@ -1109,14 +1103,14 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         @if (has_parent) {                                                      \
             if (i == ${const int: rank_parent})                                 \
                 return parent_seed(blk);                                        \
-            if (i == ${const int: rank_left})                                   \
-                return parent_seed(blk + ivec2(-1, 0));                         \
-            if (i == ${const int: rank_right})                                  \
-                return parent_seed(blk + ivec2(1, 0));                          \
-            if (i == ${const int: rank_up})                                     \
-                return parent_seed(blk + ivec2(0, -1));                         \
-            if (i == ${const int: rank_down})                                   \
-                return parent_seed(blk + ivec2(0, 1));                          \
+            /* The adjacent block towards the centre of the parent has the same \
+             * parent, so only the one on the opposite side has a different one \
+             * to seed with. */                                                 \
+            ivec2 side = 2 * (blk & 1) - 1;                                     \
+            if (i == ${const int: rank_x})                                      \
+                return parent_seed(blk + ivec2(side.x, 0));                     \
+            if (i == ${const int: rank_y})                                      \
+                return parent_seed(blk + ivec2(0, side.y));                     \
         @}                                                                      \
         @if (has_prior) {                                                       \
             if (i == ${const int: rank_prior})                                  \
