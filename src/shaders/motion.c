@@ -88,8 +88,7 @@ struct sh_motion_obj {
     struct {
         tex_pyramid_t levels; // luma pyramid of this call's frame `b`
         tex_pyramid_t raw;    // per-level search output
-        tex_pyramid_t filtered; // per-level search output after median
-                                // filtering
+        tex_pyramid_t filtered; // per-level search output after smoothing
     } scratch;
 
     struct pl_motion_estimate_params params;
@@ -1295,9 +1294,9 @@ error:
     return false;
 }
 
-// Replace all block's motion vectors with the component-wise median of the
-// surrounding 3x3 neighbourhood of blocks.
-static bool motion_median_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
+// Replace every block's motion vector with one derived from the surrounding 3x3
+// neighbourhood of blocks, to suppress vectors that the search got wrong.
+static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
                                pl_tex out)
 {
     const int grid_w = out->params.w, grid_h = out->params.h;
@@ -1306,14 +1305,14 @@ static bool motion_median_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     int bh = MOTION_MEDIAN_WORKGROUP_DIM;
 
     pl_shader sh = pl_dispatch_begin(dispatch);
-    sh_describef(sh, "motion vector median filter (3x3, %dx%d blocks)", grid_w,
+    sh_describef(sh, "motion vector smoothing (3x3, %dx%d blocks)", grid_w,
                  grid_h);
     sh->output = PL_SHADER_SIG_NONE;
 
     if (!sh_try_compute(sh, bw, bh, false, 0)) {
         PL_ERR(gpu,
-               "pl_motion_estimate: cannot create motion vector median shader, "
-               "needs %dx%d threads per work group!",
+               "pl_motion_estimate: cannot create motion vector smoothing "
+               "shader, needs %dx%d threads per work group!",
                bw, bh);
         goto error;
     }
@@ -1322,7 +1321,7 @@ static bool motion_median_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     ident_t dst = bind_img(sh, "flow_out", out);
 
     // clang-format off
-#pragma GLSLH /* motion_median_pass */                                          \
+#pragma GLSLH /* motion_smooth_pass */                                          \
     /* Branchless, element-wise comparator to use in the sorting network. */    \
     void sort2(inout vec2 a, inout vec2 b) {                                    \
         vec2 lo = min(a, b);                                                    \
@@ -1347,7 +1346,7 @@ static bool motion_median_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     // clang-format on
 
     // clang-format off
-#pragma GLSL /* motion_median_pass */                                           \
+#pragma GLSL /* motion_smooth_pass */                                           \
     ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
     ivec2 blk  = ivec2(gl_GlobalInvocationID.xy);                               \
     if (all(lessThan(blk, grid))) {                                             \
@@ -1760,7 +1759,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
             // Use the parent motion search to seed this levels search, for
             // all levels but the coarsest. The parent is the motion field
-            // after median filtering is ran.
+            // after smoothing.
             pl_tex parent =
                 i < levels - 1 ? obj->scratch.filtered.elem[i + 1] : NULL;
 
@@ -1791,7 +1790,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (!ok)
                 break;
 
-            ok = motion_median_pass(gpu, input->dispatch, raw, out);
+            ok = motion_smooth_pass(gpu, input->dispatch, raw, out);
             if (!ok)
                 break;
         }
