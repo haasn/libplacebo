@@ -1370,13 +1370,16 @@ static bool motion_median_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     }
     // clang-format on
 
-    return pl_dispatch_compute(
-        dispatch, pl_dispatch_compute_params(.shader = &sh,
-                                             .dispatch_size = {
-                                                 PL_DIV_UP(grid_w, bw),
-                                                 PL_DIV_UP(grid_h, bh),
-                                                 1,
-                                             }, ));
+    const struct pl_dispatch_compute_params *params = pl_dispatch_compute_params(
+        .shader = &sh,
+        .dispatch_size = {
+            PL_DIV_UP(grid_w, bw),
+            PL_DIV_UP(grid_h, bh),
+            1,
+        },
+    );
+
+    return pl_dispatch_compute(dispatch, params);
 
 error:
     pl_dispatch_abort(dispatch, &sh);
@@ -1502,13 +1505,16 @@ static bool motion_global_hist_pass(pl_gpu gpu, pl_dispatch dispatch,
     }
     // clang-format on
 
-    return pl_dispatch_compute(
-        dispatch, pl_dispatch_compute_params(.shader = &sh,
-                                             .dispatch_size = {
-                                                 PL_DIV_UP(grid_w, dim),
-                                                 PL_DIV_UP(grid_h, dim),
-                                                 1,
-                                             }, ));
+    const struct pl_dispatch_compute_params *params = pl_dispatch_compute_params(
+        .shader = &sh,
+        .dispatch_size = {
+            PL_DIV_UP(grid_w, dim),
+            PL_DIV_UP(grid_h, dim),
+            1,
+        },
+    );
+
+    return pl_dispatch_compute(dispatch, params);
 
 error:
     pl_dispatch_abort(dispatch, &sh);
@@ -1598,9 +1604,12 @@ static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
     }
     // clang-format on
 
-    return pl_dispatch_compute(
-        dispatch, pl_dispatch_compute_params(.shader = &sh,
-                                             .dispatch_size = { 1, 1, 1 }, ));
+    const struct pl_dispatch_compute_params *params = pl_dispatch_compute_params(
+        .dispatch_size = { 1, 1, 1 },
+        .shader = &sh,
+    );
+
+    return pl_dispatch_compute(dispatch, params);
 
 error:
     pl_dispatch_abort(dispatch, &sh);
@@ -1809,16 +1818,17 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (!ok)
                 break;
 
-            ok = motion_search_pass(gpu, input->dispatch,
-                                    &(struct motion_search) {
-                                        .ref = fwd ? a : b,
-                                        .tgt = fwd ? b : a,
-                                        .parent = parent,
-                                        .prior = prior,
-                                        .out_mv = raw,
-                                        .geom = &geom,
-                                        .cand_lut = &obj->cand_lut[coarsest],
-                                    });
+            const struct motion_search search = {
+                .cand_lut = &obj->cand_lut[coarsest],
+                .ref    = fwd ? a : b,
+                .tgt    = fwd ? b : a,
+                .parent = parent,
+                .prior  = prior,
+                .out_mv = raw,
+                .geom   = &geom,
+            };
+
+            ok = motion_search_pass(gpu, input->dispatch, &search);
             if (!ok)
                 break;
 
