@@ -218,6 +218,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
             limits->max_mapped_size = limits->max_buf_size;
             limits->max_mapped_vram = limits->max_buf_size;
             limits->host_cached = strcmp(vendor, "AMD") == 0 ||
+                                  strcmp(vendor, "ATI Technologies Inc.") == 0 ||
                                   strcmp(vendor, "NVIDIA Corporation") == 0;
         }
     }
