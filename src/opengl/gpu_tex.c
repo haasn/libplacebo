@@ -616,6 +616,35 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
     return true;
 }
 
+static pl_fmt gl_fb_format(pl_gpu gpu, const struct pl_fmt_t *fb_fmt,
+                           const struct gl_format *fb_glfmt)
+{
+    struct pl_gl *p = PL_PRIV(gpu);
+    for (int i = 0; i < p->fb_formats.num; i++) {
+        pl_fmt fmt = p->fb_formats.elem[i];
+        if (fmt->type == fb_fmt->type && fmt->caps == fb_fmt->caps &&
+            fmt->opaque == fb_fmt->opaque &&
+            fmt->num_components == fb_fmt->num_components &&
+            fmt->internal_size == fb_fmt->internal_size &&
+            fmt->texel_size == fb_fmt->texel_size &&
+            !memcmp(fmt->component_depth, fb_fmt->component_depth,
+                    sizeof(fmt->component_depth)) &&
+            !memcmp(fmt->host_bits, fb_fmt->host_bits, sizeof(fmt->host_bits)))
+        {
+            return fmt;
+        }
+    }
+
+    struct pl_fmt_t *fmt = pl_alloc_obj((void *) gpu, fmt, const struct gl_format *);
+    struct gl_format *glfmt = pl_alloc_ptr(fmt, glfmt);
+    const struct gl_format **glfmtp = PL_PRIV(fmt);
+    *fmt = *fb_fmt;
+    *glfmt = *fb_glfmt;
+    *glfmtp = glfmt;
+    PL_ARRAY_APPEND((void *) gpu, p->fb_formats, fmt);
+    return fmt;
+}
+
 pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
 {
     const gl_funcs *gl = gl_funcs_get(gpu);
@@ -654,19 +683,17 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
             goto error;
         }
     } else {
-        // Wrapping framebuffer: Allocate/infer generic FBO format
-        fmt = pl_alloc_obj((void *) gpu, fmt, const struct gl_format *);
-        glfmt = pl_alloc_ptr((void *) fmt, glfmt);
-        const struct gl_format **glfmtp = PL_PRIV(fmt);
-        *glfmtp = glfmt;
-        if (!gl_fb_query(gpu, params->framebuffer,
-                         (struct pl_fmt_t *) fmt,
-                         (struct gl_format *) glfmt))
-        {
+        // Wrapping framebuffer: Infer generic FBO format
+        struct pl_fmt_t fb_fmt;
+        struct gl_format fb_glfmt;
+        if (!gl_fb_query(gpu, params->framebuffer, &fb_fmt, &fb_glfmt)) {
             PL_ERR(gpu, "Failed querying framebuffer specifics!");
-            pl_free((void *) fmt);
             goto error;
         }
+
+        fmt = gl_fb_format(gpu, &fb_fmt, &fb_glfmt);
+        const struct gl_format **glfmtp = PL_PRIV(fmt);
+        glfmt = *glfmtp;
     }
 
     *tex_gl = (struct pl_tex_gl) {

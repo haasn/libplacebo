@@ -44,6 +44,9 @@ struct pl_gl {
     // Sync objects and associated callbacks
     PL_ARRAY(struct gl_cb) callbacks;
 
+    // Formats of wrapped framebuffers
+    PL_ARRAY(pl_fmt) fb_formats;
+
 
     // Incrementing counters to keep track of object uniqueness
     int buf_id;
