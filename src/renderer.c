@@ -4694,7 +4694,22 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
                 clear[c] = mult * encoded[plane->component_mapping[c]];
         }
 
-        pl_tex_clear(gpu, plane->texture, clear);
+        if (plane->texture->params.blit_dst) {
+            pl_tex_clear(gpu, plane->texture, clear);
+            continue;
+        }
+
+        pl_dispatch dp = pl_gpu_dispatch(gpu);
+        pl_shader sh = pl_dispatch_begin(dp);
+        sh->output = PL_SHADER_SIG_COLOR;
+#pragma GLSL /* pl_frame_clear_rgba */                                  \
+        vec4 color = vec4(${float: clear[0]}, ${float: clear[1]},       \
+                          ${float: clear[2]}, ${float: clear[3]});
+
+        pl_dispatch_finish(dp, pl_dispatch_params(
+            .shader = &sh,
+            .target = plane->texture,
+        ));
     }
 }
 
