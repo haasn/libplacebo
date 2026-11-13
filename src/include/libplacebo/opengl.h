@@ -150,6 +150,12 @@ struct pl_opengl_swapchain_params {
     // even 1 can reduce latency (at the cost of throughput).
     int max_swapchain_depth;
 
+    // Called when the output colorspace changes. The implementation should
+    // recreate its surface with the given EGL surface attributes, terminated
+    // by EGL_NONE (or NULL for the default), and make it current. Return
+    // false on failure. Optional, EGL only.
+    bool (*recreate_surface)(void *priv, const int32_t *attribs);
+
     // Arbitrary user pointer that gets passed to `swap_buffers` etc.
     void *priv;
 };
