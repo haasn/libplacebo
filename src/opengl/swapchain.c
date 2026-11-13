@@ -22,6 +22,8 @@
 #include "utils.h"
 #include "pl_thread.h"
 
+#include <math.h>
+
 struct priv {
     struct pl_sw_fns impl;
 
@@ -33,6 +35,11 @@ struct priv {
     // current parameters
     pl_tex fb;
     bool frame_started;
+
+    // applied colorspace
+    struct pl_color_space csp;
+    // last requested EGL colorspace, including failed attempts
+    EGLint colorspace;
 
     // vsync fences
     int swapchain_depth;
@@ -64,6 +71,8 @@ pl_swapchain pl_opengl_create_swapchain(pl_opengl pl_gl,
     p->params = *params;
     p->has_sync = pl_opengl_has_ext(pl_gl, "GL_ARB_sync");
     p->gl = pl_gl;
+    p->csp = pl_color_space_srgb;
+    p->colorspace = EGL_NONE;
 
     gl_release_current(pl_gl);
     return sw;
@@ -153,6 +162,106 @@ void pl_opengl_swapchain_update_fb(pl_swapchain sw,
     pl_mutex_unlock(&p->lock);
 }
 
+static const int32_t *surface_attribs(enum pl_color_transfer trc,
+                                      EGLint *colorspace)
+{
+    static const int32_t pq[] = {
+        EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_BT2020_PQ_EXT, EGL_NONE,
+    };
+    static const int32_t hlg[] = {
+        EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_BT2020_HLG_EXT, EGL_NONE,
+    };
+
+    switch (trc) {
+    case PL_COLOR_TRC_PQ:
+        *colorspace = EGL_GL_COLORSPACE_BT2020_PQ_EXT;
+        return pq;
+    case PL_COLOR_TRC_HLG:
+        *colorspace = EGL_GL_COLORSPACE_BT2020_HLG_EXT;
+        return hlg;
+    default:
+        *colorspace = EGL_GL_COLORSPACE_LINEAR;
+        return NULL;
+    }
+}
+
+static void set_hdr_metadata(pl_swapchain sw, const struct pl_color_space *csp)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct pl_gl *gl = PL_PRIV(sw->gpu);
+    if (!gl->egl_dpy || !gl_make_current(p->gl))
+        return;
+
+    const struct pl_raw_primaries prim = csp->hdr.prim;
+    EGLSurface surf = eglGetCurrentSurface(EGL_DRAW);
+    if (surf == EGL_NO_SURFACE || !pl_primaries_valid(&prim))
+        goto done;
+
+    const EGLDisplay dpy = gl->egl_dpy;
+    const int scale = EGL_METADATA_SCALING_EXT;
+
+    if (pl_opengl_has_ext(p->gl, "EGL_EXT_surface_SMPTE2086_metadata")) {
+        const struct { EGLint attribute; float value; } smpte2086[] = {
+            { EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT, prim.red.x },
+            { EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT, prim.red.y },
+            { EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT, prim.green.x },
+            { EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT, prim.green.y },
+            { EGL_SMPTE2086_DISPLAY_PRIMARY_BX_EXT, prim.blue.x },
+            { EGL_SMPTE2086_DISPLAY_PRIMARY_BY_EXT, prim.blue.y },
+            { EGL_SMPTE2086_WHITE_POINT_X_EXT, prim.white.x },
+            { EGL_SMPTE2086_WHITE_POINT_Y_EXT, prim.white.y },
+            { EGL_SMPTE2086_MAX_LUMINANCE_EXT, csp->hdr.max_luma },
+            { EGL_SMPTE2086_MIN_LUMINANCE_EXT, csp->hdr.min_luma },
+        };
+
+        for (int i = 0; i < PL_ARRAY_SIZE(smpte2086); i++) {
+            eglSurfaceAttrib(dpy, surf, smpte2086[i].attribute,
+                             lroundf(smpte2086[i].value * scale));
+        }
+    }
+
+    if (pl_opengl_has_ext(p->gl, "EGL_EXT_surface_CTA861_3_metadata")) {
+        eglSurfaceAttrib(dpy, surf, EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT,
+                         lroundf(csp->hdr.max_cll * scale));
+        eglSurfaceAttrib(dpy, surf, EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT,
+                         lroundf(csp->hdr.max_fall * scale));
+    }
+
+done:
+    gl_release_current(p->gl);
+}
+
+static void gl_sw_colorspace_hint(pl_swapchain sw, const struct pl_color_space *csp)
+{
+    struct priv *p = PL_PRIV(sw);
+
+    if (!p->params.recreate_surface) {
+        p->csp = pl_color_space_srgb;
+        return;
+    }
+
+    EGLint colorspace;
+    const int32_t *attribs = surface_attribs(csp->transfer, &colorspace);
+
+    pl_mutex_lock(&p->lock);
+
+    bool recreate = colorspace != p->colorspace;
+    bool ok = true;
+    if (recreate) {
+        ok = p->params.recreate_surface(p->params.priv, attribs);
+        p->colorspace = colorspace;
+    }
+
+    if (!ok || colorspace == EGL_GL_COLORSPACE_LINEAR) {
+        p->csp = pl_color_space_srgb;
+    } else if (recreate || !pl_color_space_equal(&p->csp, csp)) {
+        p->csp = *csp;
+        set_hdr_metadata(sw, csp);
+    }
+
+    pl_mutex_unlock(&p->lock);
+}
+
 static bool gl_sw_start_frame(pl_swapchain sw,
                               struct pl_swapchain_frame *out_frame)
 {
@@ -193,7 +302,7 @@ static bool gl_sw_start_frame(pl_swapchain sw,
                 .color_depth = p->fb->params.format->component_depth[0],
             },
         },
-        .color_space = pl_color_space_monitor,
+        .color_space = p->csp,
     };
 
     p->frame_started = gl_check_err(sw->gpu, "gl_sw_start_frame");
@@ -272,6 +381,7 @@ static const struct pl_sw_fns opengl_swapchain = {
     .destroy      = gl_sw_destroy,
     .latency      = gl_sw_latency,
     .resize       = gl_sw_resize,
+    .colorspace_hint = gl_sw_colorspace_hint,
     .start_frame  = gl_sw_start_frame,
     .submit_frame = gl_sw_submit_frame,
     .swap_buffers = gl_sw_swap_buffers,
