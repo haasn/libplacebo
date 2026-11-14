@@ -69,6 +69,7 @@ struct sh_motion_obj {
     // the next motion estimation search.
     struct {
         pl_tex_pyramid field[NUM_DIRS]; // indexed by dir_index()
+        pl_tex_pyramid fine[NUM_DIRS];  // likewise, see refine_plan()
         enum pl_motion_direction valid; // directions actually computed
     } flow;
 
@@ -236,6 +237,9 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // blocks of the default 3x3 search are 63 threads, which is one wave on AMD.
 #define MOTION_BPGX 1
 #define MOTION_BPGY 7
+
+// Maximum number of subblock refinement passes, see refine_plan().
+#define MOTION_MAX_REFINE_PASSES 1
 
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
@@ -501,6 +505,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
     pl_pyramid_destroy(gpu, &obj->scratch.filtered);
     for (int i = 0; i < NUM_DIRS; i++) {
         pl_pyramid_destroy(gpu, &obj->flow.field[i]);
+        pl_pyramid_destroy(gpu, &obj->flow.fine[i]);
         pl_buf_destroy(gpu, &obj->global.buf[i]);
     }
     pl_buf_destroy(gpu, &obj->global.hist);
@@ -556,7 +561,8 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
     if (!obj || d < 0 || !(obj->flow.valid & dir))
         return NULL;
 
-    return obj->flow.field[d].elem[0];
+    const pl_tex_pyramid *fine = &obj->flow.fine[d];
+    return fine->num ? fine->elem[0] : obj->flow.field[d].elem[0];
 }
 
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
@@ -1301,6 +1307,158 @@ error:
     return false;
 }
 
+// Writes a vector for every 4x4 sub-block of `out`: of the vectors of the 3x3
+// blocks around it in `blocks` (of `bs` pixels squared), the one that best
+// matches the sub-block and a border of one pixel around it. The vector of the
+// sub-block's own block is preferred by a margin of one code value (8 bit).
+static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
+                                   pl_tex ref, pl_tex tgt, pl_tex blocks,
+                                   pl_tex out)
+{
+    const int w = ref->params.w, h = ref->params.h;
+    const int grid_w = blocks->params.w, grid_h = blocks->params.h;
+    const int sub_w = out->params.w, sub_h = out->params.h;
+    const int sub = 4, win = sub + 2;
+
+    pl_shader sh = pass_begin(gpu, dispatch, 8, 8, 0,
+                              "motion vector refinement (4x4, %dx%d)", sub_w,
+                              sub_h);
+    if (!sh)
+        return false;
+
+    ident_t src = bind_tex(sh, "blocks", blocks);
+    ident_t dst = bind_img(sh, "sub_out", out);
+    ident_t ref_id = bind_tex(sh, "ref", ref);
+    ident_t tgt_id = bind_tex(sh, "tgt", tgt);
+    ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, ref_id,
+                                           &ref->params);
+    ident_t block_ssd = sh_block_ssd(sh, win, win, 0, tgt_id, &tgt->params);
+
+    // clang-format off
+#pragma GLSL /* motion_refine_4x4_pass */                                       \
+    ivec2 size = ivec2(${const int: w}, ${const int: h});                       \
+    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
+    ivec2 sb = ivec2(gl_GlobalInvocationID.xy);                                 \
+    if (all(lessThan(sb, ivec2(${const int: sub_w}, ${const int: sub_h})))) {   \
+        /* Origin of the sub-block in the frame, and the block its centre is    \
+         * in. */                                                               \
+        ivec2 org = sb * ${const int: sub};                                     \
+        ivec2 blk = min(org + ${const int: sub / 2}, size - 1)                  \
+                  / ${const int: bs};                                           \
+        float ref_px[${const int: win * win}];                                  \
+        $load_block(org - 1, ref_px);                                           \
+                                                                                \
+        /* The own block first, then its neighbours. */                         \
+        const ivec2 cand[9] = ivec2[9](ivec2(0, 0),                             \
+            ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1), ivec2(-1, 0),            \
+            ivec2(1, 0), ivec2(-1, 1), ivec2(0, 1), ivec2(1, 1));               \
+                                                                                \
+        /* Costs are mean squared errors over the window, times 255. */         \
+        const float margin = ${const float: 1.0f / 255.0f};                     \
+        const float scale = ${const float: 255.0f / (win * win)};               \
+        vec2 best = vec2(0.0), own = vec2(0.0), last = vec2(0.0);               \
+        float best_cost = 1e9;                                                  \
+        for (int k = 0; k < 9; k++) {                                           \
+            /* The others pay the margin: none can beat what is within it. */   \
+            if (k > 0 && best_cost <= margin)                                   \
+                break;                                                          \
+                                                                                \
+            ivec2 p = clamp(blk + cand[k], ivec2(0), grid - 1);                 \
+            vec2 mv = texelFetch($src, p, 0).xy;                                \
+                                                                                \
+            /* Most candidates repeat the own, the previous or the best one. */ \
+            vec2 d0 = mv - own, d1 = mv - last, d2 = mv - best;                 \
+            if (k > 0 && (dot(d0, d0) < 0.01 || dot(d1, d1) < 0.01 ||           \
+                          dot(d2, d2) < 0.01))                                  \
+                continue;                                                       \
+            if (k == 0)                                                         \
+                own = mv;                                                       \
+            last = mv;                                                          \
+                                                                                \
+            /* A candidate is dropped as soon as it has lost. */                \
+            float pay = k == 0 ? 0.0 : margin;                                  \
+            float limit = (best_cost - pay) / scale;                            \
+            float cost = pay + scale * $block_ssd(ref_px, vec2(org - 1) + mv,   \
+                                                  1.0, limit);                  \
+            if (cost < best_cost) {                                             \
+                best_cost = cost;                                               \
+                best = mv;                                                      \
+            }                                                                   \
+        }                                                                       \
+        imageStore($dst, sb, vec4(best, 0.0, 0.0));                             \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = sub_w,
+        .height = sub_h,
+    ));
+}
+
+// Returns the number of refine passes needed, and the block size of each
+static int refine_plan(const struct pl_motion_estimate_params *params,
+                       int plan[MOTION_MAX_REFINE_PASSES])
+{
+    int num = 0;
+    if (params->block_size_fine <= 4 && params->block_size_coarse > 4)
+        plan[num++] = 4;
+    pl_static_assert(MOTION_MAX_REFINE_PASSES >= 1);
+    pl_assert(num <= MOTION_MAX_REFINE_PASSES);
+    return num;
+}
+
+// Allocate or resize `pyramid` to hold a field for each of the `num` block
+// sizes of `sizes`, at the same index, for frames of `w` x `h`.
+static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
+                                    pl_tex_pyramid *pyramid, int w, int h,
+                                    const int sizes[], int num, pl_fmt fmt)
+{
+    pl_pyramid_resize(gpu, alloc, pyramid, num);
+    for (int i = 0; i < num; i++) {
+        const int fw = PL_DIV_UP(w, sizes[i]);
+        const int fh = PL_DIV_UP(h, sizes[i]);
+        bool ok = pl_tex_recreate(gpu, &pyramid->elem[i], pl_tex_params(
+            .w          = fw,
+            .h          = fh,
+            .format     = fmt,
+            .sampleable = true,
+            .storable   = true,
+        ));
+        if (!ok) {
+            PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d refined "
+                        "flow field!", fw, fh);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Refines `blocks`, of `bs` pixels squared, into the levels of `fine`, of the
+// block sizes of `sizes`, from the coarsest.
+static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, const int sizes[],
+                        pl_tex_pyramid *fine, int bs, pl_tex ref, pl_tex tgt,
+                        pl_tex blocks)
+{
+    pl_tex in = blocks;
+    for (int i = fine->num - 1; i >= 0; i--) {
+        bool ok = false;
+        switch (sizes[i]) {
+        case 4:
+            ok = motion_refine_4x4_pass(gpu, dispatch, bs, ref, tgt, in,
+                                        fine->elem[i]);
+            break;
+        }
+        if (!ok)
+            return false;
+        in = fine->elem[i];
+        bs = sizes[i];
+    }
+
+    return true;
+}
+
 // Two contiguous histograms describing the global motion in the frame.
 // One histogram for each component of the motion vector (x,y).
 static const struct pl_buffer_var global_hist_var = {
@@ -1607,6 +1765,15 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                              flow_params))
         goto error;
 
+    int refine[MOTION_MAX_REFINE_PASSES];
+    const int num_refine = refine_plan(params, refine);
+    for (int d = 0; d < NUM_DIRS; d++) {
+        if ((input->direction & (1 << d)) &&
+            !refine_pyramid_recreate(gpu, obj, &obj->flow.fine[d], w, h,
+                                     refine, num_refine, mv_fmt))
+            goto error;
+    }
+
     // Upon cold start or after reset, build the image pyramid for frame `a`,
     // use cached pyramid otherwise.
     if (!obj->pyramid_valid) {
@@ -1713,6 +1880,18 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
         if (!ok)
             break;
+
+        if (num_refine) {
+            pl_tex luma[2] = {
+                obj->pyramid_prev.elem[0],
+                obj->scratch.levels.elem[0],
+            };
+            ok = refine_flow(gpu, input->dispatch, refine, &obj->flow.fine[d],
+                             params->block_size_coarse, luma[d], luma[!d],
+                             obj->scratch.filtered.elem[0]);
+            if (!ok)
+                break;
+        }
 
         // NOTE: we assume that the prior forward motion field is safe to be
         // overwritten by the backward motion search.
