@@ -282,6 +282,7 @@ PL_API extern const struct pl_filter_config pl_filter_ginseng;     // sinc-jinc
 PL_API extern const struct pl_filter_config pl_filter_ewa_jinc;    // unwindowed
 PL_API extern const struct pl_filter_config pl_filter_ewa_lanczos; // jinc-jinc
 PL_API extern const struct pl_filter_config pl_filter_ewa_lanczossharp;
+PL_API extern const struct pl_filter_config pl_filter_ewa_lanczosradius;
 PL_API extern const struct pl_filter_config pl_filter_ewa_lanczos4sharpest;
 PL_API extern const struct pl_filter_config pl_filter_ewa_ginseng; // jinc-sinc
 PL_API extern const struct pl_filter_config pl_filter_ewa_hann;    // jinc-hann
