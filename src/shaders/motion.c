@@ -473,7 +473,7 @@ static int pyramid_num_levels(int w, int h,
                               const struct pl_motion_estimate_params *params)
 {
     if (!params->pyramid_levels)
-        return levels_auto(w, h, params->block_size);
+        return levels_auto(w, h, params->block_size_coarse);
 
     return PL_MIN(params->pyramid_levels, pl_pyramid_max_levels(w, h));
 }
@@ -529,7 +529,7 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
 int pl_motion_num_blocks(int w, int h,
                          const struct pl_motion_estimate_params *params)
 {
-    const int bs = params->block_size;
+    const int bs = params->block_size_coarse;
     if (w <= 0 || h <= 0 || bs <= 0)
         return 0;
 
@@ -664,7 +664,8 @@ bool pl_motion_get_global(pl_shader_obj state, enum pl_motion_direction dir,
 static bool params_eq(const struct pl_motion_estimate_params *a,
                       const struct pl_motion_estimate_params *b)
 {
-    return a->block_size == b->block_size &&
+    return a->block_size_coarse == b->block_size_coarse &&
+           a->block_size_fine == b->block_size_fine &&
            a->pyramid_levels == b->pyramid_levels &&
            a->search_radius_coarse == b->search_radius_coarse &&
            a->search_radius_fine == b->search_radius_fine;
@@ -709,18 +710,26 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
         return false;
     }
 
-    if (params->block_size < 1) {
-        PL_ERR(gpu, "pl_motion_estimate: block_size must be positive!");
+    if (params->block_size_coarse < 1) {
+        PL_ERR(gpu, "pl_motion_estimate: block_size_coarse must be positive!");
         return false;
     }
 
-    if (params->block_size > 64) {
-        PL_ERR(gpu, "pl_motion_estimate: block_size must be <= 64!");
+    if (params->block_size_coarse > 64) {
+        PL_ERR(gpu, "pl_motion_estimate: block_size_coarse must be <= 64!");
         return false;
     }
 
-    if (params->block_size % 2) {
-        PL_ERR(gpu, "pl_motion_estimate: block_size must be even!");
+    if (params->block_size_coarse % 2) {
+        PL_ERR(gpu, "pl_motion_estimate: block_size_coarse must be even!");
+        return false;
+    }
+
+    if (params->block_size_fine < 1 ||
+        params->block_size_fine > params->block_size_coarse)
+    {
+        PL_ERR(gpu, "pl_motion_estimate: block_size_fine must be in "
+               "[1, block_size_coarse]!");
         return false;
     }
 
@@ -1552,8 +1561,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     // The search covers the trailing partial blocks as well, hence ceiling
     // division.
-    obj->grid_w = PL_DIV_UP(w, params->block_size);
-    obj->grid_h = PL_DIV_UP(h, params->block_size);
+    obj->grid_w = PL_DIV_UP(w, params->block_size_coarse);
+    obj->grid_h = PL_DIV_UP(h, params->block_size_coarse);
 
     pl_fmt mv_fmt = flow_fmt(gpu);
     if (!mv_fmt) {
@@ -1674,7 +1683,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             pl_tex prior = has_prior ? prior_field->elem[i] : NULL;
 
             struct motion_geometry geom;
-            ok = motion_plan(gpu, tmp, params->block_size, radius,
+            ok = motion_plan(gpu, tmp, params->block_size_coarse, radius,
                              motion_seeds_plan(parent != NULL, prior != NULL),
                              i == 0, out->params.w, out->params.h, &geom);
             if (!ok)
@@ -1695,8 +1704,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (!ok)
                 break;
 
-            ok = motion_smooth_pass(gpu, input->dispatch, params->block_size,
-                                    luma[d], luma[!d], raw, out);
+            ok = motion_smooth_pass(gpu, input->dispatch,
+                                    params->block_size_coarse, luma[d],
+                                    luma[!d], raw, out);
             if (!ok)
                 break;
         }
@@ -1919,12 +1929,16 @@ bool pl_shader_frame_interp(pl_shader sh,
     if (!input || !input->state)
         return false;
 
+    struct pl_motion_estimate_params me_params = params->motion;
     enum pl_motion_direction me_dir;
     bool me_global = false;
     switch (params->algo) {
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         me_dir = PL_MOTION_FORWARD;
         me_global = true;
+        // The global motion is estimated from the blocks, refining the
+        // fields would be wasted
+        me_params.block_size_fine = me_params.block_size_coarse;
         break;
     case PL_FRAME_INTERP_VISUALIZE:
         me_dir = PL_MOTION_FORWARD;
@@ -1945,7 +1959,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         .direction = me_dir,
         .estimate_global = me_global,
         .state     = input->state,
-    ), &params->motion);
+    ), &me_params);
     if (!ok)
         return false;
 

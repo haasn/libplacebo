@@ -41,11 +41,17 @@ enum pl_motion_direction {
 struct pl_motion_estimate_params {
     // Side length, in pixels, of the square blocks the search operates on.
     // Must be even. Smaller blocks track finer detail at a superlinear cost.
-    int block_size;
+    int block_size_coarse;
+
+    // Side length, in pixels, of the squares that the final flow fields may
+    // be refined to. Must be in the range [1, block_size_coarse]. This is a
+    // hint; the actual resolution of the flow field may be coarser than this,
+    // depending on implementation details.
+    int block_size_fine;
 
     // Number of levels in the coarse-to-fine pyramid, including the full
     // resolution level. 0 picks a value from the input resolution and
-    // `block_size`.
+    // `block_size_coarse`.
     int pyramid_levels;
 
     // Search radius in pixels. `coarse` applies to only the coarsest level of
@@ -57,8 +63,8 @@ struct pl_motion_estimate_params {
 };
 
 #define PL_MOTION_ESTIMATE_DEFAULTS                                            \
-    .block_size = 8, .pyramid_levels = 0, .search_radius_coarse = 4,           \
-    .search_radius_fine = 1,
+    .block_size_coarse = 8, .block_size_fine = 1, .pyramid_levels = 0,         \
+    .search_radius_coarse = 4, .search_radius_fine = 1,
 
 #define pl_motion_estimate_params(...)                                         \
     (&(struct pl_motion_estimate_params) {                                     \
@@ -69,7 +75,7 @@ PL_API extern const struct pl_motion_estimate_params
 
 // Returns the number of blocks `pl_motion_estimate` searches at full
 // resolution, for frames of dimensions `w` x `h`. Returns 0 if the dimensions
-// or `params->block_size` are not positive.
+// or `params->block_size_coarse` are not positive.
 PL_API int pl_motion_num_blocks(int w, int h,
                                 const struct pl_motion_estimate_params *params);
 
@@ -153,9 +159,9 @@ PL_API void pl_motion_reset(pl_shader_obj state);
 //  - The field's own dimensions are unspecified and should be sampled with
 //    normalized coordinates (motion estimate may be in block granularity).
 //
-// `tex->params` provides the exact dimensions and formats. `params.w` and
-// `params.h` are typically smaller than the source frame dimensions because
-// motion is estimated at a block granularity.
+// `tex->params` provides the exact dimensions and formats. The granularity
+// of the flow field is guaranteed to lie somewhere in the range
+// [block_size_fine, block_size_coarse].
 //
 // Each texel holds `vec2(mv.x, mv.y)` in its first two components, in a
 // floating point format. `mv.x` and `mv.y` may be fractional. Any further

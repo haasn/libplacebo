@@ -471,7 +471,8 @@ static void bench_motion_block4(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state
 {
     run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
                    PL_MOTION_FORWARD, false,
-                   pl_motion_estimate_params( .block_size = 4 ));
+                   pl_motion_estimate_params( .block_size_coarse = 4,
+                                              .block_size_fine = 4 ));
 }
 
 static void bench_motion_global(pl_gpu gpu, pl_dispatch dp,
