@@ -477,19 +477,18 @@ static int pyramid_num_levels(int w, int h,
     return PL_MIN(params->pyramid_levels, pl_pyramid_max_levels(w, h));
 }
 
-// Format for motion vector fields, holding `vec3(mv.x, mv.y, confidence)`,
-// with an empty fourth element for padding. Prefer 16 bit floats but fall back
-// to 32 bits.
+// Format for motion vector fields, holding `vec2(mv.x, mv.y)`. Prefer 16 bit
+// floats but fall back to 32 bits.
 static pl_fmt flow_fmt(pl_gpu gpu)
 {
     static const enum pl_fmt_caps caps = PL_FMT_CAP_STORABLE |
                                          PL_FMT_CAP_LINEAR;
 
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 0, caps);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 2, 16, 0, caps);
     if (fmt)
         return fmt;
 
-    return pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 32, 0, caps);
+    return pl_find_fmt(gpu, PL_FMT_FLOAT, 2, 32, 0, caps);
 }
 
 static void motion_uninit(pl_gpu gpu, void *ptr)
@@ -1172,7 +1171,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
             vec2 off = 0.5 * (prev - next) / max(curv, vec2(1.0));              \
             mv += clamp(off, vec2(-0.5), vec2(0.5));                            \
         @}                                                                      \
-        imageStore($out, blk, vec4(mv, 1.0, 0.0));                              \
+        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
     }
     // clang-format on
 
@@ -1278,8 +1277,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
             }                                                                   \
         }                                                                       \
                                                                                 \
-        /* The confidence is always 1. */                                       \
-        imageStore($dst, blk, vec4(best, 1.0, 0.0));                            \
+        imageStore($dst, blk, vec4(best, 0.0, 0.0));                            \
     }
     // clang-format on
 
