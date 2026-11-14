@@ -817,7 +817,6 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int ncand   = PL_SQUARE(2 * r + 1);
     const int nseed = geom->seeds.num;
     const bool subpixel = geom->subpixel;
-    const int parts = PL_MIN(tpb, bs * bs); // threads scoring a block's seeds
 
     // Total size of tile.
     const int ref_w = bpgx * bs, ref_h = bpgy * bs;
@@ -836,6 +835,11 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
                               "%d, %d seed candidates)", bs, bs, r, nseed);
     if (!sh)
         return false;
+
+    // Fetch the luma 2x2 texels at a time: the cost of the search is mostly
+    // that of its texture fetches.
+    const int units = bs * bs / 4; // fetches per block
+    const int parts = PL_MIN(tpb, units); // threads scoring a block's seeds
 
     PL_DEBUG(gpu, "pl_motion_estimate: searching %dx%d -> %dx%d blocks: block "
              "size %d, radius %d, %d candidates, %dx%d block tile, %d threads, "
@@ -865,6 +869,8 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     // Describe the textures for the reference frames and motion vector output.
     ident_t ref = bind_tex(sh, "ref", p->ref);
     ident_t tgt = bind_tex(sh, "tgt", p->tgt);
+    ident_t ref_quad = sh_tex_quad(sh, 0, ref, &p->ref->params);
+    ident_t tgt_quad = sh_tex_quad(sh, 0, tgt, &p->tgt->params);
     ident_t out = bind_img(sh, "out_mv", p->out_mv);
 
     // Bind the flow field of the previous motion search image pyramid level,
@@ -922,9 +928,12 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         /* Cost one pixel before and after the winner of each block, on x and   \
          * then on y. */                                                        \
         shared uint near_cost[${const int: 4 * bpg}];                           \
+        uint luma8b(float x) {                                                  \
+            return uint(round(clamp(x, 0.0, 1.0) * 255.0));                     \
+        }                                                                       \
     @}                                                                          \
-    uint luma8b(float x) {                                                      \
-        return uint(round(clamp(x, 0.0, 1.0) * 255.0));                         \
+    uvec4 luma8b(vec4 x) {                                                      \
+        return uvec4(round(clamp(x, 0.0, 1.0) * 255.0));                        \
     }                                                                           \
                                                                                 \
     @if (has_parent) {                                                          \
@@ -968,6 +977,13 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
             return ivec2(round(mv));                                            \
         }                                                                       \
     @}                                                                          \
+                                                                                \
+    /* Sum of the squared differences between `a` and `b`. */                   \
+    uint sqdiff(uvec4 a, uvec4 b) {                                             \
+        ivec4 d = ivec4(a) - ivec4(b);                                          \
+        d *= d;                                                                 \
+        return uint(d.x + d.y + d.z + d.w);                                     \
+    }                                                                           \
                                                                                 \
     /* Sum of squared differences between reference block `b` and the block     \
      * at `offset` within its search window in shared memory. */                \
@@ -1064,16 +1080,13 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
             sd[i] = seed_candidate(blk, i);                                     \
             part[i] = 0u;                                                       \
         }                                                                       \
-        for (int j = c0; j < ${const int: bs * bs}; j += ${const int: tpb}) {   \
+        for (int j = c0; j < ${const int: units}; j += ${const int: tpb}) {     \
             ivec2 pos = blk * ${const int: bs}                                  \
-                      + ivec2(j % ${const int: bs}, j / ${const int: bs});      \
-            ivec2 ref_pos = clamp(pos, ivec2(0), size - 1);                     \
-            int ref_px = int(luma8b(texelFetch($ref, ref_pos, 0).r));           \
-            for (int i = 0; i < ${const int: nseed}; i++) {                     \
-                ivec2 tgt_pos = clamp(pos + sd[i], ivec2(0), size - 1);         \
-                int diff = ref_px - int(luma8b(texelFetch($tgt, tgt_pos, 0).r));\
-                part[i] += uint(diff * diff);                                   \
-            }                                                                   \
+                      + 2 * ivec2(j % ${const int: bs / 2},                     \
+                                  j / ${const int: bs / 2});                    \
+            uvec4 ref_px = luma8b($ref_quad(pos));                              \
+            for (int i = 0; i < ${const int: nseed}; i++)                       \
+                part[i] += sqdiff(ref_px, luma8b($tgt_quad(pos + sd[i])));      \
         }                                                                       \
         if (c0 < ${const int: parts}) {                                         \
             for (int i = 0; i < ${const int: nseed}; i++)                       \
@@ -1083,14 +1096,17 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
                                                                                 \
     /* Load block from reference image into shared memory. We clamp coordinates \
      * and pad partial blocks that extend past the image boundaries. */         \
-    for (uint i = tid; i < ${const uint: ref_w * ref_h};                        \
+    for (uint i = tid; i < ${const uint: ref_w * ref_h / 4};                    \
          i += ${const uint: threads})                                           \
     {                                                                           \
-        ivec2 elem = ivec2(int(i) % ${const int: ref_w},                        \
-                           int(i) / ${const int: ref_w});                       \
-        ivec2 ref_pos = clamp(tile * ${const int: bs} + elem, ivec2(0),         \
-                              size - 1);                                        \
-        sRef[i] = luma8b(texelFetch($ref, ref_pos, 0).r);                       \
+        ivec2 elem = 2 * ivec2(int(i) % ${const int: ref_w / 2},                \
+                               int(i) / ${const int: ref_w / 2});               \
+        uvec4 px = luma8b($ref_quad(tile * ${const int: bs} + elem));           \
+        int j = elem.y * ${const int: ref_w} + elem.x;                          \
+        sRef[j] = px.x;                                                         \
+        sRef[j + 1] = px.y;                                                     \
+        sRef[j + ${const int: ref_w}] = px.z;                                   \
+        sRef[j + ${const int: ref_w + 1}] = px.w;                               \
     }                                                                           \
                                                                                 \
     /* Pick the seed candidate with the lowest SSD, the first one on ties, to   \
@@ -1111,11 +1127,16 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
      * shared memory. Pad rows of the search window in shared memory to avoid   \
      * bank conflicts. */                                                       \
     ivec2 origin = blk * ${const int: bs} + seed - ${const int: r};             \
-    for (int i = c0; i < ${const int: win * win}; i += ${const int: tpb}) {     \
-        ivec2 elem = ivec2(i % ${const int: win}, i / ${const int: win});       \
-        ivec2 tgt_pos = clamp(origin + elem, ivec2(0), size - 1);               \
-        sTgt[b * ${const int: block_stride} + elem.y * ${const int: win_stride} \
-             + elem.x] = luma8b(texelFetch($tgt, tgt_pos, 0).r);                \
+    int win_base = b * ${const int: block_stride};                              \
+    for (int i = c0; i < ${const int: win * win / 4}; i += ${const int: tpb}) { \
+        ivec2 elem = 2 * ivec2(i % ${const int: win / 2},                       \
+                               i / ${const int: win / 2});                      \
+        uvec4 px = luma8b($tgt_quad(origin + elem));                            \
+        int j = win_base + elem.y * ${const int: win_stride} + elem.x;          \
+        sTgt[j] = px.x;                                                         \
+        sTgt[j + 1] = px.y;                                                     \
+        sTgt[j + ${const int: win_stride}] = px.z;                              \
+        sTgt[j + ${const int: win_stride + 1}] = px.w;                          \
     }                                                                           \
     barrier();  /* make sure all elements are loaded into shared memory */      \
                                                                                 \
