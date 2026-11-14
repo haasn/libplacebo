@@ -339,13 +339,15 @@ motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
 
     // When `nseed` == 1, that is the case when the only seed candidate is
     // the zero vector. We do not need to score any candidates in this case.
-    const size_t score = nseed > 1 ? (size_t) blocks * nseed : 0;
+    // Otherwise, every thread of a block scores a part of each seed (at most
+    // one per pixel).
+    const int parts = PL_MIN(PL_SQUARE(2 * radius + 1), PL_SQUARE(block_size));
+    const size_t score = nseed > 1 ? (size_t) blocks * nseed * parts : 0;
 
     const size_t words =
         (size_t) blocks * PL_SQUARE(block_size) // reference tile
         + (size_t) blocks * block_stride        // search windows
         + 2 * (size_t) blocks                   // cost and rank
-        + 2 * (size_t) blocks                   // seed
         + (subpixel ? 4 : 0) * (size_t) blocks  // cost around the winner
         + score;                                // seed candidate scores
 
@@ -810,6 +812,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int ncand   = PL_SQUARE(2 * r + 1);
     const int nseed = geom->seeds.num;
     const bool subpixel = geom->subpixel;
+    const int parts = PL_MIN(tpb, bs * bs); // threads scoring a block's seeds
 
     // Total size of tile.
     const int ref_w = bpgx * bs, ref_h = bpgy * bs;
@@ -888,6 +891,14 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         prior = bind_tex(sh, "prior", p->prior);
     }
 
+    // Partial SSD of each seed candidate of each block of the tile, one per
+    // thread of the block. Not needed if there is only a single candidate.
+    ident_t put_sum2 = NULL_IDENT, total_sum2 = NULL_IDENT;
+    if (nseed > 1) {
+        sh_partial_sums(sh, PL_VAR_UINT, 0x1, bpg, parts, nseed, &put_sum2,
+                        &total_sum2);
+    }
+
     // clang-format off
 #pragma GLSLH /* motion_search_pass */                                          \
     /* Shared memory allocations and helper functions.                          \
@@ -907,15 +918,6 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
          * then on y. */                                                        \
         shared uint near_cost[${const int: 4 * bpg}];                           \
     @}                                                                          \
-    /* Displacement into the target image that each block's search window will  \
-     * be centered upon or seeded with. */                                      \
-    shared ivec2 s_seed[${const int: bpg}];                                     \
-    /* Avoid using any shared memory if there is only one seed candidate. */    \
-    @if (nseed > 1) {                                                           \
-        /* SSD of each seed candidate of each block of the tile. */             \
-        shared uint s_score[${const int: bpg * nseed}];                         \
-    @}                                                                          \
-                                                                                \
     uint luma8b(float x) {                                                      \
         return uint(round(clamp(x, 0.0, 1.0) * 255.0));                         \
     }                                                                           \
@@ -982,8 +984,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         return ssd;                                                             \
     }                                                                           \
                                                                                 \
-    /* Returns the seed candidate that a thread `i` is responsible for          \
-     * scoring. */                                                              \
+    /* Returns seed candidate `i` of block `blk`. */                            \
     ivec2 seed_candidate(ivec2 blk, int i) {                                    \
         @if (has_parent) {                                                      \
             if (i == ${const int: rank_parent})                                 \
@@ -1004,7 +1005,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         return ivec2(0);                                                        \
     }                                                                           \
                                                                                 \
-    @if (nseed > 1 || subpixel) {                                               \
+    @if (subpixel) {                                                            \
         /* Sum of squared differences between reference block `b` and the       \
          * corresponding block in the target frame, but displaced by `d`. */    \
         uint seed_score(int b, ivec2 blk, ivec2 d) {                            \
@@ -1047,6 +1048,34 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         best_rank[tid] = 0xFFFFFFFFu;                                           \
     }                                                                           \
                                                                                 \
+    /* Score the seed candidates of this thread's block. Each thread of the     \
+     * block sums a share of its pixels, read from the textures, so that none   \
+     * has to wait for another. */                                              \
+    ivec2 seed = ivec2(0);                                                      \
+    @if (nseed > 1) {                                                           \
+        ivec2 sd[${const int: nseed}];                                          \
+        uint part[${const int: nseed}];                                         \
+        for (int i = 0; i < ${const int: nseed}; i++) {                         \
+            sd[i] = seed_candidate(blk, i);                                     \
+            part[i] = 0u;                                                       \
+        }                                                                       \
+        for (int j = c0; j < ${const int: bs * bs}; j += ${const int: tpb}) {   \
+            ivec2 pos = blk * ${const int: bs}                                  \
+                      + ivec2(j % ${const int: bs}, j / ${const int: bs});      \
+            ivec2 ref_pos = clamp(pos, ivec2(0), size - 1);                     \
+            int ref_px = int(luma8b(texelFetch($ref, ref_pos, 0).r));           \
+            for (int i = 0; i < ${const int: nseed}; i++) {                     \
+                ivec2 tgt_pos = clamp(pos + sd[i], ivec2(0), size - 1);         \
+                int diff = ref_px - int(luma8b(texelFetch($tgt, tgt_pos, 0).r));\
+                part[i] += uint(diff * diff);                                   \
+            }                                                                   \
+        }                                                                       \
+        if (c0 < ${const int: parts}) {                                         \
+            for (int i = 0; i < ${const int: nseed}; i++)                       \
+                $put_sum2(b, c0, i, part[i]);                                   \
+        }                                                                       \
+    @}                                                                          \
+                                                                                \
     /* Load block from reference image into shared memory. We clamp coordinates \
      * and pad partial blocks that extend past the image boundaries. */         \
     for (uint i = tid; i < ${const uint: ref_w * ref_h};                        \
@@ -1059,63 +1088,29 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         sRef[i] = luma8b(texelFetch($ref, ref_pos, 0).r);                       \
     }                                                                           \
                                                                                 \
-    /* Select the displacement that block `b`s search window will be centered   \
-     * on, saved to shared memory for the rest of the block to use. */          \
-    ivec2 seed = ivec2(0);                                                      \
+    /* Pick the seed candidate with the lowest SSD, the first one on ties, to   \
+     * center the search window of the block on. */                             \
     @if (nseed > 1) {                                                           \
-        barrier();  /* reference tile must be available in shared memory */     \
-                                                                                \
-        for (int i = c0; i < ${const int: nseed};                               \
-             i += ${const int: tpb})                                            \
-        {                                                                       \
-            s_score[b * ${const int: nseed} + i] =                              \
-                seed_score(b, blk, seed_candidate(blk, i));                     \
-        }                                                                       \
         barrier();                                                              \
-                                                                                \
-        /* Pick the seed candidate with the lowest SSD. */                      \
-        if (c0 == 0) {                                                          \
-            int best_seed = 0;                                                  \
-            uint best_ssd = s_score[b * ${const int: nseed}];                   \
-            for (int i = 1; i < ${const int: nseed}; i++) {                     \
-                uint seed_ssd = s_score[b * ${const int: nseed} + i];           \
-                if (seed_ssd < best_ssd) {                                      \
-                    best_seed = i;                                              \
-                    best_ssd = seed_ssd;                                        \
-                }                                                               \
+        uint best_ssd = 0xFFFFFFFFu;                                            \
+        for (int i = 0; i < ${const int: nseed}; i++) {                         \
+            uint ssd = $total_sum2(b, i);                                       \
+            if (ssd < best_ssd) {                                               \
+                best_ssd = ssd;                                                 \
+                seed = sd[i];                                                   \
             }                                                                   \
-            seed = seed_candidate(blk, best_seed);                              \
-            s_seed[b] = seed;                                                   \
-        }                                                                       \
-    @} else {                                                                   \
-        if (c0 == 0) {                                                          \
-            seed = seed_candidate(blk, 0);                                      \
-            s_seed[b] = seed;                                                   \
         }                                                                       \
     @}                                                                          \
-    barrier();                                                                  \
                                                                                 \
-    /* Load block from target image into shared memory. Each block can have a   \
-     * unique search window based on `s_seed`, so account for that. Pad rows    \
-     * of the search window in shared memory to avoid bank conflicts. */        \
-    for (uint i = tid; i < ${const uint: bpg * win * win_stride};               \
-         i += ${const uint: threads})                                           \
-    {                                                                           \
-        int win_idx = int(i) / ${const int: win * win_stride};                  \
-        int j       = int(i) % ${const int: win * win_stride};                  \
-        int win_x   = j % ${const int: win_stride};                             \
-        int win_y   = j / ${const int: win_stride};                             \
-        if (win_x < ${const int: win}) {                                        \
-            ivec2 win_blk = tile + ivec2(win_idx % ${const int: bpgx},          \
-                                         win_idx / ${const int: bpgx});         \
-            ivec2 origin = win_blk * ${const int: bs} + s_seed[win_idx]         \
-                         - ${const int: r};                                     \
-            ivec2 tgt_pos = clamp(origin + ivec2(win_x, win_y), ivec2(0),       \
-                                  size - 1);                                    \
-            sTgt[win_idx * ${const int: block_stride}                           \
-                 + win_y * ${const int: win_stride} + win_x]                    \
-                = luma8b(texelFetch($tgt, tgt_pos, 0).r);                       \
-        }                                                                       \
+    /* Load the search window of this thread's block from the target image into \
+     * shared memory. Pad rows of the search window in shared memory to avoid   \
+     * bank conflicts. */                                                       \
+    ivec2 origin = blk * ${const int: bs} + seed - ${const int: r};             \
+    for (int i = c0; i < ${const int: win * win}; i += ${const int: tpb}) {     \
+        ivec2 elem = ivec2(i % ${const int: win}, i / ${const int: win});       \
+        ivec2 tgt_pos = clamp(origin + elem, ivec2(0), size - 1);               \
+        sTgt[b * ${const int: block_stride} + elem.y * ${const int: win_stride} \
+             + elem.x] = luma8b(texelFetch($tgt, tgt_pos, 0).r);                \
     }                                                                           \
     barrier();  /* make sure all elements are loaded into shared memory */      \
                                                                                 \
@@ -1151,7 +1146,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
             if (max(abs(adj.x), abs(adj.y)) <= ${const int: r}) {               \
                 near_cost[4 * b + i] = window_ssd(b, adj + ${const int: r});    \
             } else {                                                            \
-                near_cost[4 * b + i] = seed_score(b, blk, s_seed[b] + adj);     \
+                near_cost[4 * b + i] = seed_score(b, blk, seed + adj);          \
             }                                                                   \
         }                                                                       \
         barrier();                                                              \
