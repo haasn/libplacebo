@@ -725,6 +725,7 @@ static void cand_lut_fill(void *data, const struct sh_lut_params *params)
 enum motion_prior {
     MOTION_PRIOR_SAME,   // the same direction, of the previous frame pair
     MOTION_PRIOR_NEGATE, // the opposite direction, from the same frame
+    MOTION_PRIOR_INVERT, // the opposite direction, from the other frame
 };
 
 // All of the parameters for a motion search shader for one level of the image
@@ -830,7 +831,9 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int prior_w = has_prior ? p->prior->params.w : 0;
     const int prior_h = has_prior ? p->prior->params.h : 0;
     const int rank_prior = geom->seeds.rank[MOTION_SEED_PRIOR];
-    const bool prior_neg = p->prior_kind == MOTION_PRIOR_NEGATE;
+    const bool prior_neg = p->prior_kind != MOTION_PRIOR_SAME;
+    const bool prior_inv = p->prior_kind == MOTION_PRIOR_INVERT;
+    const float fbs = bs;
     ident_t prior = NULL_IDENT;
     if (has_prior) {
         prior = bind_tex(sh, "prior", p->prior);
@@ -892,6 +895,18 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
                             ivec2(${const int: prior_w},                        \
                                   ${const int: prior_h}) - 1);                  \
             vec2 mv = texelFetch($prior, p, 0).xy;                              \
+            @if (prior_inv) {                                                   \
+                /* The prior field maps its blocks onto the frame of this       \
+                 * search. Find the block that lands on this one, i.e. solve    \
+                 * `pos = q + mv(q)` for `q`, by fixed point iteration. */      \
+                vec2 pos = (vec2(blk) + 0.5) * ${const float: fbs};             \
+                for (int i = 0; i < 2; i++) {                                   \
+                    ivec2 q = ivec2(floor((pos - mv) / ${const float: fbs}));   \
+                    q = clamp(q, ivec2(0), ivec2(${const int: prior_w},         \
+                                                 ${const int: prior_h}) - 1);   \
+                    mv = texelFetch($prior, q, 0).xy;                           \
+                }                                                               \
+            @}                                                                  \
             @if (prior_neg)                                                     \
                 mv = -mv;                                                       \
             return ivec2(round(mv));                                            \
@@ -1514,6 +1529,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (d == 0 && (obj->flow.valid & PL_MOTION_BACKWARD)) {
             prior_kind = MOTION_PRIOR_NEGATE;
             prior_field = &obj->flow.field[1];
+        } else if (d == 1 && (input->direction & PL_MOTION_FORWARD)) {
+            prior_kind = MOTION_PRIOR_INVERT;
+            prior_field = &obj->flow.field[0];
         }
 
         const bool has_prior = prior_kind != MOTION_PRIOR_SAME ||
