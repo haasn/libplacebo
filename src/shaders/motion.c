@@ -722,6 +722,11 @@ static void cand_lut_fill(void *data, const struct sh_lut_params *params)
     memcpy(data, geom->cand, 2 * (size_t) params->width * sizeof(int));
 }
 
+enum motion_prior {
+    MOTION_PRIOR_SAME,   // the same direction, of the previous frame pair
+    MOTION_PRIOR_NEGATE, // the opposite direction, from the same frame
+};
+
 // All of the parameters for a motion search shader for one level of the image
 // pyramid.
 struct motion_search {
@@ -729,9 +734,9 @@ struct motion_search {
     pl_tex tgt;                         // target frame luma
     pl_tex parent; // flow field of the previous motion search image pyramid
                    // level, or NULL at the coarsest level
-    pl_tex prior;  // flow field produced at the same image pyramid level by
-                   // the motion search invocation on the previous frame pair,
-                   // or NULL when there is none available
+    pl_tex prior;  // flow field of the same image pyramid level to take the
+                   // temporal prior from, or NULL when there is none available
+    enum motion_prior prior_kind;
     pl_tex out_mv;                      // block granular flow field
     const struct motion_geometry *geom; // compile time constants
     pl_shader_obj *cand_lut;
@@ -817,14 +822,15 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         parent = bind_tex(sh, "parent", p->parent);
     }
 
-    // Bind the flow field of the same motion search image pyramid level from
-    // the previous motion search invocation on the previous frame pair. Don't
-    // bind anything when there is no usable prior available (upon a cold
-    // start, after a reset, or a change in motion estimation direction).
+    // Bind the flow field of the same motion search image pyramid level that
+    // provides the temporal prior. Don't bind anything when there is no usable
+    // prior available (upon a cold start, after a reset, or a change in motion
+    // estimation direction).
     const bool has_prior = p->prior != NULL;
     const int prior_w = has_prior ? p->prior->params.w : 0;
     const int prior_h = has_prior ? p->prior->params.h : 0;
     const int rank_prior = geom->seeds.rank[MOTION_SEED_PRIOR];
+    const bool prior_neg = p->prior_kind == MOTION_PRIOR_NEGATE;
     ident_t prior = NULL_IDENT;
     if (has_prior) {
         prior = bind_tex(sh, "prior", p->prior);
@@ -879,14 +885,16 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     @}                                                                          \
                                                                                 \
     @if (has_prior) {                                                           \
-        /* Use the winning motion search candidate that was found by the        \
-         * corresponding block in the same motion search pyramid level in the   \
-         * invocation of the motion estimation on the previous frame pair. */   \
+        /* Use the vector of the corresponding block in the same motion search  \
+         * pyramid level of the prior field, see `motion_prior`. */             \
         ivec2 prior_seed(ivec2 blk) {                                           \
             ivec2 p = clamp(blk, ivec2(0),                                      \
                             ivec2(${const int: prior_w},                        \
                                   ${const int: prior_h}) - 1);                  \
-            return ivec2(round(texelFetch($prior, p, 0).xy));                   \
+            vec2 mv = texelFetch($prior, p, 0).xy;                              \
+            @if (prior_neg)                                                     \
+                mv = -mv;                                                       \
+            return ivec2(round(mv));                                            \
         }                                                                       \
     @}                                                                          \
                                                                                 \
@@ -1500,7 +1508,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             continue;
 
         pl_tex_pyramid *field = &obj->flow.field[d];
-        const bool has_prior = obj->flow.valid & dir;
+
+        enum motion_prior prior_kind = MOTION_PRIOR_SAME;
+        pl_tex_pyramid *prior_field = field;
+        if (d == 0 && (obj->flow.valid & PL_MOTION_BACKWARD)) {
+            prior_kind = MOTION_PRIOR_NEGATE;
+            prior_field = &obj->flow.field[1];
+        }
+
+        const bool has_prior = prior_kind != MOTION_PRIOR_SAME ||
+                               (obj->flow.valid & dir);
 
         for (int i = levels - 1; i >= 0; i--) {
             const bool coarsest = levels > 1 && i == levels - 1;
@@ -1522,11 +1539,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             pl_tex parent =
                 i < levels - 1 ? obj->scratch.filtered.elem[i + 1] : NULL;
 
-            // Seed the motion search using the motion estimate at the
-            // corresponding level of the motion search pyramid from the
-            // previous frame pair that the motion estimation was invoked
-            // upon.
-            pl_tex prior = has_prior ? field->elem[i] : NULL;
+            // Seed the motion search using the prior at the corresponding
+            // level of the motion search pyramid.
+            pl_tex prior = has_prior ? prior_field->elem[i] : NULL;
 
             struct motion_geometry geom;
             ok = motion_plan(gpu, tmp, params->block_size, radius,
@@ -1541,6 +1556,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 .tgt    = luma[!d],
                 .parent = parent,
                 .prior  = prior,
+                .prior_kind = prior_kind,
                 .out_mv = raw,
                 .geom   = &geom,
             };
