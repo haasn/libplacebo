@@ -1190,8 +1190,11 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     const int grid_w = out->params.w, grid_h = out->params.h;
     const int tex_w = ref->params.w, tex_h = ref->params.h;
 
-    // A work group covers `gx` x `gy` blocks, with one thread per row
+    // A work group covers `gx` x `gy` blocks, with one thread per row. Every
+    // other row of a block tells the candidates apart as well as all of them,
+    // so each thread takes half of an even row.
     const int gx = PL_CLAMP(64 / bs, 1, 8), gy = 4;
+    const int span = bs / 2;
     const int bw = gx * bs, bh = gy;
     const size_t shmem = bw * bh * 8 * sizeof(float);
 
@@ -1233,7 +1236,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     $load_block(blk - 1, mv);                                                   \
                                                                                 \
     /* Take the vector of the neighbour that matches the block best. Every      \
-     * thread matches its own row of the block against the vectors of the 8     \
+     * thread matches its share of the block against the vectors of the 8       \
      * neighbours. The block's own vector is left out: the search already       \
      * preferred it over every vector it tried, usually including those of      \
      * the neighbours, so it would win exactly where its match is               \
@@ -1241,8 +1244,9 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     float ssd[8];                                                               \
     for (int k = 0; k < 8; k++)                                                 \
         ssd[k] = 0.0;                                                           \
-    for (int j = 0; j < ${const int: bs}; j++) {                                \
-        ivec2 pos = min(blk * ${const int: bs} + ivec2(j, row), size - 1);      \
+    for (int j = 0; j < ${const int: span}; j++) {                              \
+        ivec2 off = ivec2(j + (row & 1) * ${const int: span}, row & ~1);        \
+        ivec2 pos = min(blk * ${const int: bs} + off, size - 1);                \
         float r = texelFetch($ref_id, pos, 0).r;                                \
         vec2 c = vec2(pos) + vec2(0.5);                                         \
         for (int k = 0; k < 8; k++) {                                           \
