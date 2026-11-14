@@ -245,6 +245,11 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 #define MOTION_BPGX 1
 #define MOTION_BPGY 7
 
+// Relative change in brightness between two frames below which
+// `motion_gain_pass` reports none. Compensating a change this small breaks
+// more exact matches of unchanged content than it fixes.
+#define MOTION_GAIN_DEADZONE 0.005f
+
 // Maximum number of subblock refinement passes, see refine_plan().
 #define MOTION_MAX_REFINE_PASSES 2
 
@@ -806,6 +811,105 @@ static bool convert_to_luma(pl_dispatch dispatch,
     return pl_dispatch_finish(dispatch, pl_dispatch_params(
         .shader = &sh,
         .target = out,
+    ));
+}
+
+// Measures the change in brightness from `ref` to `tgt`, as on a fade, into
+// the 1x1 texture `gain`: the factor that brings `tgt` to the brightness of
+// `ref`. It is the ratio of the mean luma of the blocks of `ref` to that of
+// the blocks in `tgt` that their vectors in `flow` lead to.
+//
+// Comparing the content that the vectors matched, instead of the means of the
+// frames, keeps content that moves into or out of the frame from counting as
+// a change in brightness. For the same reason, blocks whose vectors leave the
+// frame are skipped, and the others are weighted by how well their textures
+// match once their means are removed.
+static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
+                             pl_tex ref, pl_tex tgt, pl_tex flow, pl_tex gain)
+{
+    const int tex_w = ref->params.w, tex_h = ref->params.h;
+    const int grid_w = flow->params.w, grid_h = flow->params.h;
+    const int threads = 64;
+    const float fbs = bs;
+
+    // SSD of a block at which a block without any texture counts half: a
+    // mean squared error of 4 code values (8 bit) per pixel.
+    const float flat = 4.0f * bs * bs / (255.0f * 255.0f);
+
+    pl_shader sh = pass_begin(gpu, dispatch, threads, 1,
+                              threads * sizeof(float[2]),
+                              "motion brightness gain (%dx%d blocks)", grid_w,
+                              grid_h);
+    if (!sh)
+        return false;
+
+    ident_t ref_id  = bind_tex(sh, "ref", ref);
+    ident_t flow_id = bind_tex(sh, "flow", flow);
+    ident_t gain_id = bind_img(sh, "gain", gain);
+    ident_t tgt_id  = bind_tex_linear(sh, "tgt", tgt, NULL, NULL);
+    if (!tgt_id) {
+        pl_dispatch_abort(dispatch, &sh);
+        return false;
+    }
+
+    // Weighted sums of the block means of `ref` and `tgt`
+    ident_t put_means, total_means;
+    sh_partial_sums(sh, PL_VAR_FLOAT, 0x3, 1, threads, 1, &put_means,
+                    &total_means);
+
+    // clang-format off
+#pragma GLSL /* motion_gain_pass */                                             \
+    int tid = int(gl_LocalInvocationIndex);                                     \
+    vec2 size = vec2(${const int: tex_w}, ${const int: tex_h});                 \
+    vec2 sum = vec2(0.0);                                                       \
+    /* A single work group shares all blocks among its threads. */              \
+    for (int i = tid; i < ${const int: grid_w * grid_h};                        \
+         i += ${const int: threads})                                            \
+    {                                                                           \
+        ivec2 blk = ivec2(i % ${const int: grid_w}, i / ${const int: grid_w});  \
+        vec2 mv = texelFetch($flow_id, blk, 0).xy;                              \
+        vec2 org = vec2(blk * ${const int: bs});                                \
+        if (any(lessThan(org + mv, vec2(0.0))) ||                               \
+            any(greaterThan(org + mv + ${const float: fbs}, size)) ||           \
+            any(greaterThan(org + ${const float: fbs}, size)))                  \
+            continue;                                                           \
+                                                                                \
+        vec2 mean = vec2(0.0);                                                  \
+        for (int j = 0; j < ${const int: bs * bs}; j++) {                       \
+            vec2 pos = org + vec2(j % ${const int: bs}, j / ${const int: bs});  \
+            mean.x += texelFetch($ref_id, ivec2(pos), 0).r;                     \
+            mean.y += textureLod($tgt_id, (pos + 0.5 + mv) / size, 0.0).r;      \
+        }                                                                       \
+        mean /= ${const float: fbs * fbs};                                      \
+                                                                                \
+        /* How far the textures of the two blocks differ, relative to how much  \
+         * texture there is. */                                                 \
+        float ssd = 0.0, energy = 0.0;                                          \
+        for (int j = 0; j < ${const int: bs * bs}; j++) {                       \
+            vec2 pos = org + vec2(j % ${const int: bs}, j / ${const int: bs});  \
+            float r = texelFetch($ref_id, ivec2(pos), 0).r - mean.x;            \
+            float t = textureLod($tgt_id, (pos + 0.5 + mv) / size, 0.0).r       \
+                    - mean.y;                                                   \
+            ssd += (r - t) * (r - t);                                           \
+            energy += r * r + t * t;                                            \
+        }                                                                       \
+        sum += mean / (1.0 + ssd / (0.1 * energy + ${const float: flat}));      \
+    }                                                                           \
+                                                                                \
+    $put_means(0, tid, 0, sum);                                                 \
+    barrier();                                                                  \
+    if (tid == 0) {                                                             \
+        sum = $total_means(0, 0);                                               \
+        float change = sum.x / max(sum.y, 1e-6) - 1.0;                          \
+        change = sign(change) *                                                 \
+                 max(abs(change) - ${const float: MOTION_GAIN_DEADZONE}, 0.0);  \
+        imageStore($gain_id, ivec2(0), vec4(1.0 + change));                     \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader        = &sh,
+        .dispatch_size = { 1, 1, 1 },
     ));
 }
 
