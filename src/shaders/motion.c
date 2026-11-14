@@ -329,7 +329,9 @@ static struct motion_shmem_layout
 motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
                             int nseed, bool subpixel)
 {
-    const int win = block_size + 2 * radius;
+    // The window of a sub-pixel search also covers the pixels around the
+    // candidates, whose cost the fit needs.
+    const int win = block_size + 2 * (radius + subpixel);
     const int win_stride = win | 1;
     const int block_stride = (win * win_stride) | 1;
     const int blocks = bpgx * bpgy;
@@ -814,6 +816,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int ncand   = PL_SQUARE(2 * r + 1);
     const int nseed = geom->seeds.num;
     const bool subpixel = geom->subpixel;
+    const int wr = r + subpixel; // radius of the search window
 
     // Total size of tile.
     const int ref_w = bpgx * bs, ref_h = bpgy * bs;
@@ -1021,30 +1024,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
                 return prior_seed(blk);                                         \
         @}                                                                      \
         return ivec2(0);                                                        \
-    }                                                                           \
-                                                                                \
-    @if (subpixel) {                                                            \
-        /* Sum of squared differences between reference block `b` and the       \
-         * corresponding block in the target frame, but displaced by `d`. */    \
-        uint seed_score(int b, ivec2 blk, ivec2 d) {                            \
-            ivec2 size = ivec2(${const int: tex_w}, ${const int: tex_h});       \
-            int bx = b % ${const int: bpgx};                                    \
-            int by = b / ${const int: bpgx};                                    \
-            uint ssd = 0u;                                                      \
-            for (int i = 0; i < ${const int: bs}; i++) {                        \
-                int ref_row = (by * ${const int: bs} + i) * ${const int: ref_w} \
-                            + bx * ${const int: bs};                            \
-                for (int j = 0; j < ${const int: bs}; j++) {                    \
-                    ivec2 pos = clamp(blk * ${const int: bs} + ivec2(j, i) + d, \
-                                      ivec2(0), size - 1);                      \
-                    int diff = int(sRef[ref_row + j])                           \
-                             - int(luma8b(texelFetch($tgt, pos, 0).r));         \
-                    ssd += uint(diff * diff);                                   \
-                }                                                               \
-            }                                                                   \
-            return ssd;                                                         \
-        }                                                                       \
-    @}
+    }
     // clang-format on
 
     // clang-format off
@@ -1123,7 +1103,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     /* Load the search window of this thread's block from the target image into \
      * shared memory. Pad rows of the search window in shared memory to avoid   \
      * bank conflicts. */                                                       \
-    ivec2 origin = blk * ${const int: bs} + seed - ${const int: r};             \
+    ivec2 origin = blk * ${const int: bs} + seed - ${const int: wr};            \
     int win_base = b * ${const int: block_stride};                              \
     for (int i = c0; i < ${const int: win * win / 4}; i += ${const int: tpb}) { \
         ivec2 elem = 2 * ivec2(i % ${const int: win / 2},                       \
@@ -1143,7 +1123,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     for (int c = c0; c < ${const int: ncand}; c += ${const int: tpb}) {         \
         ivec2 cand_offset = $cand(c);                                           \
         /* Change the candidate offset into coordinates within the window */    \
-        cand_offset += ${const int: r};                                         \
+        cand_offset += ${const int: wr};                                        \
         uint ssd = window_ssd(b, cand_offset);                                  \
         /* For when a thread computes SSD of multiple candidates. */            \
         /* Strictly lower, so the order of candidates breaks ties. */           \
@@ -1165,12 +1145,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         for (int i = c0; i < 4; i += ${const int: tpb}) {                       \
             ivec2 adj = winner;                                                 \
             adj[i / 2] += 2 * (i % 2) - 1;                                      \
-            /* The search window does not extend beyond the candidates. */      \
-            if (max(abs(adj.x), abs(adj.y)) <= ${const int: r}) {               \
-                near_cost[4 * b + i] = window_ssd(b, adj + ${const int: r});    \
-            } else {                                                            \
-                near_cost[4 * b + i] = seed_score(b, blk, seed + adj);          \
-            }                                                                   \
+            near_cost[4 * b + i] = window_ssd(b, adj + ${const int: wr});       \
         }                                                                       \
         barrier();                                                              \
     @}                                                                          \
