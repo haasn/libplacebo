@@ -58,7 +58,7 @@ struct pl_motion_estimate_params {
 
 #define PL_MOTION_ESTIMATE_DEFAULTS                                            \
     .block_size = 8, .pyramid_levels = 0, .search_radius_coarse = 4,           \
-    .search_radius_fine = 2,
+    .search_radius_fine = 1,
 
 #define pl_motion_estimate_params(...)                                         \
     (&(struct pl_motion_estimate_params) {                                     \
