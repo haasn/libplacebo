@@ -170,7 +170,7 @@ static int dir_index(enum pl_motion_direction dir)
 }
 
 // Don't reduce image pyramid to a size that is too small to recover motion.
-#define MIN_COARSE_BLOCKS 8
+#define MIN_COARSE_BLOCKS 3
 
 // "Block" will be used to refer to a block of pixels that we group together
 // for the motion search.
