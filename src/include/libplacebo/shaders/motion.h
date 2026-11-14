@@ -113,6 +113,10 @@ struct pl_motion_estimate_input {
     // `pl_motion_get_global`.
     bool estimate_global;
 
+    // Optionally estimate the quality of the vectors of each direction. If
+    // true, it can later be retrieved using `pl_motion_get_quality`.
+    bool estimate_quality;
+
     // Persistent state, owned by the caller. May point at a NULL
     // `pl_shader_obj`, in which case it is allocated on first use. Must be
     // freed with `pl_shader_obj_destroy` when motion estimation is no longer
@@ -169,6 +173,21 @@ PL_API void pl_motion_reset(pl_shader_obj state);
 // (or `texelFetch`).
 PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
                                  enum pl_motion_direction dir);
+
+// Returns the quality of the flow field of a single direction, or NULL if
+// not available. `dir` must name exactly one direction.
+//
+// Each texel holds, in its first component, an estimate of how trustworthy
+// the vectors of the corresponding flow field are. This is a float in the
+// range [0, 1], with 1 meaning high quality and 0 meaning low quality.
+//
+// The texture is owned by `state`. Do not destroy it, or reference it after
+// `pl_motion_reset` or `pl_motion_estimate`.
+//
+// `tex->params` provides the exact dimensions and formats, which need not
+// match the resolution of the flow field itself.
+PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,
+                                    enum pl_motion_direction dir);
 
 // Returns the buffer holding the global motion vector in the direction `dir`
 // or NULL if no `pl_motion_estimate` call for the current frame pair set
