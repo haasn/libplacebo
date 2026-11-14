@@ -231,14 +231,11 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // for the motion search.
 // "Tile" will be used to refer to a set of blocks that one workgroup operates
 // on.
-// `MOTION_BPGX` and `MOTION_BPGY` define the tile dimensions.
-//
-// TODO: benchmark the impacts of varying shape and size of tile to configure
-// texel reuse and memory access patterns. Also needs to be revisited when we
-// start the motion search at different locations for each block depending on
-// the temporal state.
-#define MOTION_BPGX 2
-#define MOTION_BPGY 5
+// `MOTION_BPGX` and `MOTION_BPGY` define the tile dimensions. The threads of
+// a tile wait for each other at every barrier, so small tiles idle less. 7
+// blocks of the default 3x3 search are 63 threads, which is one wave on AMD.
+#define MOTION_BPGX 1
+#define MOTION_BPGY 7
 
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
