@@ -119,6 +119,13 @@ static ident_t bind_tex(pl_shader sh, const char *name, pl_tex tex)
     });
 }
 
+static ident_t bind_tex_linear(pl_shader sh, const char *name, pl_tex tex,
+                               ident_t *out_pos, ident_t *out_pt)
+{
+    return sh_bind(sh, tex, PL_TEX_ADDRESS_CLAMP, PL_TEX_SAMPLE_LINEAR, name,
+                   NULL, out_pos, out_pt);
+}
+
 // Binds `tex` as a write-only storage image.
 static ident_t bind_img(pl_shader sh, const char *name, pl_tex tex)
 {
@@ -1271,9 +1278,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     ident_t ref_id = bind_tex(sh, "ref", ref);
 
     // The vectors are fractional
-    ident_t tgt_pt, tgt_id = sh_bind(sh, tgt, PL_TEX_ADDRESS_CLAMP,
-                                     PL_TEX_SAMPLE_LINEAR, "tgt", NULL, NULL,
-                                     &tgt_pt);
+    ident_t tgt_pt, tgt_id = bind_tex_linear(sh, "tgt", tgt, NULL, &tgt_pt);
     if (!tgt_id)
         goto error;
 
