@@ -39,8 +39,8 @@ int pl_pyramid_max_levels(int w, int h)
     return levels;
 }
 
-bool pl_pyramid_recreate(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
-                         int levels, const struct pl_tex_params *params)
+void pl_pyramid_resize(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
+                       int levels)
 {
     for (int i = levels; i < pyramid->num; i++)
         pl_tex_destroy(gpu, &pyramid->elem[i]);
@@ -49,7 +49,12 @@ bool pl_pyramid_recreate(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
     for (int i = pyramid->num; i < levels; i++)
         pyramid->elem[i] = NULL;
     pyramid->num = levels;
+}
 
+bool pl_pyramid_recreate(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
+                         int levels, const struct pl_tex_params *params)
+{
+    pl_pyramid_resize(gpu, alloc, pyramid, levels);
     struct pl_tex_params level = *params;
     for (int i = 0; i < levels; i++) {
         pl_tex tex = pyramid->elem[i];
