@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '393': 'remove the confidence from the fields of pl_motion_get_flow',
       '392': 'add pl_frame_interp_algo PL_FRAME_INTERP_VISUALIZE',
       '391': 'add pl_render_stage enum value PL_RENDER_STAGE_MOTION',
       '390': 'add pl_frame_interp_input and pl_shader_frame_interp',

@@ -1887,8 +1887,7 @@ static bool frame_interp_visualize(pl_shader sh,
     const vec3 R = vec3(1.0, 0.0, 0.0), Y = vec3(1.0, 1.0, 0.0),                \
                G = vec3(0.0, 1.0, 0.0), C = vec3(0.0, 1.0, 1.0),                \
                B = vec3(0.0, 0.0, 1.0), M = vec3(1.0, 0.0, 1.0);                \
-    vec3 mv = textureLod($flow, $pos, 0.0).xyz;                                 \
-    vec2 uv = mv.xy;                                                            \
+    vec2 uv = textureLod($flow, $pos, 0.0).xy;                                  \
     float rad = length(uv);                                                     \
     vec3 col = vec3(1.0);                                                       \
     if (rad > 0.0) {                                                            \
@@ -1901,7 +1900,7 @@ static bool frame_interp_visualize(pl_shader sh,
         else                col = mix(M, R, (fk - 49.0) / 6.0);                 \
         col = vec3(1.0) - rad / (rad + 4.0) * (vec3(1.0) - col);                \
     }                                                                           \
-    color = vec4(mv.z * col, 1.0);
+    color = vec4(col, 1.0);
     // clang-format on
 
     struct pl_color_space csp = pl_color_space_srgb;

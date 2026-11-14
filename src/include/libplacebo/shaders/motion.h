@@ -157,12 +157,10 @@ PL_API void pl_motion_reset(pl_shader_obj state);
 // `params.h` are typically smaller than the source frame dimensions because
 // motion is estimated at a block granularity.
 //
-// Each texel holds `vec3(mv.x, mv.y, confidence)` in its first three
-// components, in a floating point format. `mv.x` and `mv.y` may be
-// fractional, and `confidence` is in the range [0, 1], with 1 meaning high
-// confidence. Any further components are unspecified. Sample the field with
-// `PL_TEX_SAMPLE_NEAREST` (or `texelFetch`).
-// NOTE: the confidence is currently always 1.
+// Each texel holds `vec2(mv.x, mv.y)` in its first two components, in a
+// floating point format. `mv.x` and `mv.y` may be fractional. Any further
+// components are unspecified. Sample the field with `PL_TEX_SAMPLE_NEAREST`
+// (or `texelFetch`).
 PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
                                  enum pl_motion_direction dir);
 
@@ -226,7 +224,7 @@ enum pl_frame_interp_algo {
 
     // Debugging aid: instead of interpolating, draws the forward motion
     // vectors between the two frames with the Middlebury color wheel, on top
-    // of the earlier frame and as opaque as the vectors are confident.
+    // of the earlier frame.
     PL_FRAME_INTERP_VISUALIZE,
 
     PL_FRAME_INTERP_ALGO_COUNT,

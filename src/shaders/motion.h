@@ -41,9 +41,9 @@ ident_t sh_motion_global(pl_shader sh, pl_shader_obj state,
 // The texture is not guaranteed to match the dimensions of the frames that it
 // estimated motion between, as motion may be stored in block granularity; the
 // texture should be sampled with relative coordinates. Each element of the
-// texture holds in .xyz the data `vec3(mv.x, mv.y, confidence)`, where mv.x
-// and mv.y are integer pixel offsets, confidence a float in [0,1]. Returns
-// NULL_IDENT if the most recent call to `pl_motion_estimate` did not compute
-//`dir`, or if it was not successfully called prior to this function call.
+// texture holds in .xy the vector `vec2(mv.x, mv.y)`, in pixels, which may be
+// fractional. Returns NULL_IDENT if the most recent call to
+// `pl_motion_estimate` did not compute `dir`, or if it was not successfully
+// called prior to this function call.
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
                        enum pl_motion_direction dir);
