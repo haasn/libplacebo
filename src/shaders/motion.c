@@ -313,6 +313,7 @@ struct motion_geometry {
     int bpgx, bpgy;    // dimensions of tile
     int threads_block; // threads per block in the tile
     bool subpixel;     // refine the vectors to a fraction of a pixel
+    bool zero_mean;    // compare the blocks without their means
 
     // The seed candidates every block of this level scores before searching.
     struct motion_seeds seeds;
@@ -342,7 +343,7 @@ struct motion_shmem_layout {
 // TODO: consider if we can pack multiple pixels into a single shared memory bank.
 static struct motion_shmem_layout
 motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
-                            int nseed, bool subpixel)
+                            int nseed, bool subpixel, bool zero_mean)
 {
     // The window of a sub-pixel search also covers the pixels around the
     // candidates, whose cost the fit needs.
@@ -356,7 +357,9 @@ motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
     // Otherwise, every thread of a block scores a part of each seed (at most
     // one per pixel).
     const int parts = PL_MIN(PL_SQUARE(2 * radius + 1), PL_SQUARE(block_size));
-    const size_t score = nseed > 1 ? (size_t) blocks * nseed * parts : 0;
+    // The zero-mean SSD also needs the sums of the differences.
+    const size_t score = nseed > 1 ? (size_t) blocks * nseed * parts
+                                     * (zero_mean ? 2 : 1) : 0;
 
     const size_t words =
         (size_t) blocks * PL_SQUARE(block_size) // reference tile
@@ -404,8 +407,9 @@ static void cand_fill(int radius, int *out)
 // the motion estimation. Iteratively reduces the tile size that each workgroup
 // will process until a size is found that fits in shared memory.
 static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
-                        struct motion_seeds seeds, bool subpixel, int grid_w,
-                        int grid_h, struct motion_geometry *out)
+                        struct motion_seeds seeds, bool subpixel,
+                        bool zero_mean, int grid_w, int grid_h,
+                        struct motion_geometry *out)
 {
     const int ncand = PL_SQUARE(2 * radius + 1);
     const int max_group = gpu->glsl.max_group_threads;
@@ -422,7 +426,7 @@ static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
 
     while (bpgx > 1 || bpgy > 1) {
         const struct motion_shmem_layout shmem = motion_compute_shmem_layout(
-            block_size, radius, bpgx, bpgy, seeds.num, subpixel);
+            block_size, radius, bpgx, bpgy, seeds.num, subpixel, zero_mean);
 
         if (bpgx * bpgy * threads_block <= max_threads &&
             shmem.size <= gpu->glsl.max_shmem_size)
@@ -435,7 +439,7 @@ static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
     }
 
     const struct motion_shmem_layout shmem = motion_compute_shmem_layout(
-        block_size, radius, bpgx, bpgy, seeds.num, subpixel);
+        block_size, radius, bpgx, bpgy, seeds.num, subpixel, zero_mean);
 
     if (bpgx * bpgy * threads_block > max_threads) {
         PL_ERR(gpu,
@@ -464,6 +468,7 @@ static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
         .bpgy = bpgy,
         .threads_block = threads_block,
         .subpixel = subpixel,
+        .zero_mean = zero_mean,
         .seeds = seeds,
         .cand = cand,
     };
@@ -847,8 +852,12 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     // Total size of tile.
     const int ref_w = bpgx * bs, ref_h = bpgy * bs;
 
+    const bool zero_mean = geom->zero_mean;
+    const float block_px = bs * bs;
+
     const struct motion_shmem_layout shmem =
-        motion_compute_shmem_layout(bs, r, bpgx, bpgy, nseed, subpixel);
+        motion_compute_shmem_layout(bs, r, bpgx, bpgy, nseed, subpixel,
+                                    zero_mean);
     const int win = shmem.win;
     const int win_stride = shmem.win_stride;
     const int block_stride = shmem.block_stride;
@@ -929,11 +938,17 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     }
 
     // Partial SSD of each seed candidate of each block of the tile, one per
-    // thread of the block. Not needed if there is only a single candidate.
+    // thread of the block, and of the differences themselves for the
+    // zero-mean SSD. Not needed if there is only a single candidate.
     ident_t put_sum2 = NULL_IDENT, total_sum2 = NULL_IDENT;
+    ident_t put_sum = NULL_IDENT, total_sum = NULL_IDENT;
     if (nseed > 1) {
         sh_partial_sums(sh, PL_VAR_UINT, 0x1, bpg, parts, nseed, &put_sum2,
                         &total_sum2);
+        if (zero_mean) {
+            sh_partial_sums(sh, PL_VAR_SINT, 0x1, bpg, parts, nseed, &put_sum,
+                            &total_sum);
+        }
     }
 
     // clang-format off
@@ -1004,11 +1019,19 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         }                                                                       \
     @}                                                                          \
                                                                                 \
-    /* Sum of the squared differences between `a` and `b`. */                   \
-    uint sqdiff(uvec4 a, uvec4 b) {                                             \
+    /* Sum of the (squared) differences between `a` and `b`. */                 \
+    void sqdiff(uvec4 a, uvec4 b, inout int sum, inout uint sum2) {             \
         ivec4 d = ivec4(a) - ivec4(b);                                          \
-        d *= d;                                                                 \
-        return uint(d.x + d.y + d.z + d.w);                                     \
+        uvec4 d2 = uvec4(d * d);                                                \
+        sum  +=  d.x +  d.y +  d.z +  d.w;                                      \
+        sum2 += d2.x + d2.y + d2.z + d2.w;                                      \
+    }                                                                           \
+                                                                                \
+    /* The SSD of a block without the difference of the two blocks' means,      \
+     * from the sum of its differences: sum((d - mean(d))^2). */                \
+    uint zero_mean_ssd(uint ssd, int sum) {                                     \
+        float dc = float(sum) * float(sum) / ${const float: block_px};          \
+        return ssd - min(ssd, uint(dc));                                        \
     }                                                                           \
                                                                                 \
     /* Sum of squared differences between reference block `b` and the block     \
@@ -1017,6 +1040,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         int bx = b % ${const int: bpgx};                                        \
         int by = b / ${const int: bpgx};                                        \
         uint ssd = 0u;                                                          \
+        int sum = 0;                                                            \
         for (int i = 0; i < ${const int: bs}; i++) {                            \
             int ref_row = (by * ${const int: bs} + i) * ${const int: ref_w}     \
                         + bx * ${const int: bs};                                \
@@ -1026,8 +1050,11 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
             for (int j = 0; j < ${const int: bs}; j++) {                        \
                 int diff = int(sRef[ref_row + j]) - int(sTgt[tgt_row + j]);     \
                 ssd += uint(diff * diff);                                       \
+                sum += diff;                                                    \
             }                                                                   \
         }                                                                       \
+        @if (zero_mean)                                                         \
+            ssd = zero_mean_ssd(ssd, sum);                                      \
         return ssd;                                                             \
     }                                                                           \
                                                                                 \
@@ -1078,10 +1105,12 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     ivec2 seed = ivec2(0);                                                      \
     @if (nseed > 1) {                                                           \
         ivec2 sd[${const int: nseed}];                                          \
-        uint part[${const int: nseed}];                                         \
+        int psum[${const int: nseed}];                                          \
+        uint psum2[${const int: nseed}];                                        \
         for (int i = 0; i < ${const int: nseed}; i++) {                         \
             sd[i] = seed_candidate(blk, i);                                     \
-            part[i] = 0u;                                                       \
+            psum[i]  = 0;                                                       \
+            psum2[i] = 0u;                                                      \
         }                                                                       \
         for (int j = c0; j < ${const int: units}; j += ${const int: tpb}) {     \
             ivec2 pos = blk * ${const int: bs}                                  \
@@ -1089,11 +1118,15 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
                                   j / ${const int: bs / 2});                    \
             uvec4 ref_px = luma8b($ref_quad(pos));                              \
             for (int i = 0; i < ${const int: nseed}; i++)                       \
-                part[i] += sqdiff(ref_px, luma8b($tgt_quad(pos + sd[i])));      \
+                sqdiff(ref_px, luma8b($tgt_quad(pos + sd[i])),                  \
+                       psum[i], psum2[i]);                                      \
         }                                                                       \
         if (c0 < ${const int: parts}) {                                         \
-            for (int i = 0; i < ${const int: nseed}; i++)                       \
-                $put_sum2(b, c0, i, part[i]);                                   \
+            for (int i = 0; i < ${const int: nseed}; i++) {                     \
+                $put_sum2(b, c0, i, psum2[i]);                                  \
+                @if (zero_mean)                                                 \
+                    $put_sum(b, c0, i, psum[i]);                                \
+            }                                                                   \
         }                                                                       \
     @}                                                                          \
                                                                                 \
@@ -1119,6 +1152,8 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
         uint best_ssd = 0xFFFFFFFFu;                                            \
         for (int i = 0; i < ${const int: nseed}; i++) {                         \
             uint ssd = $total_sum2(b, i);                                       \
+            @if (zero_mean)                                                     \
+                ssd = zero_mean_ssd(ssd, $total_sum(b, i));                     \
             if (ssd < best_ssd) {                                               \
                 best_ssd = ssd;                                                 \
                 seed = sd[i];                                                   \
@@ -1926,7 +1961,12 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                                (obj->flow.valid & dir);
 
         for (int i = levels - 1; i >= 0; i--) {
-            const bool coarsest = levels > 1 && i == levels - 1;
+            // The top level has no vectors of a coarser level to start from,
+            // so it compares the blocks without their means: a change in
+            // brightness between the frames, as on a fade, otherwise outweighs
+            // the match of the content.
+            const bool top = i == levels - 1;
+            const bool coarsest = levels > 1 && top;
             const int radius = coarsest ? params->search_radius_coarse
                                         : params->search_radius_fine;
 
@@ -1952,7 +1992,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             struct motion_geometry geom;
             ok = motion_plan(gpu, tmp, params->block_size_coarse, radius,
                              motion_seeds_plan(parent != NULL, prior != NULL),
-                             i == 0, out->params.w, out->params.h, &geom);
+                             i == 0, top, out->params.w, out->params.h,
+                             &geom);
             if (!ok)
                 break;
 
