@@ -290,6 +290,10 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // values: the level of noise below which a mismatch means nothing.
 #define MOTION_QUALITY_NOISE 6.0f
 
+// Distance, in pixels, of a vector from the median of the 3x3 vectors around
+// it at which its quality falls to 1/e.
+#define MOTION_QUALITY_OUTLIER 4.0f
+
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
@@ -1766,7 +1770,8 @@ static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, const int sizes[],
 }
 
 // Estimates the quality of `flow`. The quality of a vector scales with the
-// consistency between the 3x3 window around its pixel and where it leads.
+// consistency between the 3x3 window around its pixel and where it leads,
+// and with the consistency of the vector and its neighbors.
 //
 // A mismatch means less the more texture the window has, so it is taken
 // relative to that.
@@ -1777,7 +1782,9 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     const int w = ref->params.w, h = ref->params.h;
     const int out_w = out->params.w, out_h = out->params.h;
     const int sub = MOTION_QUALITY_SUB, win = sub + 2;
+    const int grid_w = flow->params.w, grid_h = flow->params.h;
     const float noise = 9.0f * PL_SQUARE(MOTION_QUALITY_NOISE / 255.0f);
+    const float outlier = 1.0f / PL_SQUARE(MOTION_QUALITY_OUTLIER);
 
     pl_shader sh = pass_begin(gpu, dispatch, 16, 16, 0,
                               "motion vector quality (%dx%d)", out_w, out_h);
@@ -1791,11 +1798,14 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, ref_id,
                                            &ref->params);
     ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, tgt_id, &tgt->params);
+    ident_t load_vectors = sh_tex_load_block(sh, 4, 4, 0x3, src, &flow->params);
+    ident_t median9 = sh_median(sh, 9, 0x3);
     ident_t gain = get_target_gain(sh, gain_tex);
 
     // clang-format off
 #pragma GLSL /* motion_quality_pass */                                          \
     ivec2 size = ivec2(${const int: w}, ${const int: h});                       \
+    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
     ivec2 sq   = ivec2(gl_GlobalInvocationID.xy);                               \
     if (all(lessThan(sq, ivec2(${const int: out_w}, ${const int: out_h})))) {   \
         /* The pixels of the square, and those around it. */                    \
@@ -1803,15 +1813,35 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
         float luma[${const int: win * win}];                                    \
         $load_block(org - 1, luma);                                             \
                                                                                 \
+        /* The vectors of the pixels of the square, which are at most 2x2,      \
+         * and those around them. */                                            \
+        ivec2 blk_org = org / ${const int: bs} - 1;                             \
+        vec2 flow[16];                                                          \
+        $load_vectors(blk_org, flow);                                           \
+                                                                                \
         float sum = 0.0, num = 0.0;                                             \
         float ref_px[9], texture, ssd, d, q;                                    \
-        ivec2 pos;                                                              \
-        vec2 mv, to;                                                            \
+        ivec2 pos, blk;                                                         \
+        vec2 mv, to, around[9];                                                 \
         @for (y < sub) {                                                        \
         @for (x < sub) {                                                        \
             pos = org + ivec2(@x, @y);                                          \
             if (all(lessThan(pos, size))) {                                     \
-                mv = texelFetch($src, pos / ${const int: bs}, 0).xy;            \
+                /* Spelled out for fields with a vector per pixel, to index     \
+                 * the array with constants. */                                 \
+                @if (bs == 1) {                                                 \
+                    blk = ivec2(@x + 1, @y + 1);                                \
+                @} else {                                                       \
+                    blk = pos / ${const int: bs} - blk_org;                     \
+                @}                                                              \
+                @for (j < 9) {                                                  \
+                    around[@j] = flow[(blk.y + @j / 3 - 1) * 4                  \
+                                      + blk.x + @j % 3 - 1];                    \
+                @}                                                              \
+                mv = around[4];                                                 \
+                d = distance(mv, $median9(around));                             \
+                q = exp(-d * d * ${const float: outlier});                      \
+                                                                                \
                 texture = ${const float: noise};                                \
                 @for (j < 9) {                                                  \
                     ref_px[@j] = luma[(@y + @j / 3) * ${const int: win}         \
@@ -1821,16 +1851,18 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
                     texture += d * d;                                           \
                 @}                                                              \
                 ssd = $block_ssd(ref_px, vec2(pos - 1) + mv, $gain, 1e30);      \
-                q = 1.0 - smoothstep(${const float: MOTION_QUALITY_COST_LO},    \
-                                     ${const float: MOTION_QUALITY_COST_HI},    \
-                                     sqrt(ssd / texture));                      \
                                                                                 \
                 /* Where a vector leaves the frame there is nothing to match    \
                  * it against. */                                               \
                 to = vec2(pos) + 0.5 + mv;                                      \
-                if (any(lessThan(to, vec2(0.0))) ||                             \
-                    any(greaterThan(to, vec2(size))))                           \
-                    q = 1.0;                                                    \
+                if (all(greaterThanEqual(to, vec2(0.0))) &&                     \
+                    all(lessThanEqual(to, vec2(size))))                         \
+                {                                                               \
+                    q *= 1.0 - smoothstep(                                      \
+                        ${const float: MOTION_QUALITY_COST_LO},                 \
+                        ${const float: MOTION_QUALITY_COST_HI},                 \
+                        sqrt(ssd / texture));                                   \
+                }                                                               \
                                                                                 \
                 sum += q;                                                       \
                 num += 1.0;                                                     \
