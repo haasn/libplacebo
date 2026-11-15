@@ -287,6 +287,10 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // without checking the content at the end of the round trip.
 #define MOTION_OCCLUSION_MIN   0.5f
 
+// Distance, in pixels, of the neighbouring vectors `frame_interp_gather_mix`
+// uses besides those at a pixel.
+#define MOTION_GATHER_MIX_NEIGHBOUR 4
+
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
@@ -2837,10 +2841,7 @@ static bool bind_frames(pl_shader sh, const struct pl_frame_interp_input *input,
     return true;
 }
 
-// Gathers every pixel from both frames along the vectors that the flow fields
-// hold at its own position. Those are the vectors of what is there in frame
-// `a` and in frame `b`, not of what passes through there in between, so this
-// is only right as far as the two are the same.
+// Gathers every pixel from both frames along a handful of vectors
 static bool frame_interp_gather(pl_shader sh,
                                 const struct pl_frame_interp_input *input,
                                 const struct pl_color_space *out_color)
@@ -2863,6 +2864,7 @@ static bool frame_interp_gather(pl_shader sh,
 
     sh_describe(sh, "frame interpolation (gather)");
     const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
+    const int neighbour = MOTION_GATHER_MIX_NEIGHBOUR;
 
     // clang-format off
 #pragma GLSLH /* frame_interp_gather */                                         \
@@ -2886,10 +2888,45 @@ static bool frame_interp_gather(pl_shader sh,
     {                                                                           \
     float t = ${dynamic float: t};                                              \
     vec2 pos_a = ${fr.pos[0]}, pos_b = ${fr.pos[1]};                            \
-    vec2 mv_fwd =  textureLod($fwd, pos_a, 0.0).xy;                             \
-    vec2 mv_bwd = -textureLod($bwd, pos_a, 0.0).xy;                             \
-    color = 0.5 * (gather_sample(pos_a, pos_b, mv_fwd, t) +                     \
-                   gather_sample(pos_a, pos_b, mv_bwd, t));                     \
+    /* The vectors, all from frame `a` to frame `b`: the forward and the        \
+     * backward one at the pixel, then those next to it along x, then y. */     \
+    vec2 mv[6];                                                                 \
+    /* How many of the vectors each one stands for, 0 for a duplicate. Vectors  \
+     * within 1/8 px of each other give nearly the same sample, so only the     \
+     * first is sampled. That is not transitive, so a vector only counts        \
+     * towards the first one it matches that is not a duplicate itself. It is   \
+     * only compared with the pixel's own vectors and the other one on its      \
+     * axis: missing a match only costs time. */                                \
+    float count[6];                                                             \
+    for (int k = 0; k < 6; k++) {                                               \
+        vec2 ofs = vec2(0.0);                                                   \
+        if (k >= 2) {                                                           \
+            bool x = k < 4;                                                     \
+            vec2 dir = mv[0] + mv[1];                                           \
+            bool ahead = (x ? dir.x : dir.y) >= 0.0;                            \
+            float n = ((k & 1) == 0) == ahead ? -${const float: neighbour}      \
+                                              : ${const float: neighbour};      \
+            ofs = (x ? vec2(n, 0.0) : vec2(0.0, n)) * ${fr.pt[0]};              \
+        }                                                                       \
+        mv[k] = (k & 1) == 0 ?  textureLod($fwd, pos_a + ofs, 0.0).xy           \
+                             : -textureLod($bwd, pos_a + ofs, 0.0).xy;          \
+        count[k] = 1.0;                                                         \
+        for (int j = 0; j < k; j++) {                                           \
+            if (count[k] > 0.0 && count[j] > 0.0 && (j < 2 || j == (k ^ 1)) &&  \
+                all(lessThanEqual(abs(mv[k] - mv[j]), vec2(0.125))))            \
+            {                                                                   \
+                count[j] += 1.0;                                                \
+                count[k] = 0.0;                                                 \
+            }                                                                   \
+        }                                                                       \
+    }                                                                           \
+                                                                                \
+    vec4 sum = vec4(0.0);                                                       \
+    for (int k = 0; k < 6; k++) {                                               \
+        if (count[k] > 0.0)                                                     \
+            sum += count[k] * gather_sample(pos_a, pos_b, mv[k], t);            \
+    }                                                                           \
+    color = sum / 6.0;                                                          \
     }
     // clang-format on
 
