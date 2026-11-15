@@ -1124,3 +1124,76 @@ ident_t sh_tex_quad(pl_shader sh, uint8_t comp, ident_t tex,
 
     return fn;
 }
+
+// Defines `void f(ivec2 pos, float fx, out float top[n], out float bot[n])`
+// which fills `top` and `bot` with `n` edge-clamped texels of the rows `pos.y`
+// and `pos.y + 1` of the component `comp` of the (pre-bound) texture `tex`,
+// starting from `pos.x`, each linearly interpolated with its right neighbour
+// by `fx`.
+static ident_t sh_tex_rows(pl_shader sh, int n, uint8_t comp, ident_t tex,
+                           const struct pl_tex_params *tpars)
+{
+    ident_t quad = sh_tex_quad(sh, comp, tex, tpars);
+    ident_t fn = sh_fresh(sh, "tex_rows");
+    const int quads = n / 2 + 1;
+
+#pragma GLSLH                                                                   \
+    void $fn(ivec2 pos, float fx, out float top[${const int: n}],               \
+             out float bot[${const int: n}])                                    \
+    {                                                                           \
+        vec4 q[${const int: quads}];                                            \
+        @for (i < quads)                                                        \
+            q[@i] = $quad(pos + ivec2(@i * 2, 0));                              \
+        @for (x < n) {                                                          \
+            top[@x] = mix(q[@x / 2][@x % 2],                                    \
+                          q[(@x + 1) / 2][(@x + 1) % 2], fx);                   \
+            bot[@x] = mix(q[@x / 2][@x % 2 + 2],                                \
+                          q[(@x + 1) / 2][(@x + 1) % 2 + 2], fx);               \
+        @}                                                                      \
+    }
+
+    return fn;
+}
+
+ident_t sh_block_ssd(pl_shader sh, int bw, int bh, uint8_t comp, ident_t tex,
+                     const struct pl_tex_params *tpars)
+{
+    ident_t rows = sh_tex_rows(sh, bw, comp, tex, tpars);
+    ident_t fn = sh_fresh(sh, "block_ssd");
+
+#pragma GLSLH                                                                   \
+    float $fn(float ref[${const int: bw * bh}], vec2 pos, float gain,           \
+              float limit)                                                      \
+    {                                                                           \
+        /* The samples share the fraction of `pos`: interpolate them from the   \
+         * texels under them, fetched two rows at a time. */                    \
+        vec2 fl = floor(pos), fr = pos - fl;                                    \
+        float top[${const int: bw}], bot[${const int: bw}];                     \
+        float prev[${const int: bw}];                                           \
+        float ssd = 0.0, d;                                                     \
+        @for (y < bh) {                                                         \
+            @if @(y % 2 == 0) {                                                 \
+                @if @(y == 0)                                                   \
+                    $rows(ivec2(fl), fr.x, top, bot);                           \
+                @for (x < bw) {                                                 \
+                    d = ref[@y * ${const int: bw} + @x]                         \
+                      - gain * mix(top[@x], bot[@x], fr.y);                     \
+                    ssd += d * d;                                               \
+                @}                                                              \
+            @} else {                                                           \
+                prev = bot;                                                     \
+                $rows(ivec2(fl) + ivec2(0, @y + 1), fr.x, top, bot);            \
+                @for (x < bw) {                                                 \
+                    d = ref[@y * ${const int: bw} + @x]                         \
+                      - gain * mix(prev[@x], top[@x], fr.y);                    \
+                    ssd += d * d;                                               \
+                @}                                                              \
+                if (ssd >= limit)                                               \
+                    return ssd;                                                 \
+            @}                                                                  \
+        @}                                                                      \
+        return ssd;                                                             \
+    }
+
+    return fn;
+}

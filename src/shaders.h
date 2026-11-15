@@ -334,6 +334,15 @@ ident_t sh_tex_load_block(pl_shader sh, int bw, int bh, uint8_t comps,
 ident_t sh_tex_quad(pl_shader sh, uint8_t comp, ident_t tex,
                     const struct pl_tex_params *tpars);
 
+// Defines `float f(float ref[bw * bh], vec2 pos, float gain, float limit)`
+// which returns the sum of squared differences between the `bw x bh` block
+// `ref`, in row-major order, and the bilinear samples of the component `comp`
+// of the (pre-bound) texture `tex` starting from `pos` (in texels, with texel
+// centres at integers), scaled by `gain`. Returns early, every two rows, once
+// the sum reaches `limit`.
+ident_t sh_block_ssd(pl_shader sh, int bw, int bh, uint8_t comp, ident_t tex,
+                     const struct pl_tex_params *tpars);
+
 // Like `pl_shader_dither` and `pl_shader_error_diffusion`, but quantizing to
 // `steps` steps per unit instead of 2^new_depth - 1
 struct pl_dither_params;
