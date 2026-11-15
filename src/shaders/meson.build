@@ -10,6 +10,7 @@ shader_sources = [
   'icc.c',
   'lut.c',
   'motion.c',
+  'pyramid.c',
   'sampling.c',
 ]
 
