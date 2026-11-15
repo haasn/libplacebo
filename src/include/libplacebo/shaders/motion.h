@@ -249,7 +249,7 @@ enum pl_frame_interp_algo {
 
     // Debugging aid: instead of interpolating, draws the forward motion
     // vectors between the two frames with the Middlebury color wheel, on top
-    // of the earlier frame.
+    // of the earlier frame. Vectors of low quality fade to gray.
     PL_FRAME_INTERP_VISUALIZE,
 
     PL_FRAME_INTERP_ALGO_COUNT,

@@ -2519,7 +2519,8 @@ static bool frame_interp_global(pl_shader sh,
     return true;
 }
 
-// Draws the forward flow with the Middlebury color wheel
+// Draws the forward flow with the Middlebury color wheel, desaturated towards
+// gray where its quality is low
 static bool frame_interp_visualize(pl_shader sh,
                                    const struct pl_frame_interp_input *input,
                                    const struct pl_color_space *out_color)
@@ -2534,6 +2535,13 @@ static bool frame_interp_visualize(pl_shader sh,
         return false;
     }
 
+    pl_tex qtex = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
+    if (!qtex) {
+        PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
+        return false;
+    }
+
+    ident_t quality = bind_tex_linear(sh, "motion_quality", qtex, NULL, NULL);
     ident_t pos, frame = sh_bind(sh, input->a.tex, PL_TEX_ADDRESS_CLAMP,
                                  PL_TEX_SAMPLE_NEAREST, "frame", NULL, &pos,
                                  NULL);
@@ -2574,6 +2582,8 @@ static bool frame_interp_visualize(pl_shader sh,
         else                col = mix(M, R, (fk - 49.0) / 6.0);                 \
         col = vec3(1.0) - rad / (rad + 4.0) * (vec3(1.0) - col);                \
     }                                                                           \
+    float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));                        \
+    col = mix(vec3(luma), col, textureLod($quality, $pos, 0.0).x);              \
     color = vec4(col, 1.0);
     // clang-format on
 
@@ -2600,7 +2610,7 @@ bool pl_shader_frame_interp(pl_shader sh,
 
     struct pl_motion_estimate_params me_params = params->motion;
     enum pl_motion_direction me_dir;
-    bool me_global = false;
+    bool me_global = false, me_quality = false;
     switch (params->algo) {
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         me_dir = PL_MOTION_FORWARD;
@@ -2611,6 +2621,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         break;
     case PL_FRAME_INTERP_VISUALIZE:
         me_dir = PL_MOTION_FORWARD;
+        me_quality = true;
         break;
     case PL_FRAME_INTERP_ALGO_COUNT:
     default:
@@ -2627,6 +2638,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         .b         = input->b,
         .direction = me_dir,
         .estimate_global = me_global,
+        .estimate_quality = me_quality,
         .state     = input->state,
     ), &me_params);
     if (!ok)
