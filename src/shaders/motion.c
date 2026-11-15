@@ -88,9 +88,9 @@ struct sh_motion_obj {
         bool valid;
     } global;
 
-    // Change in brightness between the frames of the direction being
-    // searched, see `motion_gain_pass`.
-    pl_tex gain;
+    // Change in brightness between the frames, see `motion_gain_pass`. One
+    // for the forward and one for the backward direction.
+    pl_tex gain[NUM_DIRS];
 
     // LUTs for the search candidate ordering.
     // `cand_lut[0]` holds the fine search radius LUT and `cand_lut[1]` holds
@@ -539,8 +539,8 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->flow.field[i]);
         pl_pyramid_destroy(gpu, &obj->flow.fine[i]);
         pl_buf_destroy(gpu, &obj->global.buf[i]);
+        pl_tex_destroy(gpu, &obj->gain[i]);
     }
-    pl_tex_destroy(gpu, &obj->gain);
     pl_buf_destroy(gpu, &obj->global.hist);
     for (int i = 0; i < PL_ARRAY_SIZE(obj->cand_lut); i++)
         pl_shader_obj_destroy(&obj->cand_lut[i]);
@@ -2046,17 +2046,20 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     }
 
     pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
-    bool gain_ok = pl_tex_recreate(gpu, &obj->gain, pl_tex_params(
-        .w          = 1,
-        .h          = 1,
-        .format     = PL_DEF(gain_fmt, mv_fmt),
-        .sampleable = true,
-        .storable   = true,
-    ));
 
-    if (!gain_ok) {
-        PL_ERR(gpu, "pl_motion_estimate: failed creating brightness gain!");
-        goto error;
+    for (int i = 0; i < NUM_DIRS; i++) {
+        bool ok = pl_tex_recreate(gpu, &obj->gain[i], pl_tex_params(
+            .w          = 1,
+            .h          = 1,
+            .format     = PL_DEF(gain_fmt, mv_fmt),
+            .sampleable = true,
+            .storable   = true,
+        ));
+
+        if (!ok) {
+            PL_ERR(gpu, "pl_motion_estimate: failed creating brightness gain!");
+            goto error;
+        }
     }
 
     // Upon cold start or after reset, build the image pyramid for frame `a`,
@@ -2117,7 +2120,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // the match of the content. Its vectors then measure that change,
             // which the levels below compensate.
             const bool top = i == levels - 1;
-            pl_tex gain = top ? NULL : obj->gain;
+            pl_tex gain = top ? NULL : obj->gain[d];
             const bool coarsest = levels > 1 && top;
             const int radius = coarsest ? params->search_radius_coarse
                                         : params->search_radius_fine;
@@ -2174,7 +2177,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (top && i > 0) {
                 ok = motion_gain_pass(gpu, input->dispatch,
                                       params->block_size_coarse, luma[d],
-                                      luma[!d], out, obj->gain);
+                                      luma[!d], out, obj->gain[d]);
                 if (!ok)
                     break;
             }
@@ -2191,7 +2194,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // The gain is that of the levels below the top one, if any
             ok = refine_flow(gpu, input->dispatch, refine, &obj->flow.fine[d],
                              params->block_size_coarse, luma[d], luma[!d],
-                             levels > 1 ? obj->gain : NULL,
+                             levels > 1 ? obj->gain[d] : NULL,
                              obj->scratch.filtered.elem[0]);
             if (!ok)
                 break;
