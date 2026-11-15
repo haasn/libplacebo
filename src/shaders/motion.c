@@ -239,13 +239,18 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 #define MOTION_BPGY 7
 
 // Maximum number of subblock refinement passes, see refine_plan().
-#define MOTION_MAX_REFINE_PASSES 1
+#define MOTION_MAX_REFINE_PASSES 2
 
 // Number of rings of far candidates of `motion_refine_4x4_pass`: the vectors of
 // the blocks 2 and 4 blocks away along either axis. They bring back the
 // motion of thin objects, which the smoothing removes from the block field
 // around them.
 #define MOTION_REFINE_4X4_RINGS 2
+
+// Margin by which the vector of a neighbouring block must match a pixel better
+// than the vector of its own block for `motion_refine_1x1_pass` to take it, as
+// a mean squared error in 8 bit code values.
+#define MOTION_REFINE_1X1_MARGIN 1.0f
 
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
@@ -1410,14 +1415,91 @@ static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     ));
 }
 
+// Writes a vector for every pixel of `out`, which has the dimensions of `ref`:
+// the vector of the pixel's block in `flow` (of `bs` pixels squared), or that
+// of one of the 8 neighbouring blocks if it matches the 3x3 pixels around the
+// pixel better by more than `MOTION_REFINE_1X1_MARGIN`.
+static bool motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
+                                   pl_tex ref, pl_tex tgt, pl_tex flow,
+                                   pl_tex out)
+{
+    const int w = out->params.w, h = out->params.h;
+    const int grid_w = flow->params.w, grid_h = flow->params.h;
+
+    // SSD over the 9 pixels of the window, in units of the luma textures
+    const float margin = MOTION_REFINE_1X1_MARGIN * 9.0f / (255.0f * 255.0f);
+
+    pl_shader sh = pass_begin(gpu, dispatch, 16, 16, 0,
+                              "motion vector refinement (1x1, %dx%d)", w, h);
+    if (!sh)
+        return false;
+
+    ident_t src = bind_tex(sh, "flow_in", flow);
+    ident_t dst = bind_img(sh, "flow_out", out);
+    ident_t ref_id = bind_tex(sh, "ref", ref);
+    ident_t tgt_id = bind_tex(sh, "tgt", tgt);
+    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x1, ref_id, &ref->params);
+    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, tgt_id, &tgt->params);
+
+    // clang-format off
+#pragma GLSL /* motion_refine_1x1_pass */                                       \
+    ivec2 size = ivec2(${const int: w}, ${const int: h});                       \
+    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
+    ivec2 pos  = ivec2(gl_GlobalInvocationID.xy);                               \
+    if (all(lessThan(pos, size))) {                                             \
+        ivec2 blk = pos / ${const int: bs};                                     \
+        vec2 org = vec2(pos - 1);                                               \
+        float ref_px[9];                                                        \
+        $load_block(pos - 1, ref_px);                                           \
+                                                                                \
+        /* The vector of the pixel's own block comes first. The others pay the  \
+         * margin, so none of them can win once it matches within that. */      \
+        vec2 cand[9];                                                           \
+        cand[0] = texelFetch($src, blk, 0).xy;                                  \
+        vec2 best = cand[0];                                                    \
+        float best_ssd = $block_ssd(ref_px, org + best, 1.0, 1e30);             \
+        if (best_ssd > ${const float: margin}) {                                \
+            for (int k = 1; k < 9; k++) {                                       \
+                int i = k <= 4 ? k - 1 : k;                                     \
+                ivec2 p = clamp(blk + ivec2(i % 3, i / 3) - 1, ivec2(0),        \
+                                grid - 1);                                      \
+                cand[k] = texelFetch($src, p, 0).xy;                            \
+                /* A vector equal to an earlier one cannot win. */              \
+                bool dup = false;                                               \
+                for (int j = 0; j < k; j++)                                     \
+                    dup = dup || cand[k] == cand[j];                            \
+                if (dup)                                                        \
+                    continue;                                                   \
+                float ssd = ${const float: margin}                              \
+                          + $block_ssd(ref_px, org + cand[k], 1.0,              \
+                                       best_ssd - ${const float: margin});      \
+                if (ssd < best_ssd) {                                           \
+                    best = cand[k];                                             \
+                    best_ssd = ssd;                                             \
+                }                                                               \
+            }                                                                   \
+        }                                                                       \
+        imageStore($dst, pos, vec4(best, 0.0, 0.0));                            \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = w,
+        .height = h,
+    ));
+}
+
 // Returns the number of refine passes needed, and the block size of each
 static int refine_plan(const struct pl_motion_estimate_params *params,
                        int plan[MOTION_MAX_REFINE_PASSES])
 {
     int num = 0;
+    if (params->block_size_fine <= 1 && params->block_size_coarse > 1)
+        plan[num++] = 1;
     if (params->block_size_fine <= 4 && params->block_size_coarse > 4)
         plan[num++] = 4;
-    pl_static_assert(MOTION_MAX_REFINE_PASSES >= 1);
+    pl_static_assert(MOTION_MAX_REFINE_PASSES >= 2);
     pl_assert(num <= MOTION_MAX_REFINE_PASSES);
     return num;
 }
@@ -1459,6 +1541,10 @@ static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, const int sizes[],
     for (int i = fine->num - 1; i >= 0; i--) {
         bool ok = false;
         switch (sizes[i]) {
+        case 1:
+            ok = motion_refine_1x1_pass(gpu, dispatch, bs, ref, tgt, in,
+                                        fine->elem[i]);
+            break;
         case 4:
             ok = motion_refine_4x4_pass(gpu, dispatch, bs, ref, tgt, in,
                                         fine->elem[i]);
