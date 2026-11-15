@@ -1804,9 +1804,9 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
         $load_block(org - 1, luma);                                             \
                                                                                 \
         float sum = 0.0, num = 0.0;                                             \
-        float ref_px[9], texture, ssd, d;                                       \
+        float ref_px[9], texture, ssd, d, q;                                    \
         ivec2 pos;                                                              \
-        vec2 mv;                                                                \
+        vec2 mv, to;                                                            \
         @for (y < sub) {                                                        \
         @for (x < sub) {                                                        \
             pos = org + ivec2(@x, @y);                                          \
@@ -1821,10 +1821,18 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
                     texture += d * d;                                           \
                 @}                                                              \
                 ssd = $block_ssd(ref_px, vec2(pos - 1) + mv, $gain, 1e30);      \
-                sum += 1.0 - smoothstep(                                        \
-                    ${const float: MOTION_QUALITY_COST_LO},                     \
-                    ${const float: MOTION_QUALITY_COST_HI},                     \
-                    sqrt(ssd / texture));                                       \
+                q = 1.0 - smoothstep(${const float: MOTION_QUALITY_COST_LO},    \
+                                     ${const float: MOTION_QUALITY_COST_HI},    \
+                                     sqrt(ssd / texture));                      \
+                                                                                \
+                /* Where a vector leaves the frame there is nothing to match    \
+                 * it against. */                                               \
+                to = vec2(pos) + 0.5 + mv;                                      \
+                if (any(lessThan(to, vec2(0.0))) ||                             \
+                    any(greaterThan(to, vec2(size))))                           \
+                    q = 1.0;                                                    \
+                                                                                \
+                sum += q;                                                       \
                 num += 1.0;                                                     \
             }                                                                   \
         @}                                                                      \
