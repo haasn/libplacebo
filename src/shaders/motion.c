@@ -35,6 +35,21 @@ const struct pl_frame_interp_params pl_frame_interp_default_params = {
     PL_FRAME_INTERP_DEFAULTS
 };
 
+enum {
+    FWD = 0,
+    BWD = 1,
+    NUM_DIRS = 2,
+};
+
+static int dir_index(enum pl_motion_direction dir)
+{
+    switch (dir) {
+    case PL_MOTION_FORWARD:  return FWD;
+    case PL_MOTION_BACKWARD: return BWD;
+    default:                 return -1;
+    }
+}
+
 // Persistent state and scratch space behind a PL_SHADER_OBJ_MOTION shader object.
 struct sh_motion_obj {
     // --- Persistent across frames
@@ -53,12 +68,12 @@ struct sh_motion_obj {
     // searched by the most recent motion estimation invocation. Used to seed
     // the next motion estimation search.
     struct {
-        pl_tex_pyramid field[2];        // indexed by dir_index()
+        pl_tex_pyramid field[NUM_DIRS]; // indexed by dir_index()
         enum pl_motion_direction valid; // directions actually computed
     } flow;
 
-    // Dimensions of `flow.field[0].elem[0]` (number of blocks to cover the full
-    // resolution).
+    // Dimensions of `flow.field[FWD].elem[0]` (number of blocks to cover the
+    // full resolution).
     int grid_w, grid_h;
 
     // Global motion of each direction, as an SSBO laid out as
@@ -67,7 +82,7 @@ struct sh_motion_obj {
     // the global motion of the directions in `flow.valid`. `hist` is scratch
     // for computation.
     struct {
-        pl_buf buf[2];
+        pl_buf buf[NUM_DIRS];
         pl_buf hist;
         bool valid;
     } global;
@@ -158,15 +173,6 @@ static pl_shader pass_begin(pl_gpu gpu, pl_dispatch dispatch, int bw, int bh,
     }
 
     return sh;
-}
-
-static int dir_index(enum pl_motion_direction dir)
-{
-    switch (dir) {
-    case PL_MOTION_FORWARD:  return 0;
-    case PL_MOTION_BACKWARD: return 1;
-    default:                 return -1;
-    }
 }
 
 // Don't reduce image pyramid to a size that is too small to recover motion.
@@ -449,7 +455,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
     pl_pyramid_destroy(gpu, &obj->scratch.levels);
     pl_pyramid_destroy(gpu, &obj->scratch.raw);
     pl_pyramid_destroy(gpu, &obj->scratch.filtered);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < NUM_DIRS; i++) {
         pl_pyramid_destroy(gpu, &obj->flow.field[i]);
         pl_buf_destroy(gpu, &obj->global.buf[i]);
     }
@@ -471,7 +477,7 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
     obj->global.valid = false;
     obj->pyramid_valid = false;
 
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < NUM_DIRS; i++)
         pl_buf_destroy(gpu, &obj->global.buf[i]);
     pl_buf_destroy(gpu, &obj->global.hist);
 }
@@ -1408,7 +1414,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (!input->estimate_global || obj->global.valid)
             return true;
 
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < NUM_DIRS; i++) {
             const enum pl_motion_direction dir = 1 << i;
             if ((obj->flow.valid & dir) &&
                 !estimate_global(gpu, input->dispatch, obj, dir))
@@ -1472,7 +1478,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     // These are no-ops as long as the motion search shape stays the same.
     // Otherwise, they invalidate the no longer usable temporal prior that resides
     // in `obj->flow.field`.
-    for (int d = 0; d < 2; d++) {
+    for (int d = 0; d < NUM_DIRS; d++) {
         if ((input->direction & (1 << d)) &&
             !pl_pyramid_recreate(gpu, obj, &obj->flow.field[d], levels,
                                  flow_params))
@@ -1517,7 +1523,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     void *tmp = pl_tmp(NULL);
     bool ok = true;
-    for (int d = 0; d < 2; d++) {
+    for (int d = 0; d < NUM_DIRS; d++) {
         const enum pl_motion_direction dir = 1 << d;
         if (!(input->direction & dir))
             continue;
@@ -1526,12 +1532,12 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
         enum motion_prior prior_kind = MOTION_PRIOR_SAME;
         pl_tex_pyramid *prior_field = field;
-        if (d == 0 && (obj->flow.valid & PL_MOTION_BACKWARD)) {
+        if (d == FWD && (obj->flow.valid & PL_MOTION_BACKWARD)) {
             prior_kind = MOTION_PRIOR_NEGATE;
-            prior_field = &obj->flow.field[1];
-        } else if (d == 1 && (input->direction & PL_MOTION_FORWARD)) {
+            prior_field = &obj->flow.field[BWD];
+        } else if (d == BWD && (input->direction & PL_MOTION_FORWARD)) {
             prior_kind = MOTION_PRIOR_INVERT;
-            prior_field = &obj->flow.field[0];
+            prior_field = &obj->flow.field[FWD];
         }
 
         const bool has_prior = prior_kind != MOTION_PRIOR_SAME ||
@@ -1664,7 +1670,9 @@ static bool frame_interp_global(pl_shader sh,
     pl_assert(gm);
 
     const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
-    const struct pl_motion_estimate_frame *frames[2] = { &input->a, &input->b };
+    const struct pl_motion_estimate_frame *frames[NUM_DIRS] = {
+        &input->a, &input->b
+    };
 
     // clang-format off
 #pragma GLSL /* pl_shader_frame_interp (global motion) */                       \
@@ -1679,7 +1687,7 @@ static bool frame_interp_global(pl_shader sh,
     float gm_inside;  /* 0 if gm_pos is out of bounds, 1 otherwise */
     // clang-format on
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < NUM_DIRS; i++) {
         pl_tex tex = frames[i]->tex;
         enum pl_tex_sample_mode sample_mode = PL_TEX_SAMPLE_NEAREST;
         if (tex->params.format->caps & PL_FMT_CAP_LINEAR)
