@@ -97,6 +97,9 @@ static inline bool pl_gpu_supports_interop(pl_gpu gpu)
 pl_dispatch pl_gpu_dispatch(pl_gpu gpu);
 pl_cache pl_gpu_cache(pl_gpu gpu);
 
+// Whether a texture created with `a` can stand in for one created with `b`.
+bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params b);
+
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
 // This performs several tasks. It sorts the format list, logs GPU metadata,

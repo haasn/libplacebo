@@ -273,7 +273,7 @@ void pl_tex_destroy(pl_gpu gpu, pl_tex *tex)
     *tex = NULL;
 }
 
-static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params b)
+bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params b)
 {
     return a.w == b.w && a.h == b.h && a.d == b.d &&
            a.format          == b.format &&
