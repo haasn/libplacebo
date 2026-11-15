@@ -241,6 +241,12 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // Maximum number of subblock refinement passes, see refine_plan().
 #define MOTION_MAX_REFINE_PASSES 1
 
+// Number of rings of far candidates of `motion_refine_4x4_pass`: the vectors of
+// the blocks 2 and 4 blocks away along either axis. They bring back the
+// motion of thin objects, which the smoothing removes from the block field
+// around them.
+#define MOTION_REFINE_4X4_RINGS 2
+
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
@@ -1308,7 +1314,8 @@ error:
 }
 
 // Writes a vector for every 4x4 sub-block of `out`: of the vectors of the 3x3
-// blocks around it in `blocks` (of `bs` pixels squared), the one that best
+// blocks around it in `blocks` (of `bs` pixels squared), and of
+// `MOTION_REFINE_4X4_RINGS` rings of blocks further away, the one that best
 // matches the sub-block and a border of one pixel around it. The vector of the
 // sub-block's own block is preferred by a margin of one code value (8 bit).
 static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
@@ -1319,6 +1326,7 @@ static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     const int grid_w = blocks->params.w, grid_h = blocks->params.h;
     const int sub_w = out->params.w, sub_h = out->params.h;
     const int sub = 4, win = sub + 2;
+    const int ncand = 9 + 4 * MOTION_REFINE_4X4_RINGS;
 
     pl_shader sh = pass_begin(gpu, dispatch, 8, 8, 0,
                               "motion vector refinement (4x4, %dx%d)", sub_w,
@@ -1348,17 +1356,23 @@ static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
         float ref_px[${const int: win * win}];                                  \
         $load_block(org - 1, ref_px);                                           \
                                                                                 \
-        /* The own block first, then its neighbours. */                         \
-        const ivec2 cand[9] = ivec2[9](ivec2(0, 0),                             \
-            ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1), ivec2(-1, 0),            \
-            ivec2(1, 0), ivec2(-1, 1), ivec2(0, 1), ivec2(1, 1));               \
+        /* The own block first, then its neighbours, then the far rings. */     \
+        const ivec2 cand[${const int: ncand}] = ivec2[${const int: ncand}](     \
+            ivec2( 0,  0),                                                      \
+            ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1), ivec2(-1,  0),         \
+            ivec2( 1,  0), ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1)          \
+        @for (r < MOTION_REFINE_4X4_RINGS) {                                    \
+            , ivec2(0, -(2 << @r)), ivec2(-(2 << @r), 0),                       \
+              ivec2(2 << @r, 0), ivec2(0, 2 << @r)                              \
+        @}                                                                      \
+        );                                                                      \
                                                                                 \
         /* Costs are mean squared errors over the window, times 255. */         \
         const float margin = ${const float: 1.0f / 255.0f};                     \
         const float scale = ${const float: 255.0f / (win * win)};               \
         vec2 best = vec2(0.0), own = vec2(0.0), last = vec2(0.0);               \
         float best_cost = 1e9;                                                  \
-        for (int k = 0; k < 9; k++) {                                           \
+        for (int k = 0; k < ${const int: ncand}; k++) {                         \
             /* The others pay the margin: none can beat what is within it. */   \
             if (k > 0 && best_cost <= margin)                                   \
                 break;                                                          \
