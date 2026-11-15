@@ -1620,6 +1620,22 @@ error:
     return false;
 }
 
+// Converts `color`, as sampled from `frame`, to `out_color` with premultiplied
+// alpha.
+static void interp_convert(pl_shader sh,
+                           const struct pl_motion_estimate_frame *frame,
+                           const struct pl_color_space *out_color)
+{
+    struct pl_color_repr repr = frame->repr;
+    struct pl_color_space csp = frame->color;
+    pl_color_space_infer(&csp);
+    if (!pl_color_space_equal(&csp, out_color)) {
+        pl_shader_set_alpha(sh, &repr, PL_ALPHA_INDEPENDENT);
+        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(csp, *out_color));
+    }
+    pl_shader_set_alpha(sh, &repr, PL_ALPHA_PREMULTIPLIED);
+}
+
 // Mixes the two frames, each sampled at the position offset by the global
 // motion, scaled by the frame's distance in time to the intermediate frame.
 static bool frame_interp_global(pl_shader sh,
@@ -1681,14 +1697,7 @@ static bool frame_interp_global(pl_shader sh,
         color = textureLod($frame, gm_pos, 0.0);
         // clang-format on
 
-        struct pl_color_repr repr = frames[i]->repr;
-        struct pl_color_space csp = frames[i]->color;
-        pl_color_space_infer(&csp);
-        if (!pl_color_space_equal(&csp, out_color)) {
-            pl_shader_set_alpha(sh, &repr, PL_ALPHA_INDEPENDENT);
-            pl_shader_color_map_ex(sh, NULL, pl_color_map_args(csp, *out_color));
-        }
-        pl_shader_set_alpha(sh, &repr, PL_ALPHA_PREMULTIPLIED);
+        interp_convert(sh, frames[i], out_color);
 
         // clang-format off
 #pragma GLSL /* pl_shader_frame_interp (global motion) */                       \
@@ -1740,15 +1749,7 @@ static bool frame_interp_visualize(pl_shader sh,
     color = textureLod($frame, $pos, 0.0);
     // clang-format on
 
-    struct pl_color_repr repr = input->a.repr;
-    struct pl_color_space frame_csp = input->a.color;
-    pl_color_space_infer(&frame_csp);
-    if (!pl_color_space_equal(&frame_csp, out_color)) {
-        pl_shader_set_alpha(sh, &repr, PL_ALPHA_INDEPENDENT);
-        pl_shader_color_map_ex(sh, NULL,
-                               pl_color_map_args(frame_csp, *out_color));
-    }
-    pl_shader_set_alpha(sh, &repr, PL_ALPHA_PREMULTIPLIED);
+    interp_convert(sh, &input->a, out_color);
 
     // The wheel is piecewise linear between red, yellow, green, cyan, blue and
     // magenta, with segment lengths 15, 6, 4, 11, 13, 6. As in the original
