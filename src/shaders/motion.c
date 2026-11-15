@@ -644,6 +644,16 @@ ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
     return bind_tex(sh, "motion_flow", flow);
 }
 
+ident_t sh_motion_quality(pl_shader sh, pl_shader_obj state,
+                          enum pl_motion_direction dir)
+{
+    pl_tex quality = pl_motion_get_quality(state, dir);
+    if (!quality)
+        return NULL_IDENT;
+
+    return bind_tex_linear(sh, "motion_quality", quality, NULL, NULL);
+}
+
 pl_buf pl_motion_get_global_buf(pl_shader_obj state,
                                 enum pl_motion_direction dir)
 {
@@ -2699,15 +2709,12 @@ static bool frame_interp_visualize(pl_shader sh,
         return false;
     }
 
-    pl_tex quality_tex = pl_motion_get_quality(*input->state,
-                                               PL_MOTION_FORWARD);
-    if (!quality_tex) {
+    ident_t quality = sh_motion_quality(sh, *input->state, PL_MOTION_FORWARD);
+    if (!quality) {
         PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
         return false;
     }
 
-    ident_t quality = bind_tex_linear(sh, "motion_quality", quality_tex, NULL,
-                                      NULL);
     ident_t pos, frame = sh_bind(sh, input->a.tex, PL_TEX_ADDRESS_CLAMP,
                                  PL_TEX_SAMPLE_NEAREST, "frame", NULL, &pos,
                                  NULL);

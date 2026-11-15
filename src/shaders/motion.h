@@ -47,3 +47,11 @@ ident_t sh_motion_global(pl_shader sh, pl_shader_obj state,
 // called prior to this function call.
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
                        enum pl_motion_direction dir);
+
+// Binds the quality of the flow field of a single direction to `sh` as a
+// read-only texture with linear sampling, and returns an identifier for the
+// texture, to be sampled with relative coordinates. See
+// `pl_motion_get_quality`. Returns NULL_IDENT if the quality of `dir` was not
+// estimated for the current frame pair.
+ident_t sh_motion_quality(pl_shader sh, pl_shader_obj state,
+                          enum pl_motion_direction dir);
