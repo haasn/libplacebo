@@ -1131,9 +1131,10 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     if (!sh)
         return false;
 
-    ident_t src = bind_tex(sh, "flow_in", in);
+    ident_t tex = bind_tex(sh, "flow_in", in);
     ident_t dst = bind_img(sh, "flow_out", out);
     ident_t median = sh_median(sh, 9, 0x3);
+    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x3, tex, &in->params);
 
     // clang-format off
 #pragma GLSL /* motion_smooth_pass */                                           \
@@ -1142,10 +1143,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     if (all(lessThan(blk, grid))) {                                             \
         /* The 3x3 neighbourhood around this block, clamped. */                 \
         vec2 mv[9];                                                             \
-        for (int i = 0; i < 9; i++) {                                           \
-            ivec2 p = clamp(blk + ivec2(i % 3, i / 3) - 1, ivec2(0), grid - 1); \
-            mv[i] = texelFetch($src, p, 0).xy;                                  \
-        }                                                                       \
+        $load_block(blk - 1, mv);                                               \
                                                                                 \
         /* Take median of all elements. The confidence is always 1. */          \
         imageStore($dst, blk, vec4($median(mv), 1.0, 0.0));                     \

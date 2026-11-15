@@ -323,6 +323,12 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *state);
 // Note: Not all values of N are implemented; see `src/shaders.c` for a list.
 ident_t sh_median(pl_shader sh, const int N, uint8_t comps);
 
+// Defines `void f(ivec2 pos, out T v[bw * bh])` which fills `v` with the
+// `bw x bh` edge-clamped texels of the (pre-bound) texture `tex`, starting
+// from the top-left pixel at `pos`, in row-major order.
+ident_t sh_tex_load_block(pl_shader sh, int bw, int bh, uint8_t comps,
+                          ident_t tex, const struct pl_tex_params *tpars);
+
 // Like `pl_shader_dither` and `pl_shader_error_diffusion`, but quantizing to
 // `steps` steps per unit instead of 2^new_depth - 1
 struct pl_dither_params;

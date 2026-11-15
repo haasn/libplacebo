@@ -1067,3 +1067,23 @@ ident_t sh_median(pl_shader sh, const int n, uint8_t comps)
 
     return median;
 }
+
+ident_t sh_tex_load_block(pl_shader sh, int bw, int bh, uint8_t comps,
+                          ident_t tex, const struct pl_tex_params *tpars)
+{
+    ident_t fn = sh_fresh(sh, "tex_load_block");
+
+#pragma GLSLH                                                                   \
+    void $fn(ivec2 pos, out ${vecType: comps} v[${const int: bw * bh}])         \
+    {                                                                           \
+        ivec2 tex_range = ivec2(${const int: tpars->w - 1},                     \
+                                ${const int: tpars->h - 1});                    \
+        for (int i = 0; i < ${const int: bw * bh}; i++) {                       \
+            ivec2 p = pos + ivec2(i % ${const int: bw}, i / ${const int: bw});  \
+            p = clamp(p, ivec2(0), tex_range);                                  \
+            v[i] = texelFetch($tex, p, 0).${swizzle: comps};                    \
+        }                                                                       \
+    }
+
+    return fn;
+}
