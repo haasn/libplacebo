@@ -623,11 +623,16 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc)
     return last->layout.offset + last->layout.size;
 }
 
+void sh_vdescribef(pl_shader sh, const char *fmt, va_list ap)
+{
+    sh_describe(sh, pl_vasprintf(sh->info->tmp, fmt, ap));
+}
+
 void sh_describef(pl_shader sh, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    sh_describe(sh, pl_vasprintf(sh->info->tmp, fmt, ap));
+    sh_vdescribef(sh, fmt, ap);
     va_end(ap);
 }
 

@@ -231,6 +231,7 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc);
 #define GLSLF(...) sh_append(sh, SH_BUF_FOOTER, __VA_ARGS__)
 
 // Attach a description to a shader
+void sh_vdescribef(pl_shader sh, const char *fmt, va_list ap);
 void sh_describef(pl_shader sh, const char *fmt, ...)
     PL_PRINTF(2, 3);
 
