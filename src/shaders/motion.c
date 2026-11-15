@@ -411,60 +411,6 @@ static pl_fmt flow_fmt(pl_gpu gpu)
     return pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 32, 0, caps);
 }
 
-// Similar to `pl_pyramid_recreate`, except does not invalidate the contents of
-// `pyramid` when the dimensions and levels of the flow pyramid has not changed
-// since the previous call.
-static bool flow_pyramid_recreate(pl_gpu gpu, void *alloc,
-                                  pl_tex_pyramid *pyramid, int w, int h,
-                                  int levels, int block_size, pl_fmt fmt)
-{
-    bool reusable = pyramid->num == levels;
-    for (int i = 0, lw = w, lh = h; reusable && i < levels; i++) {
-        pl_tex tex = pyramid->elem[i];
-        reusable = tex && tex->params.format == fmt &&
-                   tex->params.w == PL_DIV_UP(lw, block_size) &&
-                   tex->params.h == PL_DIV_UP(lh, block_size);
-        lw = (lw + 1) / 2;
-        lh = (lh + 1) / 2;
-    }
-
-    if (reusable)
-        return true;
-
-    // Free levels that are now unused.
-    for (int i = levels; i < pyramid->num; i++)
-        pl_tex_destroy(gpu, &pyramid->elem[i]);
-
-    // Clear levels that will be reused.
-    PL_ARRAY_RESIZE(alloc, *pyramid, levels);
-    for (int i = pyramid->num; i < levels; i++)
-        pyramid->elem[i] = NULL;
-    pyramid->num = levels;
-
-    for (int i = 0; i < levels; i++) {
-        // Use PL_DIV_UP to account for trailing partial blocks.
-        const int grid_w = PL_DIV_UP(w, block_size);
-        const int grid_h = PL_DIV_UP(h, block_size);
-
-        bool ok = pl_tex_recreate(
-            gpu, &pyramid->elem[i],
-            pl_tex_params(.w = grid_w, .h = grid_h, .format = fmt,
-                          .sampleable = true, .storable = true,
-                          .debug_tag = PL_DEBUG_TAG, ));
-
-        if (!ok) {
-            PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d flow field!",
-                   grid_w, grid_h);
-            return false;
-        }
-
-        w = (w + 1) / 2;
-        h = (h + 1) / 2;
-    }
-
-    return true;
-}
-
 static void motion_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_motion_obj *obj = ptr;
@@ -1550,34 +1496,50 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
     }
 
+    const struct pl_tex_params *luma_params = pl_tex_params(
+        .w          = w,
+        .h          = h,
+        .format     = fmt,
+        .sampleable = true,
+        .renderable = true,
+        .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
+        .debug_tag  = PL_DEBUG_TAG,
+    );
+
+    const struct pl_tex_params *flow_params = pl_tex_params(
+        .w          = obj->grid_w,
+        .h          = obj->grid_h,
+        .format     = mv_fmt,
+        .sampleable = true,
+        .storable   = true,
+        .debug_tag  = PL_DEBUG_TAG,
+    );
+
     // These are no-ops as long as the motion search shape stays the same.
     // Otherwise, they invalidate the no longer usable temporal prior that resides
     // in the `obj->flow.fwd` and `obj->flow.bwd`.
     if (input->direction & PL_MOTION_FORWARD) {
-        if (!flow_pyramid_recreate(gpu, obj, &obj->flow.fwd, w, h, levels,
-                                   params->block_size, mv_fmt))
+        if (!pl_pyramid_recreate(gpu, obj, &obj->flow.fwd, levels, flow_params))
             goto error;
     }
 
     if (input->direction & PL_MOTION_BACKWARD) {
-        if (!flow_pyramid_recreate(gpu, obj, &obj->flow.bwd, w, h, levels,
-                                   params->block_size, mv_fmt))
+        if (!pl_pyramid_recreate(gpu, obj, &obj->flow.bwd, levels, flow_params))
             goto error;
     }
 
-    if (!flow_pyramid_recreate(gpu, obj, &obj->scratch.raw, w, h, levels,
-                               params->block_size, mv_fmt))
+    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.raw, levels, flow_params))
         goto error;
 
-    if (!flow_pyramid_recreate(gpu, obj, &obj->scratch.filtered, w, h, levels,
-                               params->block_size, mv_fmt))
+    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.filtered, levels,
+                             flow_params))
         goto error;
 
     // Upon cold start or after reset, build the image pyramid for frame `a`,
     // use cached pyramid otherwise.
     if (!obj->pyramid_valid) {
-        if (!pl_pyramid_recreate(gpu, obj, &obj->pyramid_prev, w, h, levels,
-                                 fmt))
+        if (!pl_pyramid_recreate(gpu, obj, &obj->pyramid_prev, levels,
+                                 luma_params))
             goto error;
         if (!convert_to_luma(input->dispatch, &input->a,
                              obj->pyramid_prev.elem[0]))
@@ -1590,7 +1552,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             goto error;
     }
 
-    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.levels, w, h, levels, fmt))
+    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.levels, levels,
+                             luma_params))
         goto error;
     if (!convert_to_luma(input->dispatch, &input->b,
                          obj->scratch.levels.elem[0]))

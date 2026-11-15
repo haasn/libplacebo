@@ -39,38 +39,30 @@ int pl_pyramid_max_levels(int w, int h)
     return levels;
 }
 
-// Allocate or resize `pyramid` to hold exactly `levels` textures, level `i`
-// being the input resolution halved `i` times (rounding up).
 bool pl_pyramid_recreate(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
-                         int w, int h, int levels, pl_fmt fmt)
+                         int levels, const struct pl_tex_params *params)
 {
-    // If size of the frame reduced or block size increased since previous motion
-    // estimate, destroy the pyramid allocations that would be unused.
     for (int i = levels; i < pyramid->num; i++)
         pl_tex_destroy(gpu, &pyramid->elem[i]);
 
-    // If size of the frame increased since previous motion estimate, or this
-    // is a cold start, prepare the indices to be allocated by `pl_tex_recreate`.
     PL_ARRAY_RESIZE(alloc, *pyramid, levels);
     for (int i = pyramid->num; i < levels; i++)
         pyramid->elem[i] = NULL;
     pyramid->num = levels;
 
+    struct pl_tex_params level = *params;
     for (int i = 0; i < levels; i++) {
-        bool ok = pl_tex_recreate(
-            gpu, &pyramid->elem[i],
-            pl_tex_params(.w = w, .h = h, .format = fmt, .sampleable = true,
-                          .renderable = true,
-                          .storable = fmt->caps & PL_FMT_CAP_STORABLE,
-                          .debug_tag = PL_DEBUG_TAG, ));
-
-        if (!ok) {
-            PL_ERR(gpu, "Failed creating %dx%d image pyramid level!", w, h);
+        pl_tex tex = pyramid->elem[i];
+        if (!(tex && pl_tex_params_superset(tex->params, level)) &&
+            !pl_tex_recreate(gpu, &pyramid->elem[i], &level))
+        {
+            PL_ERR(gpu, "Failed creating %dx%d image pyramid level!",
+                   level.w, level.h);
             return false;
         }
 
-        w = (w + 1) / 2;
-        h = (h + 1) / 2;
+        level.w = (level.w + 1) / 2;
+        level.h = (level.h + 1) / 2;
     }
 
     return true;

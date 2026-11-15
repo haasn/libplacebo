@@ -28,10 +28,11 @@ void pl_pyramid_destroy(pl_gpu gpu, pl_tex_pyramid *pyramid);
 // Number of levels before degenerating into a single pixel.
 int pl_pyramid_max_levels(int w, int h);
 
-// Allocate or resize `pyramid` to hold exactly `levels` textures, level `i`
-// being the input resolution halved `i` times (rounding up).
+// Allocate or resize `pyramid` to hold exactly `levels` textures created with
+// `params`, the dimensions of level `i` being those of `params` halved `i`
+// times (rounding up). Levels that already fit are kept, contents included.
 bool pl_pyramid_recreate(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
-                         int w, int h, int levels, pl_fmt fmt);
+                         int levels, const struct pl_tex_params *params);
 
 // Fills every level of `pyramid` but the first by reducing the level before it.
 bool pl_pyramid_build(pl_gpu gpu, pl_dispatch dispatch,
