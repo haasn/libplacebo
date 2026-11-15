@@ -133,6 +133,33 @@ static void bind_buf(pl_shader sh, const char *name, pl_buf buf,
     });
 }
 
+// Begins a compute shader with work groups of `bw` x `bh` threads and `shmem`
+// bytes of shared memory, described by `fmt`. Returns NULL and aborts the
+// shader if the GPU cannot run it.
+PL_PRINTF(6, 7)
+static pl_shader pass_begin(pl_gpu gpu, pl_dispatch dispatch, int bw, int bh,
+                            size_t shmem, const char *fmt, ...)
+{
+    pl_shader sh = pl_dispatch_begin(dispatch);
+    sh->output = PL_SHADER_SIG_NONE;
+
+    va_list ap;
+    va_start(ap, fmt);
+    sh_vdescribef(sh, fmt, ap);
+    va_end(ap);
+
+    if (!sh_try_compute(sh, bw, bh, false, shmem)) {
+        pl_assert(sh->info->steps.num == 1);
+        PL_ERR(gpu, "pl_motion_estimate: cannot run %s, it needs %dx%d threads "
+                    "and %zu bytes of shared memory per work group!",
+               sh->info->steps.elem[0], bw, bh, shmem);
+        pl_dispatch_abort(dispatch, &sh);
+        return NULL;
+    }
+
+    return sh;
+}
+
 static int dir_index(enum pl_motion_direction dir)
 {
     switch (dir) {
@@ -741,20 +768,11 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int tex_w = p->ref->params.w, tex_h = p->ref->params.h;
     const int grid_w = p->out_mv->params.w, grid_h = p->out_mv->params.h;
 
-    pl_shader sh = pl_dispatch_begin(dispatch);
-    sh_describef(sh,
-                 "exhaustive motion search (%dx%d blocks, radius %d, %d seed "
-                 "candidates)",
-                 bs, bs, r, nseed);
-    sh->output = PL_SHADER_SIG_NONE;
-
-    if (!sh_try_compute(sh, threads, 1, false, shmem.size)) {
-        PL_ERR(gpu,
-               "pl_motion_estimate: cannot create motion search shader, needs "
-               "%d threads and %zu bytes of shared memory per work group!",
-               threads, shmem.size);
-        goto error;
-    }
+    pl_shader sh = pass_begin(gpu, dispatch, threads, 1, shmem.size,
+                              "exhaustive motion search (%dx%d blocks, radius "
+                              "%d, %d seed candidates)", bs, bs, r, nseed);
+    if (!sh)
+        return false;
 
     PL_DEBUG(gpu, "pl_motion_estimate: searching %dx%d -> %dx%d blocks: block "
              "size %d, radius %d, %d candidates, %dx%d block tile, %d threads, "
@@ -1106,21 +1124,12 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
 {
     const int grid_w = out->params.w, grid_h = out->params.h;
 
-    int bw = MOTION_MEDIAN_WORKGROUP_DIM;
-    int bh = MOTION_MEDIAN_WORKGROUP_DIM;
-
-    pl_shader sh = pl_dispatch_begin(dispatch);
-    sh_describef(sh, "motion vector smoothing (3x3, %dx%d blocks)", grid_w,
-                 grid_h);
-    sh->output = PL_SHADER_SIG_NONE;
-
-    if (!sh_try_compute(sh, bw, bh, false, 0)) {
-        PL_ERR(gpu,
-               "pl_motion_estimate: cannot create motion vector smoothing "
-               "shader, needs %dx%d threads per work group!",
-               bw, bh);
-        goto error;
-    }
+    const int dim = MOTION_MEDIAN_WORKGROUP_DIM;
+    pl_shader sh = pass_begin(gpu, dispatch, dim, dim, 0,
+                              "motion vector smoothing (3x3, %dx%d blocks)",
+                              grid_w, grid_h);
+    if (!sh)
+        return false;
 
     ident_t src = bind_tex(sh, "flow_in", in);
     ident_t dst = bind_img(sh, "flow_out", out);
@@ -1169,20 +1178,11 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
     }
     // clang-format on
 
-    const struct pl_dispatch_compute_params *params = pl_dispatch_compute_params(
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
         .shader = &sh,
-        .dispatch_size = {
-            PL_DIV_UP(grid_w, bw),
-            PL_DIV_UP(grid_h, bh),
-            1,
-        },
-    );
-
-    return pl_dispatch_compute(dispatch, params);
-
-error:
-    pl_dispatch_abort(dispatch, &sh);
-    return false;
+        .width  = grid_w,
+        .height = grid_h,
+    ));
 }
 
 // Two contiguous histograms describing the global motion in the frame.
@@ -1240,18 +1240,11 @@ static bool motion_global_hist_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int dim = MOTION_GLOBAL_WORKGROUP_DIM;
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
 
-    pl_shader sh = pl_dispatch_begin(dispatch);
-    sh_describef(sh, "global motion histogram (%dx%d blocks)", grid_w, grid_h);
-    sh->output = PL_SHADER_SIG_NONE;
-
-    if (!sh_try_compute(sh, dim, dim, false, shmem)) {
-        PL_ERR(gpu,
-               "pl_motion_estimate: cannot create global motion histogram "
-               "shader, needs %dx%d threads and %zu bytes of shared memory "
-               "per work group!",
-               dim, dim, shmem);
-        goto error;
-    }
+    pl_shader sh = pass_begin(gpu, dispatch, dim, dim, shmem,
+                              "global motion histogram (%dx%d blocks)", grid_w,
+                              grid_h);
+    if (!sh)
+        return false;
 
     ident_t src = bind_tex(sh, "flow_in", flow);
     bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
@@ -1286,20 +1279,11 @@ static bool motion_global_hist_pass(pl_gpu gpu, pl_dispatch dispatch,
     }
     // clang-format on
 
-    const struct pl_dispatch_compute_params *params = pl_dispatch_compute_params(
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
         .shader = &sh,
-        .dispatch_size = {
-            PL_DIV_UP(grid_w, dim),
-            PL_DIV_UP(grid_h, dim),
-            1,
-        },
-    );
-
-    return pl_dispatch_compute(dispatch, params);
-
-error:
-    pl_dispatch_abort(dispatch, &sh);
-    return false;
+        .width  = grid_w,
+        .height = grid_h,
+    ));
 }
 
 // Reads the median from the histogram. Needs to be in a separate shader because
@@ -1312,18 +1296,10 @@ static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
 {
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
 
-    pl_shader sh = pl_dispatch_begin(dispatch);
-    sh_describef(sh, "global motion median (%d blocks)", num);
-    sh->output = PL_SHADER_SIG_NONE;
-
-    if (!sh_try_compute(sh, MOTION_GLOBAL_BINS, 1, false, shmem)) {
-        PL_ERR(gpu,
-               "pl_motion_estimate: cannot create global motion median "
-               "shader, needs %d threads and %zu bytes of shared memory per "
-               "work group!",
-               MOTION_GLOBAL_BINS, shmem);
-        goto error;
-    }
+    pl_shader sh = pass_begin(gpu, dispatch, MOTION_GLOBAL_BINS, 1, shmem,
+                              "global motion median (%d blocks)", num);
+    if (!sh)
+        return false;
 
     bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
              &global_hist_var, 1);
@@ -1367,16 +1343,10 @@ static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
     }
     // clang-format on
 
-    const struct pl_dispatch_compute_params *params = pl_dispatch_compute_params(
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader        = &sh,
         .dispatch_size = { 1, 1, 1 },
-        .shader = &sh,
-    );
-
-    return pl_dispatch_compute(dispatch, params);
-
-error:
-    pl_dispatch_abort(dispatch, &sh);
-    return false;
+    ));
 }
 
 // Estimates the global motion of `dir` from its flow field.
