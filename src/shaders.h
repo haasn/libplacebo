@@ -317,6 +317,12 @@ static inline void *sh_lookup_obj(pl_shader_obj obj, enum pl_shader_obj_type typ
 // If `temporal` is set, the PRNG will vary across frames.
 ident_t sh_prng(pl_shader sh, bool temporal, ident_t *state);
 
+// Defines a function returning the median of an array of N values of the
+// float vector type of `mask`, per component, and returns its name.
+//
+// Note: Not all values of N are implemented; see `src/shaders.c` for a list.
+ident_t sh_median(pl_shader sh, const int N, uint8_t comps);
+
 // Like `pl_shader_dither` and `pl_shader_error_diffusion`, but quantizing to
 // `steps` steps per unit instead of 2^new_depth - 1
 struct pl_dither_params;

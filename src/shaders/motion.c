@@ -1133,31 +1133,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
 
     ident_t src = bind_tex(sh, "flow_in", in);
     ident_t dst = bind_img(sh, "flow_out", out);
-
-    // clang-format off
-#pragma GLSLH /* motion_smooth_pass */                                          \
-    /* Branchless, element-wise comparator to use in the sorting network. */    \
-    void sort2(inout vec2 a, inout vec2 b) {                                    \
-        vec2 lo = min(a, b);                                                    \
-        b = max(a, b);                                                          \
-        a = lo;                                                                 \
-    }                                                                           \
-                                                                                \
-    /* Sort 9 elements residing in registers using a sorting network. Sorting   \
-     * network from https://bertdobbelaere.github.io/sorting_networks.html or   \
-     * SorterHunter. */                                                         \
-    void sort9(inout vec2 a, inout vec2 b, inout vec2 c, inout vec2 d,          \
-               inout vec2 e, inout vec2 f, inout vec2 g, inout vec2 h,          \
-               inout vec2 i) {                                                  \
-        sort2(c,f); sort2(a,d); sort2(e,i); sort2(b,h);                         \
-        sort2(a,h); sort2(c,e); sort2(f,g); sort2(d,i);                         \
-        sort2(a,c); sort2(b,d); sort2(e,f); sort2(h,i);                         \
-        sort2(b,e); sort2(f,h); sort2(d,g);                                     \
-        sort2(c,e); sort2(a,b); sort2(d,f); sort2(g,i);                         \
-        sort2(c,d); sort2(e,f); sort2(g,h);                                     \
-        sort2(b,c); sort2(d,e); sort2(f,g);                                     \
-    }                                                                           \
-    // clang-format on
+    ident_t median = sh_median(sh, 9, 0x3);
 
     // clang-format off
 #pragma GLSL /* motion_smooth_pass */                                           \
@@ -1171,10 +1147,8 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, pl_tex in,
             mv[i] = texelFetch($src, p, 0).xy;                                  \
         }                                                                       \
                                                                                 \
-        sort9(mv[0], mv[1], mv[2], mv[3], mv[4], mv[5], mv[6], mv[7], mv[8]);   \
-                                                                                \
-        /* Take median of sorted elements. The confidence is always 1. */       \
-        imageStore($dst, blk, vec4(mv[4], 1.0, 0.0));                           \
+        /* Take median of all elements. The confidence is always 1. */          \
+        imageStore($dst, blk, vec4($median(mv), 1.0, 0.0));                     \
     }
     // clang-format on
 

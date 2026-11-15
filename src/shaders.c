@@ -1031,3 +1031,39 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
     GLSLH("#define "$" ("$"("$"))\n", res, randfun, state);
     return res;
 }
+
+ident_t sh_median(pl_shader sh, const int n, uint8_t comps)
+{
+    ident_t sort2 = sh_fresh(sh, "sort2"), median = sh_fresh(sh, "median9");
+
+#pragma GLSLH                                                                   \
+    void $sort2(inout ${vecType: comps} a, inout ${vecType: comps} b)           \
+    {                                                                           \
+        ${vecType: comps} lo = min(a, b);                                       \
+        b = max(a, b);                                                          \
+        a = lo;                                                                 \
+    }                                                                           \
+
+    switch (n) {
+    case 9:
+#pragma GLSLH                                                                   \
+        ${vecType: comps} $median(${vecType: comps} v[9])                       \
+        {                                                                       \
+            $sort2(v[1], v[2]); $sort2(v[4], v[5]); $sort2(v[7], v[8]);         \
+            $sort2(v[0], v[1]); $sort2(v[3], v[4]); $sort2(v[6], v[7]);         \
+            $sort2(v[1], v[2]); $sort2(v[4], v[5]); $sort2(v[7], v[8]);         \
+            $sort2(v[0], v[3]); $sort2(v[5], v[8]); $sort2(v[4], v[7]);         \
+            $sort2(v[3], v[6]); $sort2(v[1], v[4]); $sort2(v[2], v[5]);         \
+            $sort2(v[4], v[7]); $sort2(v[4], v[2]); $sort2(v[6], v[4]);         \
+            $sort2(v[4], v[2]);                                                 \
+            return v[4];                                                        \
+        }
+        break;
+
+    default:
+        SH_FAIL(sh, "Unsupported median filter size: %d", n);
+        return NULL_IDENT;
+    }
+
+    return median;
+}
