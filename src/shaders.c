@@ -1087,3 +1087,40 @@ ident_t sh_tex_load_block(pl_shader sh, int bw, int bh, uint8_t comps,
 
     return fn;
 }
+
+ident_t sh_tex_quad(pl_shader sh, uint8_t comp, ident_t tex,
+                    const struct pl_tex_params *tpars)
+{
+    // Gathering from components other than the first requires GLSL 400
+    const bool gather = tpars->format->gatherable &&
+                        (comp == 0 || sh_glsl(sh).version >= 400);
+    const uint8_t mask = 1 << comp;
+    ident_t fn = sh_fresh(sh, "tex_quad");
+
+#pragma GLSLH                                                                   \
+    vec4 $fn(ivec2 pos)                                                         \
+    {                                                                           \
+        @if (gather) {                                                          \
+            vec2 pt = vec2(${const float: 1.0f / tpars->w},                     \
+                           ${const float: 1.0f / tpars->h});                    \
+            @if (comp > 0) {                                                    \
+                return textureGather($tex, vec2(pos + 1) * pt,                  \
+                                     ${const int: comp}).wzxy;                  \
+            @} else {                                                           \
+                return textureGather($tex, vec2(pos + 1) * pt).wzxy;            \
+            @}                                                                  \
+        @} else {                                                               \
+            ivec2 tex_range = ivec2(${const int: tpars->w - 1},                 \
+                                    ${const int: tpars->h - 1});                \
+            ivec2 p0 = clamp(pos, ivec2(0), tex_range);                         \
+            ivec2 p1 = clamp(pos + 1, ivec2(0), tex_range);                     \
+            ivec2 p10 = ivec2(p1.x, p0.y), p01 = ivec2(p0.x, p1.y);             \
+            return vec4(texelFetch($tex, p0,  0).${swizzle: mask},              \
+                        texelFetch($tex, p10, 0).${swizzle: mask},              \
+                        texelFetch($tex, p01, 0).${swizzle: mask},              \
+                        texelFetch($tex, p1,  0).${swizzle: mask});             \
+        @}                                                                      \
+    }
+
+    return fn;
+}
