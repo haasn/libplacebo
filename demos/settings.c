@@ -429,6 +429,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             static const char *interp_algos[PL_FRAME_INTERP_ALGO_COUNT] = {
                 [PL_FRAME_INTERP_GLOBAL_MOTION] = "Global motion",
                 [PL_FRAME_INTERP_VISUALIZE]     = "Visualize motion vectors",
+                [PL_FRAME_INTERP_QUALITY]       = "Visualize quality",
             };
 
             nk_label(nk, "Algorithm", NK_TEXT_LEFT);

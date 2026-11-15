@@ -2600,6 +2600,39 @@ static bool frame_interp_visualize(pl_shader sh,
     return true;
 }
 
+static bool frame_interp_quality(pl_shader sh,
+                                 const struct pl_frame_interp_input *input,
+                                 const struct pl_color_space *out_color)
+{
+    const struct pl_tex_params *tpars = &input->a.tex->params;
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
+        return false;
+
+    pl_tex qtex = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
+    if (!qtex) {
+        PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
+        return false;
+    }
+
+    ident_t pos, quality = bind_tex_linear(sh, "motion_quality", qtex, &pos,
+                                           NULL);
+    if (!quality)
+        return false;
+
+    sh_describe(sh, "frame interpolation (visualize quality)");
+
+    // clang-format off
+#pragma GLSL /* pl_shader_frame_interp (visualize quality) */                   \
+    float q = textureLod($quality, $pos, 0.0).x;                                \
+    vec4 color = vec4(vec3(q), 1.0);
+    // clang-format on
+
+    struct pl_color_space csp = pl_color_space_srgb;
+    pl_color_space_infer(&csp);
+    pl_shader_color_map_ex(sh, NULL, pl_color_map_args(csp, *out_color));
+    return true;
+}
+
 bool pl_shader_frame_interp(pl_shader sh,
                             const struct pl_frame_interp_input *input,
                             const struct pl_frame_interp_params *params)
@@ -2620,6 +2653,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         me_params.block_size_fine = me_params.block_size_coarse;
         break;
     case PL_FRAME_INTERP_VISUALIZE:
+    case PL_FRAME_INTERP_QUALITY:
         me_dir = PL_MOTION_FORWARD;
         me_quality = true;
         break;
@@ -2654,6 +2688,8 @@ bool pl_shader_frame_interp(pl_shader sh,
         return frame_interp_global(sh, input, &out_color);
     case PL_FRAME_INTERP_VISUALIZE:
         return frame_interp_visualize(sh, input, &out_color);
+    case PL_FRAME_INTERP_QUALITY:
+        return frame_interp_quality(sh, input, &out_color);
     case PL_FRAME_INTERP_ALGO_COUNT:
         break;
     }

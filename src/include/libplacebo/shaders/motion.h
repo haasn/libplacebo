@@ -252,6 +252,11 @@ enum pl_frame_interp_algo {
     // of the earlier frame. Vectors of low quality fade to gray.
     PL_FRAME_INTERP_VISUALIZE,
 
+    // Debugging aid: instead of interpolating, draws the quality of the
+    // forward motion vectors (see `pl_motion_get_quality`), from black for
+    // the lowest to white for the highest.
+    PL_FRAME_INTERP_QUALITY,
+
     PL_FRAME_INTERP_ALGO_COUNT,
 };
 
