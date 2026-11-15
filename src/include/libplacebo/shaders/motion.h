@@ -40,7 +40,7 @@ enum pl_motion_direction {
 // state, as if `pl_motion_reset` had been called.
 struct pl_motion_estimate_params {
     // Side length, in pixels, of the square blocks the search operates on.
-    // Smaller blocks track finer detail at a superlinear cost.
+    // Must be even. Smaller blocks track finer detail at a superlinear cost.
     int block_size;
 
     // Number of levels in the coarse-to-fine pyramid, including the full

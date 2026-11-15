@@ -720,6 +720,11 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
         return false;
     }
 
+    if (params->block_size % 2) {
+        PL_ERR(gpu, "pl_motion_estimate: block_size must be even!");
+        return false;
+    }
+
     if (params->pyramid_levels < 0) {
         PL_ERR(gpu, "pl_motion_estimate: pyramid_levels must be non-negative!");
         return false;

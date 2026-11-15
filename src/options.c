@@ -1268,7 +1268,7 @@ const struct pl_opt_t pl_option_list[] = {
              {"global_motion", PL_FRAME_INTERP_GLOBAL_MOTION},
              {"visualize", PL_FRAME_INTERP_VISUALIZE})),
     OPT_INT("motion_block_size", "Motion estimation block size",
-            frame_interp_params.motion.block_size, .min = 1, .max = 64),
+            frame_interp_params.motion.block_size, .min = 2, .max = 64),
     OPT_INT("motion_pyramid_levels", "Requested motion estimation pyramid levels",
             frame_interp_params.motion.pyramid_levels, .max = 16),
     OPT_INT("motion_search_radius_coarse", "Motion estimation search radius",
