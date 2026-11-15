@@ -2864,7 +2864,9 @@ static bool frame_interp_gather(pl_shader sh,
     const pl_shader_obj state = *input->state;
     ident_t fwd = sh_motion_flow(sh, state, PL_MOTION_FORWARD);
     ident_t bwd = sh_motion_flow(sh, state, PL_MOTION_BACKWARD);
-    if (!fwd || !bwd) {
+    ident_t fwd_q = sh_motion_quality(sh, state, PL_MOTION_FORWARD);
+    ident_t bwd_q = sh_motion_quality(sh, state, PL_MOTION_BACKWARD);
+    if (!fwd || !bwd || !fwd_q || !bwd_q) {
         PL_ERR(sh, "pl_shader_frame_interp: no flow fields available!");
         return false;
     }
@@ -2877,15 +2879,22 @@ static bool frame_interp_gather(pl_shader sh,
 #pragma GLSLH /* frame_interp_gather */                                         \
     /* The mix of both frames along `mv`, which leads from frame `a` to frame   \
      * `b` and is at `pos_a` (`pos_b`) at the time `t`. */                      \
-    vec4 gather_sample(vec2 pos_a, vec2 pos_b, vec2 mv, float t)                \
+    vec4 gather_sample(vec2 pos_a, vec2 pos_b, vec2 mv, float t,                \
+                       out float quality)                                       \
     {                                                                           \
         vec2 pa = pos_a - t * mv * ${fr.pt[0]};                                 \
         vec2 pb = pos_b + (1.0 - t) * mv * ${fr.pt[1]};                         \
         vec4 ca = ${fr.conv[0]}(textureLod(${fr.tex[0]}, pa, 0.0));             \
         vec4 cb = ${fr.conv[1]}(textureLod(${fr.tex[1]}, pb, 0.0));             \
         /* Don't sample from outside the frame */                               \
-        float wa = pa == clamp(pa, 0.0, 1.0) ? 1.0 - t : 0.0;                   \
-        float wb = pb == clamp(pb, 0.0, 1.0) ? t : 0.0;                         \
+        bool in_a = pa == clamp(pa, 0.0, 1.0);                                  \
+        bool in_b = pb == clamp(pb, 0.0, 1.0);                                  \
+        float wa = in_a ? 1.0 - t : 0.0;                                        \
+        float wb = in_b ? t : 0.0;                                              \
+        quality = min(in_a ? textureLod($fwd_q, pa, 0.0).x : 1.0,               \
+                      in_b ? textureLod($bwd_q, pb, 0.0).x : 1.0);              \
+        if (!in_a && !in_b)                                                     \
+            quality = 0.0;                                                      \
         return wa + wb > 0.0 ? (wa * ca + wb * cb) / (wa + wb)                  \
                              : mix(ca, cb, t);                                  \
     }
@@ -2928,12 +2937,22 @@ static bool frame_interp_gather(pl_shader sh,
         }                                                                       \
     }                                                                           \
                                                                                 \
-    vec4 sum = vec4(0.0);                                                       \
+    /* The samples are weighted by their quality, which never is quite none,    \
+     * to have a mean when all of them are bad. */                              \
+    vec4 sum = vec4(0.0), plain = vec4(0.0);                                    \
+    float total = 0.0, quality = 0.0, q;                                        \
     for (int k = 0; k < 6; k++) {                                               \
-        if (count[k] > 0.0)                                                     \
-            sum += count[k] * gather_sample(pos_a, pos_b, mv[k], t);            \
+        if (count[k] == 0.0)                                                    \
+            continue;                                                           \
+        vec4 c = gather_sample(pos_a, pos_b, mv[k], t, q);                      \
+        float wt = count[k] * (q + 0.02);                                       \
+        sum += wt * c;                                                          \
+        plain += count[k] * c;                                                  \
+        quality += wt * q;                                                      \
+        total += wt;                                                            \
     }                                                                           \
-    color = sum / 6.0;                                                          \
+                                                                                \
+    color = mix(plain / 6.0, sum / total, quality / total);                     \
     }
     // clang-format on
 
@@ -2973,7 +2992,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         break;
     case PL_FRAME_INTERP_GATHER:
         me_dir = PL_MOTION_BOTH;
-        me_features = PL_MOTION_OCCLUSION;
+        me_features = PL_MOTION_QUALITY | PL_MOTION_OCCLUSION;
         break;
     case PL_FRAME_INTERP_ALGO_COUNT:
     default:
