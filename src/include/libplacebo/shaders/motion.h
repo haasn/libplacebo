@@ -238,7 +238,7 @@ struct pl_frame_interp_params {
 };
 
 #define PL_FRAME_INTERP_DEFAULTS                                               \
-    .algo = PL_FRAME_INTERP_GLOBAL_MOTION,                                     \
+    .algo = PL_FRAME_INTERP_GATHER,                                            \
     .motion = {PL_MOTION_ESTIMATE_DEFAULTS},
 
 #define pl_frame_interp_params(...)                                            \
