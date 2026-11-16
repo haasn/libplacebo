@@ -96,7 +96,6 @@ struct sh_motion_obj {
     struct {
         pl_tex_pyramid input;  // luma pyramid of this call's frame `b`
         pl_tex_pyramid raw;    // per-level search output
-        pl_tex_pyramid filtered; // per-level search output after smoothing
         pl_buf hist;           // global motion histogram
     } scratch;
 
@@ -548,7 +547,6 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
     pl_pyramid_destroy(gpu, &obj->pyramid_prev);
     pl_pyramid_destroy(gpu, &obj->scratch.input);
     pl_pyramid_destroy(gpu, &obj->scratch.raw);
-    pl_pyramid_destroy(gpu, &obj->scratch.filtered);
     for (int i = 0; i < NUM_DIRS; i++) {
         pl_pyramid_destroy(gpu, &obj->dir[i].coarse);
         pl_pyramid_destroy(gpu, &obj->dir[i].fine);
@@ -2241,10 +2239,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.raw, levels, flow_params))
         goto error;
 
-    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.filtered, levels,
-                             flow_params))
-        goto error;
-
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(params, refine);
     for (int d = 0; d < NUM_DIRS; d++) {
@@ -2335,7 +2329,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                                         : params->search_radius_fine;
 
             pl_tex raw = obj->scratch.raw.elem[i];
-            pl_tex out = obj->scratch.filtered.elem[i];
+            pl_tex out = field->elem[i];
 
             // The frames in the order of the direction
             pl_tex luma[2] = {
@@ -2347,7 +2341,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // all levels but the coarsest. The parent is the motion field
             // after smoothing.
             pl_tex parent =
-                i < levels - 1 ? obj->scratch.filtered.elem[i + 1] : NULL;
+                i < levels - 1 ? field->elem[i + 1] : NULL;
 
             // Seed the motion search using the prior at the corresponding
             // level of the motion search pyramid.
@@ -2404,20 +2398,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             ok = refine_flow(gpu, input->dispatch, refine, &obj->dir[d].fine,
                              params->block_size_coarse, luma[d], luma[!d],
                              levels > 1 ? obj->dir[d].gain : NULL,
-                             obj->scratch.filtered.elem[0]);
+                             field->elem[0]);
             if (!ok)
                 break;
         }
 
-        // NOTE: we assume that the prior forward motion field is safe to be
-        // overwritten by the backward motion search.
-        //
         // NOTE: motion estimation that succeeds on the forward motion
         // estimation call but fails on the backward motion estimation call
         // may leave sh_motion_obj in an incomplete state. we assume that if
         // the backward direction fails, the caller is not interested in the
         // forward direction results.
-        PL_SWAP(*field, obj->scratch.filtered);
 
         if (input->features & PL_MOTION_GLOBAL) {
             ok = estimate_global(gpu, input->dispatch, obj, dir);
