@@ -59,12 +59,12 @@ struct sh_motion_obj {
     uint64_t sig_prev, sig_next;
     int frame_w, frame_h;
 
-    // Directions the state is set up for
+    // Directions and features the state is set up for
     enum pl_motion_direction direction;
-
-    // Which directions and features of `dir` are currently valid
-    enum pl_motion_direction valid;
     enum pl_motion_feature features;
+
+    // Which directions of `dir` are currently valid
+    enum pl_motion_direction valid;
 
     // --- Outputs for the current frame pair, in each direction
     struct motion_dir {
@@ -559,12 +559,7 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
 
     obj->sig_prev = obj->sig_next = 0;
     obj->valid = 0;
-    obj->features = 0;
     obj->pyramid_valid = false;
-
-    for (int i = 0; i < NUM_DIRS; i++)
-        pl_buf_destroy(gpu, &obj->dir[i].global_flow);
-    pl_buf_destroy(gpu, &obj->scratch.hist);
 }
 
 int pl_motion_num_blocks(int w, int h,
@@ -1875,13 +1870,10 @@ static const struct pl_buffer_var global_hist_var = {
     },
 };
 
-// Reusable helper to recreate global motion and histogram scratch buffers.
-static bool global_buf_recreate(pl_gpu gpu, pl_buf *buf, size_t size,
-                                bool host_readable)
+// Reusable helper to create global motion and histogram scratch buffers.
+static bool global_buf_create(pl_gpu gpu, pl_buf *buf, size_t size,
+                              bool host_readable)
 {
-    if (*buf)
-        return true;
-
     // .initial_data doesn't care if it is larger than .size
     static const uint32_t zero[2 * MOTION_GLOBAL_BINS] = { 0 };
     pl_assert(size <= sizeof(zero));
@@ -2029,16 +2021,11 @@ static bool estimate_global(pl_gpu gpu, pl_dispatch dispatch,
 {
     const int d = dir_index(dir);
     pl_tex flow = obj->dir[d].coarse.elem[0];
-    pl_buf *global = &obj->dir[d].global_flow;
+    pl_buf global = obj->dir[d].global_flow;
 
-    return global_buf_recreate(gpu, &obj->scratch.hist,
-                               2 * MOTION_GLOBAL_BINS * sizeof(uint32_t),
-                               false) &&
-           global_buf_recreate(gpu, global, sizeof(struct global_buf_data),
-                               true) &&
-           motion_global_hist_pass(gpu, dispatch, flow, obj->scratch.hist) &&
+    return motion_global_hist_pass(gpu, dispatch, flow, obj->scratch.hist) &&
            motion_global_median_pass(gpu, dispatch, obj->scratch.hist,
-                                     flow->params.w * flow->params.h, *global,
+                                     flow->params.w * flow->params.h, global,
                                      dir);
 }
 
@@ -2048,14 +2035,6 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
                              struct sh_motion_obj *obj, pl_tex luma_a,
                              pl_tex luma_b)
 {
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
-                             PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR);
-    if (!fmt) {
-        PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
-                    "single component format available!");
-        return false;
-    }
-
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(&obj->params, refine);
     const int bs = num_refine ? refine[0] : obj->params.block_size_coarse;
@@ -2067,29 +2046,16 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
         if (!(obj->valid & dir))
             continue;
 
-        const int qw = PL_DIV_UP(obj->frame_w, MOTION_QUALITY_SUB);
-        const int qh = PL_DIV_UP(obj->frame_h, MOTION_QUALITY_SUB);
-        bool ok = pl_tex_recreate(gpu, &obj->dir[d].quality, pl_tex_params(
-            .w          = qw,
-            .h          = qh,
-            .format     = fmt,
-            .sampleable = true,
-            .storable   = true,
-        ));
-        if (!ok) {
-            PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d quality "
-                        "texture!", qw, qh);
-            return false;
-        }
-
         const bool fwd = d == FWD;
         const pl_tex_pyramid *fine = &obj->dir[d].fine;
         const pl_tex_pyramid *blocks = &obj->dir[d].coarse;
-        ok = motion_quality_pass(gpu, dispatch, bs, fwd ? luma_a : luma_b,
-                                 fwd ? luma_b : luma_a,
-                                 has_gain ? obj->dir[d].gain : NULL,
-                                 num_refine ? fine->elem[0] : blocks->elem[0],
-                                 obj->dir[d].quality);
+        bool ok = motion_quality_pass(gpu, dispatch, bs,
+                                      fwd ? luma_a : luma_b,
+                                      fwd ? luma_b : luma_a,
+                                      has_gain ? obj->dir[d].gain : NULL,
+                                      num_refine ? fine->elem[0]
+                                                 : blocks->elem[0],
+                                      obj->dir[d].quality);
         if (!ok)
             return false;
     }
@@ -2098,14 +2064,16 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
 }
 
 // Creates all GPU objects needed for this motion estimation call. Whenever the
-// dimensions, parameters or directions change, this recreates the entire
-// state from scratch, discarding the temporal state.
+// dimensions, parameters, directions or features change, this recreates the
+// entire state from scratch, discarding the temporal state.
 static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
                          const struct pl_motion_estimate_params *params,
-                         enum pl_motion_direction direction)
+                         enum pl_motion_direction direction,
+                         enum pl_motion_feature features)
 {
     if (w == obj->frame_w && h == obj->frame_h &&
-        direction == obj->direction && params_eq(&obj->params, params))
+        direction == obj->direction && features == obj->features &&
+        params_eq(&obj->params, params))
         return true;
 
     PL_DEBUG(gpu, "pl_motion: (re)initializing motion state");
@@ -2114,6 +2082,7 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
     obj->frame_w = w;
     obj->frame_h = h;
     obj->direction = direction;
+    obj->features = features;
 
     const int levels = pyramid_num_levels(w, h, params);
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
@@ -2196,6 +2165,50 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
         !pl_pyramid_recreate(gpu, obj, &obj->scratch.input, levels, input_params))
         goto error;
 
+    if (features & PL_MOTION_QUALITY) {
+        pl_fmt qfmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
+                                  PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR);
+        if (!qfmt) {
+            PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
+                        "single component format available!");
+            goto error;
+        }
+
+        const int qw = PL_DIV_UP(w, MOTION_QUALITY_SUB);
+        const int qh = PL_DIV_UP(h, MOTION_QUALITY_SUB);
+        for (int d = 0; d < NUM_DIRS; d++) {
+            if (!(direction & (1 << d)))
+                continue;
+            bool ok = pl_tex_recreate(gpu, &obj->dir[d].quality, pl_tex_params(
+                .w          = qw,
+                .h          = qh,
+                .format     = qfmt,
+                .sampleable = true,
+                .storable   = true,
+            ));
+            if (!ok) {
+                PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d quality "
+                            "texture!", qw, qh);
+                goto error;
+            }
+        }
+    }
+
+    if (features & PL_MOTION_GLOBAL) {
+        if (!global_buf_create(gpu, &obj->scratch.hist,
+                               2 * MOTION_GLOBAL_BINS * sizeof(uint32_t),
+                               false))
+            goto error;
+
+        for (int d = 0; d < NUM_DIRS; d++) {
+            if (!(direction & (1 << d)))
+                continue;
+            if (!global_buf_create(gpu, &obj->dir[d].global_flow,
+                                   sizeof(struct global_buf_data), true))
+                goto error;
+        }
+    }
+
     return true;
 
 error:
@@ -2225,39 +2238,14 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     const int w = input->a.tex->params.w;
     const int h = input->a.tex->params.h;
-    if (!motion_setup(gpu, obj, w, h, params, input->direction))
+    if (!motion_setup(gpu, obj, w, h, params, input->direction,
+                      input->features))
         return false;
 
     if (obj->sig_prev == input->a.sig && obj->sig_next == input->b.sig &&
         (obj->valid & input->direction) == input->direction)
     {
-        // Same frame pair as the previous call, at most the global motion
-        // and the quality are left to compute.
-        if ((input->features & PL_MOTION_GLOBAL) &&
-            !(obj->features & PL_MOTION_GLOBAL))
-        {
-            for (int i = 0; i < NUM_DIRS; i++) {
-                const enum pl_motion_direction dir = 1 << i;
-                if ((obj->valid & dir) &&
-                    !estimate_global(gpu, input->dispatch, obj, dir))
-                    goto error;
-            }
-
-            obj->features |= PL_MOTION_GLOBAL;
-        }
-
-        if ((input->features & PL_MOTION_QUALITY) &&
-            !(obj->features & PL_MOTION_QUALITY))
-        {
-            // The pyramids were swapped at the end of the previous call
-            if (!estimate_quality(gpu, input->dispatch, obj,
-                                  obj->scratch.input.elem[0],
-                                  obj->pyramid_prev.elem[0]))
-                goto error;
-
-            obj->features |= PL_MOTION_QUALITY;
-        }
-
+        // Same frame pair as the previous call
         return true;
     }
 
@@ -2433,7 +2421,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             goto error;
     }
 
-    obj->features = input->features;
 
     // Cache frame `b`'s luma pyramid, use reuse `a` buffers as scratch.
     PL_SWAP(obj->pyramid_prev, obj->scratch.input);
