@@ -52,21 +52,19 @@ static int dir_index(enum pl_motion_direction dir)
 
 // Persistent state and scratch space behind a PL_SHADER_OBJ_MOTION shader object.
 struct sh_motion_obj {
+    struct pl_motion_estimate_params params;
+
     // --- Persistent across frames
 
     // Signatures of the frame pair the persistent state below describes, i.e.
     // the ones given to the most recent `pl_motion_estimate` call. `sig_next`
     // also identifies the frame `pyramid_prev` was built from.
     uint64_t sig_prev, sig_next;
+    int frame_w, frame_h;
 
     // Directions and features held for that frame pair
     enum pl_motion_direction valid;
     enum pl_motion_feature features;
-
-    // Luma pyramid of the *previous* call's frame `b`, reused as this call's
-    // frame `a` pyramid. Only holds a usable pyramid if `pyramid_valid`.
-    pl_tex_pyramid pyramid_prev;
-    bool pyramid_valid;
 
     // Per-direction state, indexed by dir_index()
     struct motion_dir {
@@ -87,11 +85,6 @@ struct sh_motion_obj {
         pl_buf global_flow;
     } dir[NUM_DIRS];
 
-    // LUTs for the search candidate ordering.
-    // `cand_lut[0]` holds the fine search radius LUT and `cand_lut[1]` holds
-    // the coarse one.
-    pl_shader_obj cand_lut[2];
-
     // --- Valid only for the duration of one pl_motion_estimate call
     struct {
         pl_tex_pyramid input;  // luma pyramid of this call's frame `b`
@@ -99,8 +92,15 @@ struct sh_motion_obj {
         pl_buf hist;           // global motion histogram
     } scratch;
 
-    struct pl_motion_estimate_params params;
-    int frame_w, frame_h;
+    // LUTs for the search candidate ordering.
+    // `cand_lut[0]` holds the fine search radius LUT and `cand_lut[1]` holds
+    // the coarse one.
+    pl_shader_obj cand_lut[2];
+
+    // Luma pyramid of the *previous* call's frame `b`, reused as this call's
+    // frame `a` pyramid. Only holds a usable pyramid if `pyramid_valid`.
+    pl_tex_pyramid pyramid_prev;
+    bool pyramid_valid;
 };
 
 // Binds `tex` for use with `texelFetch`.
