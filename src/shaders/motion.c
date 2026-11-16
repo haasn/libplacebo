@@ -59,6 +59,9 @@ struct sh_motion_obj {
     uint64_t sig_prev, sig_next;
     int frame_w, frame_h;
 
+    // Directions the state is set up for
+    enum pl_motion_direction direction;
+
     // Which directions and features of `dir` are currently valid
     enum pl_motion_direction valid;
     enum pl_motion_feature features;
@@ -2094,25 +2097,23 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
     return true;
 }
 
-// Creates all GPU objects needed for this motion estimation call, and
-// invalidates any state that's no longer valid
+// Creates all GPU objects needed for this motion estimation call. Whenever the
+// dimensions, parameters or directions change, this recreates the entire
+// state from scratch, discarding the temporal state.
 static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
                          const struct pl_motion_estimate_params *params,
                          enum pl_motion_direction direction)
 {
-    const char *changed = NULL;
-    if (w != obj->frame_w || h != obj->frame_h) {
-        changed = "input dimensions changed";
-    } else if (!params_eq(&obj->params, params)) {
-        changed = "parameters changed";
-    }
+    if (w == obj->frame_w && h == obj->frame_h &&
+        direction == obj->direction && params_eq(&obj->params, params))
+        return true;
 
-    if (changed) {
-        invalidate_temporal(gpu, obj, changed);
-        obj->params = *params;
-        obj->frame_w = w;
-        obj->frame_h = h;
-    }
+    PL_DEBUG(gpu, "pl_motion: (re)initializing motion state");
+    motion_uninit(gpu, obj);
+    obj->params = *params;
+    obj->frame_w = w;
+    obj->frame_h = h;
+    obj->direction = direction;
 
     const int levels = pyramid_num_levels(w, h, params);
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
@@ -2120,14 +2121,14 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
     if (!fmt) {
         PL_ERR(gpu, "pl_motion_estimate: no renderable, linearly filterable "
                     "single component float format available!");
-        return false;
+        goto error;
     }
 
     pl_fmt mv_fmt = flow_fmt(gpu);
     if (!mv_fmt) {
         PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
                     "two component float format available!");
-        return false;
+        goto error;
     }
 
     // The search covers the trailing partial blocks as well
@@ -2151,17 +2152,16 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
         .storable   = true,
     );
 
-    // These preserve the previous contents on no-op
     for (int d = 0; d < NUM_DIRS; d++) {
         if (!(direction & (1 << d)))
             continue;
         if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
                                  flow_params))
-            return false;
+            goto error;
     }
 
     if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.raw, levels, flow_params))
-        return false;
+        goto error;
 
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(params, refine);
@@ -2170,12 +2170,14 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
             continue;
         if (!refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
                                      refine, num_refine, mv_fmt))
-            return false;
+            goto error;
     }
 
     pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
 
     for (int i = 0; i < NUM_DIRS; i++) {
+        if (!(direction & (1 << i)))
+            continue;
         bool ok = pl_tex_recreate(gpu, &obj->dir[i].gain, pl_tex_params(
             .w          = 1,
             .h          = 1,
@@ -2186,15 +2188,19 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
 
         if (!ok) {
             PL_ERR(gpu, "pl_motion_estimate: failed creating gain texture!");
-            return false;
+            goto error;
         }
     }
 
     if (!pl_pyramid_recreate(gpu, obj, &obj->pyramid_prev,  levels, input_params) ||
         !pl_pyramid_recreate(gpu, obj, &obj->scratch.input, levels, input_params))
-        return false;
+        goto error;
 
     return true;
+
+error:
+    motion_uninit(gpu, obj);
+    return false;
 }
 
 bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
@@ -2220,7 +2226,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     const int w = input->a.tex->params.w;
     const int h = input->a.tex->params.h;
     if (!motion_setup(gpu, obj, w, h, params, input->direction))
-        goto error;
+        return false;
 
     if (obj->sig_prev == input->a.sig && obj->sig_next == input->b.sig &&
         (obj->valid & input->direction) == input->direction)
