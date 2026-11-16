@@ -868,9 +868,11 @@ static ident_t get_target_gain(pl_shader sh, pl_tex gain_tex)
 // a change in brightness. For the same reason, blocks whose vectors leave the
 // frame are skipped, and the others are weighted by how well their textures
 // match once their means are removed.
-static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
+static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch,
+                             const struct pl_motion_estimate_params *params,
                              pl_tex ref, pl_tex tgt, pl_tex flow, pl_tex gain)
 {
+    const int bs = params->block_size_coarse;
     const int tex_w = ref->params.w, tex_h = ref->params.h;
     const int grid_w = flow->params.w, grid_h = flow->params.h;
     const int threads = 64;
@@ -1402,10 +1404,12 @@ error:
 
 // Replace every block's motion vector with one derived from the surrounding 3x3
 // neighbourhood of blocks, to suppress vectors that the search got wrong.
-static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
+static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch,
+                               const struct pl_motion_estimate_params *params,
                                pl_tex ref, pl_tex tgt, pl_tex gain_tex,
                                pl_tex in, pl_tex out)
 {
+    const int bs = params->block_size_coarse;
     const int grid_w = out->params.w, grid_h = out->params.h;
     const int tex_w = ref->params.w, tex_h = ref->params.h;
 
@@ -1512,14 +1516,17 @@ error:
 }
 
 // Writes a vector for every 4x4 sub-block of `out`: of the vectors of the 3x3
-// blocks around it in `blocks` (of `bs` pixels squared), and of
-// `MOTION_REFINE_4X4_RINGS` rings of blocks further away, the one that best
+// blocks around it in `blocks` (of `block_size_coarse` pixels squared), and
+// of `MOTION_REFINE_4X4_RINGS` rings of blocks further away, the one that best
 // matches the sub-block and a border of one pixel around it. The vector of the
 // sub-block's own block is preferred by a margin of one code value (8 bit).
-static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
-                                   pl_tex ref, pl_tex tgt, pl_tex gain_tex,
-                                   pl_tex blocks, pl_tex out)
+static bool
+motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
+                       const struct pl_motion_estimate_params *params,
+                       pl_tex ref, pl_tex tgt, pl_tex gain_tex, pl_tex blocks,
+                       pl_tex out)
 {
+    const int bs = params->block_size_coarse;
     const int w = ref->params.w, h = ref->params.h;
     const int grid_w = blocks->params.w, grid_h = blocks->params.h;
     const int sub_w = out->params.w, sub_h = out->params.h;
@@ -1613,10 +1620,14 @@ static bool motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
 // the vector of the pixel's block in `flow` (of `bs` pixels squared), or that
 // of one of the 8 neighbouring blocks if it matches the 3x3 pixels around the
 // pixel better by more than `MOTION_REFINE_1X1_MARGIN`.
-static bool motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
-                                   pl_tex ref, pl_tex tgt, pl_tex gain_tex,
-                                   pl_tex flow, pl_tex out)
+static bool
+motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch,
+                       const struct pl_motion_estimate_params *params,
+                       pl_tex ref, pl_tex tgt, pl_tex gain_tex, pl_tex flow,
+                       pl_tex out)
 {
+    // Refines the output of the 4x4 pass, if there is one
+    const int bs = PL_MIN(params->block_size_coarse, 4);
     const int w = out->params.w, h = out->params.h;
     const int grid_w = flow->params.w, grid_h = flow->params.h;
 
@@ -1733,30 +1744,30 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
     return true;
 }
 
-// Refines `blocks`, of `bs` pixels squared, into the levels of `fine`, from
-// the coarsest.
-static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, pl_tex_pyramid *fine,
-                        int bs, pl_tex ref, pl_tex tgt, pl_tex gain,
-                        pl_tex blocks)
+// Refines `blocks` into the levels of `fine`, from the coarsest.
+static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch,
+                        const struct pl_motion_estimate_params *params,
+                        pl_tex_pyramid *fine, pl_tex ref, pl_tex tgt,
+                        pl_tex gain, pl_tex blocks)
 {
     pl_tex in = blocks;
+    int size = params->block_size_coarse;
     for (int i = fine->num - 1; i >= 0; i--) {
-        const int size = refine_size(bs);
+        size = refine_size(size);
         bool ok;
         switch (size) {
         case 4:
-            ok = motion_refine_4x4_pass(gpu, dispatch, bs, ref, tgt, gain, in,
-                                        fine->elem[i]);
+            ok = motion_refine_4x4_pass(gpu, dispatch, params, ref, tgt, gain,
+                                        in, fine->elem[i]);
             break;
         case 1:
-            ok = motion_refine_1x1_pass(gpu, dispatch, bs, ref, tgt, gain, in,
-                                        fine->elem[i]);
+            ok = motion_refine_1x1_pass(gpu, dispatch, params, ref, tgt, gain,
+                                        in, fine->elem[i]);
             break;
         }
         if (!ok)
             return false;
         in = fine->elem[i];
-        bs = size;
     }
 
     return true;
@@ -1768,10 +1779,12 @@ static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, pl_tex_pyramid *fine,
 //
 // A mismatch means less the more texture the window has, so it is taken
 // relative to that.
-static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
+static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch,
+                                const struct pl_motion_estimate_params *params,
                                 pl_tex ref, pl_tex tgt, pl_tex gain_tex,
                                 pl_tex flow, pl_tex out)
 {
+    const int bs = params->block_size_fine;
     const int w = ref->params.w, h = ref->params.h;
     const int out_w = out->params.w, out_h = out->params.h;
     const int sub = MOTION_QUALITY_SUB, win = sub + 2;
@@ -2062,8 +2075,7 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
 
         const bool fwd = d == FWD;
         const struct motion_dir *md = &obj->dir[d];
-        bool ok = motion_quality_pass(gpu, dispatch,
-                                      obj->params.block_size_fine,
+        bool ok = motion_quality_pass(gpu, dispatch, &obj->params,
                                       fwd ? luma_a : luma_b,
                                       fwd ? luma_b : luma_a, md->gain,
                                       md->fine.num ? md->fine.elem[0]
@@ -2382,15 +2394,13 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (!ok)
                 break;
 
-            ok = motion_smooth_pass(gpu, input->dispatch,
-                                    params->block_size_coarse, luma[d],
+            ok = motion_smooth_pass(gpu, input->dispatch, params, luma[d],
                                     luma[!d], gain, raw, out);
             if (!ok)
                 break;
 
             if (top && i > 0) {
-                ok = motion_gain_pass(gpu, input->dispatch,
-                                      params->block_size_coarse, luma[d],
+                ok = motion_gain_pass(gpu, input->dispatch, params, luma[d],
                                       luma[!d], out, obj->dir[d].gain);
                 if (!ok)
                     break;
@@ -2406,9 +2416,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 obj->scratch.input.elem[0],
             };
             // The gain is that of the levels below the top one, if any
-            ok = refine_flow(gpu, input->dispatch, &obj->dir[d].fine,
-                             params->block_size_coarse, luma[d], luma[!d],
-                             obj->dir[d].gain, field->elem[0]);
+            ok = refine_flow(gpu, input->dispatch, params, &obj->dir[d].fine,
+                             luma[d], luma[!d], obj->dir[d].gain,
+                             field->elem[0]);
             if (!ok)
                 break;
         }
