@@ -28,8 +28,8 @@ PL_API_BEGIN
 
 // Which direction(s) of flow to compute.
 enum pl_motion_direction {
-    PL_MOTION_FORWARD = 1 << 0,  // A -> B
-    PL_MOTION_BACKWARD = 1 << 1, // B -> A
+    PL_MOTION_FORWARD   = 1 << 0, // A -> B
+    PL_MOTION_BACKWARD  = 1 << 1, // B -> A
     PL_MOTION_BOTH = PL_MOTION_FORWARD | PL_MOTION_BACKWARD,
 };
 
@@ -63,8 +63,11 @@ struct pl_motion_estimate_params {
 };
 
 #define PL_MOTION_ESTIMATE_DEFAULTS                                            \
-    .block_size_coarse = 8, .block_size_fine = 1, .pyramid_levels = 0,         \
-    .search_radius_coarse = 4, .search_radius_fine = 1,
+    .block_size_coarse      = 8,                                               \
+    .block_size_fine        = 1,                                               \
+    .pyramid_levels         = 0,                                               \
+    .search_radius_coarse   = 4,                                               \
+    .search_radius_fine     = 1,
 
 #define pl_motion_estimate_params(...)                                         \
     (&(struct pl_motion_estimate_params) {                                     \
@@ -238,8 +241,9 @@ PL_API extern const struct pl_buffer_var
 // WARNING: this may synchronize with the GPU. It exists for debugging. Use
 // `pl_motion_get_global_buf` to consume global motion on the device instead.
 PL_API bool pl_motion_get_global(pl_shader_obj state,
-                                 enum pl_motion_direction dir, float *out_x,
-                                 float *out_y, float *out_confidence);
+                                 enum pl_motion_direction dir,
+                                 float *out_x, float *out_y,
+                                 float *out_confidence);
 
 // Algorithm used for frame interpolation when enabled.
 enum pl_frame_interp_algo {
