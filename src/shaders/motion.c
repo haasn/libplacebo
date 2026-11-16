@@ -94,7 +94,7 @@ struct sh_motion_obj {
 
     // --- Valid only for the duration of one pl_motion_estimate call
     struct {
-        pl_tex_pyramid levels; // luma pyramid of this call's frame `b`
+        pl_tex_pyramid input;  // luma pyramid of this call's frame `b`
         pl_tex_pyramid raw;    // per-level search output
         pl_tex_pyramid filtered; // per-level search output after smoothing
         pl_buf hist;           // global motion histogram
@@ -546,7 +546,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_motion_obj *obj = ptr;
     pl_pyramid_destroy(gpu, &obj->pyramid_prev);
-    pl_pyramid_destroy(gpu, &obj->scratch.levels);
+    pl_pyramid_destroy(gpu, &obj->scratch.input);
     pl_pyramid_destroy(gpu, &obj->scratch.raw);
     pl_pyramid_destroy(gpu, &obj->scratch.filtered);
     for (int i = 0; i < NUM_DIRS; i++) {
@@ -2168,7 +2168,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         {
             // The pyramids were swapped at the end of the previous call
             if (!estimate_quality(gpu, input->dispatch, obj,
-                                  obj->scratch.levels.elem[0],
+                                  obj->scratch.input.elem[0],
                                   obj->pyramid_prev.elem[0]))
                 goto error;
 
@@ -2288,16 +2288,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             goto error;
     }
 
-    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.levels, levels,
+    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.input, levels,
                              luma_params))
         goto error;
     if (!convert_to_luma(input->dispatch, &input->b,
-                         obj->scratch.levels.elem[0]))
+                         obj->scratch.input.elem[0]))
     {
         PL_ERR(gpu, "pl_motion_estimate: failed converting frame b to luma!");
         goto error;
     }
-    if (!pl_pyramid_build(gpu, input->dispatch, &obj->scratch.levels))
+    if (!pl_pyramid_build(gpu, input->dispatch, &obj->scratch.input))
         goto error;
 
     void *tmp = pl_tmp(NULL);
@@ -2340,7 +2340,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // The frames in the order of the direction
             pl_tex luma[2] = {
                 obj->pyramid_prev.elem[i],
-                obj->scratch.levels.elem[i],
+                obj->scratch.input.elem[i],
             };
 
             // Use the parent motion search to seed this levels search, for
@@ -2398,7 +2398,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (num_refine) {
             pl_tex luma[2] = {
                 obj->pyramid_prev.elem[0],
-                obj->scratch.levels.elem[0],
+                obj->scratch.input.elem[0],
             };
             // The gain is that of the levels below the top one, if any
             ok = refine_flow(gpu, input->dispatch, refine, &obj->dir[d].fine,
@@ -2435,14 +2435,14 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (input->features & PL_MOTION_QUALITY) {
         if (!estimate_quality(gpu, input->dispatch, obj,
                               obj->pyramid_prev.elem[0],
-                              obj->scratch.levels.elem[0]))
+                              obj->scratch.input.elem[0]))
             goto error;
     }
 
     obj->features = input->features;
 
     // Cache frame `b`'s luma pyramid, use reuse `a` buffers as scratch.
-    PL_SWAP(obj->pyramid_prev, obj->scratch.levels);
+    PL_SWAP(obj->pyramid_prev, obj->scratch.input);
     obj->pyramid_valid = true;
 
     return true;
