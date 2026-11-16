@@ -2094,11 +2094,26 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
     return true;
 }
 
-// Creates all GPU objects needed for this motion estimation call
+// Creates all GPU objects needed for this motion estimation call, and
+// invalidates any state that's no longer valid
 static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
                          const struct pl_motion_estimate_params *params,
                          enum pl_motion_direction direction)
 {
+    const char *changed = NULL;
+    if (w != obj->frame_w || h != obj->frame_h) {
+        changed = "input dimensions changed";
+    } else if (!params_eq(&obj->params, params)) {
+        changed = "parameters changed";
+    }
+
+    if (changed) {
+        invalidate_temporal(gpu, obj, changed);
+        obj->params = *params;
+        obj->frame_w = w;
+        obj->frame_h = h;
+    }
+
     const int levels = pyramid_num_levels(w, h, params);
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
                              PL_FMT_CAP_LINEAR | PL_FMT_CAP_RENDERABLE);
@@ -2204,19 +2219,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     const int w = input->a.tex->params.w;
     const int h = input->a.tex->params.h;
-    const char *changed = NULL;
-    if (w != obj->frame_w || h != obj->frame_h) {
-        changed = "input dimensions changed";
-    } else if (!params_eq(&obj->params, params)) {
-        changed = "parameters changed";
-    }
-
-    if (changed) {
-        invalidate_temporal(gpu, obj, changed);
-        obj->params = *params;
-        obj->frame_w = w;
-        obj->frame_h = h;
-    }
+    if (!motion_setup(gpu, obj, w, h, params, input->direction))
+        goto error;
 
     if (obj->sig_prev == input->a.sig && obj->sig_next == input->b.sig &&
         (obj->valid & input->direction) == input->direction)
@@ -2260,9 +2264,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     obj->sig_prev = input->a.sig;
     obj->sig_next = input->b.sig;
-
-    if (!motion_setup(gpu, obj, w, h, params, input->direction))
-        goto error;
 
     const int levels = pyramid_num_levels(w, h, params);
     int refine[MOTION_MAX_REFINE_PASSES];
