@@ -2055,27 +2055,20 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
                              struct sh_motion_obj *obj, pl_tex luma_a,
                              pl_tex luma_b)
 {
-    int refine[MOTION_MAX_REFINE_PASSES];
-    const int num_refine = refine_plan(&obj->params, refine);
-    const int bs = num_refine ? refine[0] : obj->params.block_size_coarse;
-    const bool has_gain =
-        pyramid_num_levels(obj->frame_w, obj->frame_h, &obj->params) > 1;
-
     for (int d = 0; d < NUM_DIRS; d++) {
         const enum pl_motion_direction dir = 1 << d;
         if (!(obj->valid & dir))
             continue;
 
         const bool fwd = d == FWD;
-        const pl_tex_pyramid *fine = &obj->dir[d].fine;
-        const pl_tex_pyramid *blocks = &obj->dir[d].coarse;
-        bool ok = motion_quality_pass(gpu, dispatch, bs,
+        const struct motion_dir *md = &obj->dir[d];
+        bool ok = motion_quality_pass(gpu, dispatch,
+                                      obj->params.block_size_fine,
                                       fwd ? luma_a : luma_b,
-                                      fwd ? luma_b : luma_a,
-                                      has_gain ? obj->dir[d].gain : NULL,
-                                      num_refine ? fine->elem[0]
-                                                 : blocks->elem[0],
-                                      obj->dir[d].quality);
+                                      fwd ? luma_b : luma_a, md->gain,
+                                      md->fine.num ? md->fine.elem[0]
+                                                   : md->coarse.elem[0],
+                                      md->quality);
         if (!ok)
             return false;
     }
@@ -2415,8 +2408,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // The gain is that of the levels below the top one, if any
             ok = refine_flow(gpu, input->dispatch, &obj->dir[d].fine,
                              params->block_size_coarse, luma[d], luma[!d],
-                             levels > 1 ? obj->dir[d].gain : NULL,
-                             field->elem[0]);
+                             obj->dir[d].gain, field->elem[0]);
             if (!ok)
                 break;
         }
