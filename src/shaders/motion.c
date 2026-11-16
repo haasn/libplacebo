@@ -52,49 +52,36 @@ static int dir_index(enum pl_motion_direction dir)
 
 // Persistent state and scratch space behind a PL_SHADER_OBJ_MOTION shader object.
 struct sh_motion_obj {
+    // --- Current motion estimation state metadata
     struct pl_motion_estimate_params params;
 
-    // --- Persistent across frames
-
-    // Signatures of the frame pair the persistent state below describes, i.e.
-    // the ones given to the most recent `pl_motion_estimate` call. `sig_next`
-    // also identifies the frame `pyramid_prev` was built from.
+    // Current frame pair signatures and dimensions
     uint64_t sig_prev, sig_next;
     int frame_w, frame_h;
 
-    // Directions and features held for that frame pair
+    // Which directions and features of `dir` are currently valid
     enum pl_motion_direction valid;
     enum pl_motion_feature features;
 
-    // Per-direction state, indexed by dir_index()
+    // --- Outputs for the current frame pair, in each direction
     struct motion_dir {
-        // Block granular flow fields from each level of the image pyramid
-        // searched by the most recent motion estimation invocation. Used to
-        // seed the next motion estimation search.
-        pl_tex_pyramid coarse;
-        pl_tex_pyramid fine; // see refine_plan()
-
-        // Change in brightness between the frames, see `motion_gain_pass`.
-        pl_tex gain;
-
-        // Quality of the vectors, see `motion_quality_pass`.
-        pl_tex quality;
-
-        // Global motion, as an SSBO laid out as `global_buf_data`. Not
-        // allocated until `PL_MOTION_GLOBAL` is requested.
-        pl_buf global_flow;
+        pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
+        pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
+        pl_tex gain;           // gain (1x1 texture)
+        pl_tex quality;        // flow quality estimate, or NULL
+        pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
 
-    // --- Valid only for the duration of one pl_motion_estimate call
+    // --- Temporary buffers used only within a motion estimation call
     struct {
-        pl_tex_pyramid input;  // luma pyramid of this call's frame `b`
-        pl_tex_pyramid raw;    // per-level search output
-        pl_buf hist;           // global motion histogram
+        pl_tex_pyramid input; // Image pyramid of the input features
+        pl_tex_pyramid raw;   // Raw motion vectors (before smoothing)
+        pl_buf hist;          // Histogram for global motion estimation
     } scratch;
 
-    // LUTs for the search candidate ordering.
-    // `cand_lut[0]` holds the fine search radius LUT and `cand_lut[1]` holds
-    // the coarse one.
+    // --- Other cached / persistent GPU objects
+
+    // LUTs for the motion search candidate ordering
     pl_shader_obj cand_lut[2];
 
     // Luma pyramid of the *previous* call's frame `b`, reused as this call's
