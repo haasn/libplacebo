@@ -70,7 +70,7 @@ struct sh_motion_obj {
     struct motion_dir {
         pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
-        pl_tex gain;           // gain (1x1 texture)
+        pl_buf gain;           // brightness gain (float), or NULL
         pl_tex quality;        // flow quality estimate, or NULL
         pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
@@ -545,7 +545,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
     for (int i = 0; i < NUM_DIRS; i++) {
         pl_pyramid_destroy(gpu, &obj->dir[i].coarse);
         pl_pyramid_destroy(gpu, &obj->dir[i].fine);
-        pl_tex_destroy(gpu, &obj->dir[i].gain);
+        pl_buf_destroy(gpu, &obj->dir[i].gain);
         pl_tex_destroy(gpu, &obj->dir[i].quality);
         pl_buf_destroy(gpu, &obj->dir[i].global_flow);
     }
@@ -848,14 +848,30 @@ static bool convert_to_luma(pl_dispatch dispatch,
     ));
 }
 
+// Layout of the gain buffer, see `motion_gain_pass`
+static const struct pl_buffer_var gain_var = {
+    .var = {
+        .name  = "motion_gain",
+        .type  = PL_VAR_FLOAT,
+        .dim_v = 1,
+        .dim_m = 1,
+        .dim_a = 1,
+    },
+    .layout = {
+        .offset = 0,
+        .size   = sizeof(float),
+        .stride = sizeof(float),
+    },
+};
+
 // Returns the (float) gain factor needed to compensate for brightness changes
 // between the target and the reference frame.
-static ident_t get_target_gain(pl_shader sh, pl_tex gain_tex)
+static ident_t get_target_gain(pl_shader sh, pl_buf gain_buf)
 {
     ident_t gain = sh_fresh(sh, "gain");
-    if (gain_tex) {
-        ident_t tex = bind_tex(sh, "gain_tex", gain_tex);
-        GLSL("float "$" = texelFetch("$", ivec2(0), 0).x;", gain, tex);
+    if (gain_buf) {
+        bind_buf(sh, "gain_buf", gain_buf, PL_DESC_ACCESS_READONLY, &gain_var, 1);
+        GLSL("float "$" = motion_gain;", gain);
     } else {
         GLSL("float "$" = 1.0;", gain);
     }
@@ -864,7 +880,7 @@ static ident_t get_target_gain(pl_shader sh, pl_tex gain_tex)
 }
 
 // Measures the change in brightness from `ref` to `tgt`, as on a fade, into
-// the 1x1 texture `gain`: the factor that brings `tgt` to the brightness of
+// the buffer `gain`: the factor that brings `tgt` to the brightness of
 // `ref`. It is the ratio of the mean luma of the blocks of `ref` to that of
 // the blocks in `tgt` that their vectors in `flow` lead to.
 //
@@ -875,7 +891,7 @@ static ident_t get_target_gain(pl_shader sh, pl_tex gain_tex)
 // match once their means are removed.
 static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch,
                              const struct pl_motion_estimate_params *params,
-                             pl_tex ref, pl_tex tgt, pl_tex flow, pl_tex gain)
+                             pl_tex ref, pl_tex tgt, pl_tex flow, pl_buf gain)
 {
     const int bs = params->block_size_coarse;
     const int tex_w = ref->params.w, tex_h = ref->params.h;
@@ -896,7 +912,7 @@ static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch,
 
     ident_t ref_id  = bind_tex(sh, "ref", ref);
     ident_t flow_id = bind_tex(sh, "flow", flow);
-    ident_t gain_id = bind_img(sh, "gain", gain);
+    bind_buf(sh, "gain_out", gain, PL_DESC_ACCESS_WRITEONLY, &gain_var, 1);
     ident_t tgt_id  = bind_tex_linear(sh, "tgt", tgt, NULL, NULL);
     if (!tgt_id) {
         pl_dispatch_abort(dispatch, &sh);
@@ -954,7 +970,7 @@ static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch,
         float change = sum.x / max(sum.y, 1e-6) - 1.0;                          \
         change = sign(change) *                                                 \
                  max(abs(change) - ${const float: MOTION_GAIN_DEADZONE}, 0.0);  \
-        imageStore($gain_id, ivec2(0), vec4(1.0 + change));                     \
+        motion_gain = 1.0 + change;                                             \
     }
     // clang-format on
 
@@ -986,7 +1002,7 @@ struct motion_search {
     pl_tex prior;  // flow field of the same image pyramid level to take the
                    // temporal prior from, or NULL when there is none available
     enum motion_prior prior_kind;
-    pl_tex gain;   // change in brightness from `ref` to `tgt` to compensate
+    pl_buf gain;   // change in brightness from `ref` to `tgt` to compensate
     pl_tex out_mv;                      // block granular flow field
     const struct motion_geometry *geom; // compile time constants
     pl_shader_obj *cand_lut;
@@ -1411,7 +1427,7 @@ error:
 // neighbourhood of blocks, to suppress vectors that the search got wrong.
 static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch,
                                const struct pl_motion_estimate_params *params,
-                               pl_tex ref, pl_tex tgt, pl_tex gain_tex,
+                               pl_tex ref, pl_tex tgt, pl_buf gain_buf,
                                pl_tex in, pl_tex out)
 {
     const int bs = params->block_size_coarse;
@@ -1436,7 +1452,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch,
     ident_t dst = bind_img(sh, "flow_out", out);
     ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x3, tex, &in->params);
     ident_t ref_id = bind_tex(sh, "ref", ref);
-    ident_t gain = get_target_gain(sh, gain_tex);
+    ident_t gain = get_target_gain(sh, gain_buf);
 
     // The vectors are fractional
     ident_t tgt_pt, tgt_id = bind_tex_linear(sh, "tgt", tgt, NULL, &tgt_pt);
@@ -1528,7 +1544,7 @@ error:
 static bool
 motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
                        const struct pl_motion_estimate_params *params,
-                       pl_tex ref, pl_tex tgt, pl_tex gain_tex, pl_tex blocks,
+                       pl_tex ref, pl_tex tgt, pl_buf gain_buf, pl_tex blocks,
                        pl_tex out)
 {
     const int bs = params->block_size_coarse;
@@ -1551,7 +1567,7 @@ motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
     ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, ref_id,
                                            &ref->params);
     ident_t block_ssd = sh_block_ssd(sh, win, win, 0, tgt_id, &tgt->params);
-    ident_t gain = get_target_gain(sh, gain_tex);
+    ident_t gain = get_target_gain(sh, gain_buf);
 
     // clang-format off
 #pragma GLSL /* motion_refine_4x4_pass */                                       \
@@ -1628,7 +1644,7 @@ motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
 static bool
 motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch,
                        const struct pl_motion_estimate_params *params,
-                       pl_tex ref, pl_tex tgt, pl_tex gain_tex, pl_tex flow,
+                       pl_tex ref, pl_tex tgt, pl_buf gain_buf, pl_tex flow,
                        pl_tex out)
 {
     // Refines the output of the 4x4 pass, if there is one
@@ -1650,7 +1666,7 @@ motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch,
     ident_t tgt_id = bind_tex(sh, "tgt", tgt);
     ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x1, ref_id, &ref->params);
     ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, tgt_id, &tgt->params);
-    ident_t gain = get_target_gain(sh, gain_tex);
+    ident_t gain = get_target_gain(sh, gain_buf);
 
     // clang-format off
 #pragma GLSL /* motion_refine_1x1_pass */                                       \
@@ -1753,7 +1769,7 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
 static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch,
                         const struct pl_motion_estimate_params *params,
                         pl_tex_pyramid *fine, pl_tex ref, pl_tex tgt,
-                        pl_tex gain, pl_tex blocks)
+                        pl_buf gain, pl_tex blocks)
 {
     pl_tex in = blocks;
     int size = params->block_size_coarse;
@@ -1786,7 +1802,7 @@ static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch,
 // relative to that.
 static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch,
                                 const struct pl_motion_estimate_params *params,
-                                pl_tex ref, pl_tex tgt, pl_tex gain_tex,
+                                pl_tex ref, pl_tex tgt, pl_buf gain_buf,
                                 pl_tex flow, pl_tex out)
 {
     const int bs = params->block_size_fine;
@@ -1811,7 +1827,7 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch,
     ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, tgt_id, &tgt->params);
     ident_t load_vectors = sh_tex_load_block(sh, 4, 4, 0x3, src, &flow->params);
     ident_t median9 = sh_median(sh, 9, 0x3);
-    ident_t gain = get_target_gain(sh, gain_tex);
+    ident_t gain = get_target_gain(sh, gain_buf);
 
     // clang-format off
 #pragma GLSL /* motion_quality_pass */                                          \
@@ -2172,22 +2188,19 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
             goto error;
     }
 
-    pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
-
     // Only the levels below the top one compensate the gain
     for (int i = 0; levels > 1 && i < NUM_DIRS; i++) {
         if (!(direction & (1 << i)))
             continue;
-        bool ok = pl_tex_recreate(gpu, &obj->dir[i].gain, pl_tex_params(
-            .w          = 1,
-            .h          = 1,
-            .format     = PL_DEF(gain_fmt, mv_fmt),
-            .sampleable = true,
-            .storable   = true,
+        obj->dir[i].gain = pl_buf_create(gpu, pl_buf_params(
+            .size        = sizeof(float),
+            .storable    = true,
+            .memory_type = PL_BUF_MEM_DEVICE,
+            .debug_tag   = PL_DEBUG_TAG,
         ));
 
-        if (!ok) {
-            PL_ERR(gpu, "pl_motion_estimate: failed creating gain texture!");
+        if (!obj->dir[i].gain) {
+            PL_ERR(gpu, "pl_motion_estimate: failed creating gain buffer!");
             goto error;
         }
     }
@@ -2351,7 +2364,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // the match of the content. Its vectors then measure that change,
             // which the levels below compensate.
             const bool top = i == levels - 1;
-            pl_tex gain = top ? NULL : obj->dir[d].gain;
+            pl_buf gain = top ? NULL : obj->dir[d].gain;
             const bool coarsest = levels > 1 && top;
 
             pl_tex raw = obj->scratch.raw.elem[i];
