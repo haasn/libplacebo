@@ -2144,7 +2144,8 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
 
     pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
 
-    for (int i = 0; i < NUM_DIRS; i++) {
+    // Only the levels below the top one compensate the gain
+    for (int i = 0; levels > 1 && i < NUM_DIRS; i++) {
         if (!(direction & (1 << i)))
             continue;
         bool ok = pl_tex_recreate(gpu, &obj->dir[i].gain, pl_tex_params(
