@@ -1673,6 +1673,13 @@ static bool motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch, int bs,
     ));
 }
 
+// Block size that a refine pass refines blocks of `bs` pixels squared into.
+// Consistent with the passes planned by refine_plan(), from the coarsest.
+static int refine_size(int bs)
+{
+    return bs > 4 ? 4 : 1;
+}
+
 // Returns the number of refine passes needed, and the block size of each
 static int refine_plan(const struct pl_motion_estimate_params *params,
                        int plan[MOTION_MAX_REFINE_PASSES])
@@ -1714,29 +1721,30 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
     return true;
 }
 
-// Refines `blocks`, of `bs` pixels squared, into the levels of `fine`, of the
-// block sizes of `sizes`, from the coarsest.
-static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, const int sizes[],
-                        pl_tex_pyramid *fine, int bs, pl_tex ref, pl_tex tgt,
-                        pl_tex gain, pl_tex blocks)
+// Refines `blocks`, of `bs` pixels squared, into the levels of `fine`, from
+// the coarsest.
+static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch, pl_tex_pyramid *fine,
+                        int bs, pl_tex ref, pl_tex tgt, pl_tex gain,
+                        pl_tex blocks)
 {
     pl_tex in = blocks;
     for (int i = fine->num - 1; i >= 0; i--) {
-        bool ok = false;
-        switch (sizes[i]) {
-        case 1:
-            ok = motion_refine_1x1_pass(gpu, dispatch, bs, ref, tgt, gain, in,
-                                        fine->elem[i]);
-            break;
+        const int size = refine_size(bs);
+        bool ok;
+        switch (size) {
         case 4:
             ok = motion_refine_4x4_pass(gpu, dispatch, bs, ref, tgt, gain, in,
+                                        fine->elem[i]);
+            break;
+        case 1:
+            ok = motion_refine_1x1_pass(gpu, dispatch, bs, ref, tgt, gain, in,
                                         fine->elem[i]);
             break;
         }
         if (!ok)
             return false;
         in = fine->elem[i];
-        bs = sizes[i];
+        bs = size;
     }
 
     return true;
@@ -2260,9 +2268,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     obj->sig_prev = input->a.sig;
     obj->sig_next = input->b.sig;
 
-    const int levels = pyramid_num_levels(w, h, params);
-    int refine[MOTION_MAX_REFINE_PASSES];
-    const int num_refine = refine_plan(params, refine);
+    const int levels = obj->scratch.input.num;
 
     // Upon cold start or after reset, build the image pyramid for frame `a`,
     // use cached pyramid otherwise.
@@ -2382,13 +2388,13 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (!ok)
             break;
 
-        if (num_refine) {
+        if (obj->dir[d].fine.num) {
             pl_tex luma[2] = {
                 obj->pyramid_prev.elem[0],
                 obj->scratch.input.elem[0],
             };
             // The gain is that of the levels below the top one, if any
-            ok = refine_flow(gpu, input->dispatch, refine, &obj->dir[d].fine,
+            ok = refine_flow(gpu, input->dispatch, &obj->dir[d].fine,
                              params->block_size_coarse, luma[d], luma[!d],
                              levels > 1 ? obj->dir[d].gain : NULL,
                              field->elem[0]);
