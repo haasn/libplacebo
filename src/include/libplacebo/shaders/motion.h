@@ -199,40 +199,17 @@ PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,
 // been run at all. `dir` must name exactly one direction.
 //
 // Bind the buffer as a PL_DESC_BUF_STORAGE descriptor (see `pl_shader_desc`),
-// describing its contents with `pl_motion_global_buf_vars[dir]`:
+// with the layout:
 //
 //     layout(std430) buffer {
-//         vec2  global_mv_fwd;         // offset 0
-//         float global_confidence_fwd; // offset 8
+//         vec2  global_mv;         // offset 0
+//         float global_confidence; // offset 8
 //     };
-//
-// with the `_bwd` suffix in place of `_fwd` for the backward direction.
-//
-// Use named accessors (`pl_motion_global_mv` and `pl_motion_global_confidence`)
-// to access members of `pl_motion_global_buf_vars[dir]`.
 //
 // The buffer should not be destroyed. The buffer should not be referenced
 // after `pl_motion_reset` or `pl_motion_estimate` are called.
 PL_API pl_buf pl_motion_get_global_buf(pl_shader_obj state,
                                        enum pl_motion_direction dir);
-
-// We provide the std430 layout of the `pl_buf` that is returned by
-// `pl_motion_get_global_buf`, indexed by a single direction. Users should
-// assign `pl_motion_global_buf_vars[dir]` with `PL_MOTION_GLOBAL_BUF_NUM_VARS`
-// to `pl_shader_desc.buffer_vars` when binding the buffer to their own shader.
-// The names differ per direction, so both directions can be bound to one
-// shader.
-#define PL_MOTION_GLOBAL_BUF_NUM_VARS 2
-PL_API extern const struct pl_buffer_var
-    pl_motion_global_buf_vars[PL_MOTION_BACKWARD + 1]
-                             [PL_MOTION_GLOBAL_BUF_NUM_VARS];
-
-// Use named accessors to access members of `pl_motion_global_buf_vars[dir]`.
-// `pl_motion_global_mv` is a vec2 describing the (x,y) motion of the frame.
-#define pl_motion_global_mv(dir) pl_motion_global_buf_vars[dir][0]
-// `pl_motion_global_confidence` is a float in [0,1] with 1 meaning high
-// confidence.
-#define pl_motion_global_confidence(dir) pl_motion_global_buf_vars[dir][1]
 
 // Reads back the global motion vector of a single direction, in source pixels,
 // and its confidence in the range [0, 1]. Returns false for the same reasons

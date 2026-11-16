@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '398': 'remove pl_motion_global_buf_vars and its accessors',
       '397': 'replace pl_motion_estimate_input.estimate_global and estimate_quality by features',
       '396': 'add pl_frame_interp_algo PL_FRAME_INTERP_QUALITY',
       '395': 'add pl_motion_estimate_input.estimate_quality and pl_motion_get_quality',

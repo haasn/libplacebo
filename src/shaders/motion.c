@@ -666,9 +666,10 @@ struct global_buf_data {
     float global_confidence;
 };
 
-const struct pl_buffer_var
-    pl_motion_global_buf_vars[PL_MOTION_BACKWARD + 1]
-                             [PL_MOTION_GLOBAL_BUF_NUM_VARS] = {
+// Names differ per direction, so that both can be bound to one shader
+#define GLOBAL_BUF_NUM_VARS 2
+static const struct pl_buffer_var
+    global_buf_vars[PL_MOTION_BACKWARD + 1][GLOBAL_BUF_NUM_VARS] = {
 #define VAR(field, suffix, dim) {                                               \
     .var = {                                                                    \
         .name = #field "_" #suffix,                                             \
@@ -705,7 +706,7 @@ ident_t sh_motion_global(pl_shader sh, pl_shader_obj state,
     pl_assert(global->params.size >= sizeof(struct global_buf_data));
 
     bind_buf(sh, "global_motion_desc", global, PL_DESC_ACCESS_READONLY,
-             pl_motion_global_buf_vars[dir], PL_MOTION_GLOBAL_BUF_NUM_VARS);
+             global_buf_vars[dir], GLOBAL_BUF_NUM_VARS);
 
     ident_t gm = sh_fresh(sh, "global_motion");
     // clang-format off
@@ -1999,7 +2000,7 @@ static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
     bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
              &global_hist_var, 1);
     bind_buf(sh, "global_motion_out", out, PL_DESC_ACCESS_WRITEONLY,
-             pl_motion_global_buf_vars[dir], PL_MOTION_GLOBAL_BUF_NUM_VARS);
+             global_buf_vars[dir], GLOBAL_BUF_NUM_VARS);
 
     // clang-format off
 #pragma GLSLH /* motion_global_median_pass */                                   \
