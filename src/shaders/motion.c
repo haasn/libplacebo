@@ -2436,7 +2436,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     return true;
 
 error:
-    invalidate_temporal(gpu, obj, "estimation failed");
+    // Don't leave behind partially updated or allocated objects
+    motion_uninit(gpu, obj);
     return false;
 }
 
