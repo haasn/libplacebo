@@ -270,6 +270,11 @@ struct pl_frame_interp_input {
     // Used to allocate and execute motion estimation passes.
     pl_dispatch dispatch;
 
+    // Motion estimation state, as for `pl_motion_estimate_input.state`. After
+    // a successful call, the motion estimation results can be retrieved from
+    // this state.
+    pl_shader_obj *state;
+
     // The pair of frames to synthesize an intermediate frame between. These
     // are directly sampled when generating the intermediate frame.
     struct pl_motion_estimate_frame a; // earlier frame
@@ -283,11 +288,6 @@ struct pl_frame_interp_input {
     // to this color space before being combined, so this should generally be
     // a linear light space.
     struct pl_color_space out_color;
-
-    // Motion estimation state, as for `pl_motion_estimate_input.state`. After
-    // a successful call, the motion estimation results can be retrieved from
-    // this state.
-    pl_shader_obj *state;
 };
 
 #define pl_frame_interp_input(...)                                             \
