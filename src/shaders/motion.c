@@ -68,32 +68,24 @@ struct sh_motion_obj {
     pl_tex_pyramid pyramid_prev;
     bool pyramid_valid;
 
-    // Block granular flow fields from each level of the image pyramid
-    // searched by the most recent motion estimation invocation. Used to seed
-    // the next motion estimation search.
-    struct {
-        pl_tex_pyramid field[NUM_DIRS]; // indexed by dir_index()
-        pl_tex_pyramid fine[NUM_DIRS];  // likewise, see refine_plan()
-    } flow;
+    // Per-direction state, indexed by dir_index()
+    struct motion_dir {
+        // Block granular flow fields from each level of the image pyramid
+        // searched by the most recent motion estimation invocation. Used to
+        // seed the next motion estimation search.
+        pl_tex_pyramid coarse;
+        pl_tex_pyramid fine; // see refine_plan()
 
-    // Global motion of each direction, as an SSBO laid out as
-    // `global_buf_data`. Not allocated until `PL_MOTION_GLOBAL` is requested.
-    // One per direction, like `flow.field`. `hist` is scratch for
-    // computation.
-    struct {
-        pl_buf buf[NUM_DIRS];
-        pl_buf hist;
-    } global;
+        // Change in brightness between the frames, see `motion_gain_pass`.
+        pl_tex gain;
 
-    // Change in brightness between the frames, see `motion_gain_pass`. One
-    // for the forward and one for the backward direction.
-    pl_tex gain[NUM_DIRS];
+        // Quality of the vectors, see `motion_quality_pass`.
+        pl_tex quality;
 
-    // Quality of the vectors of the forward and of the backward flow field,
-    // see `motion_quality_pass`.
-    struct {
-        pl_tex field[2];
-    } quality;
+        // Global motion, as an SSBO laid out as `global_buf_data`. Not
+        // allocated until `PL_MOTION_GLOBAL` is requested.
+        pl_buf global_flow;
+    } dir[NUM_DIRS];
 
     // LUTs for the search candidate ordering.
     // `cand_lut[0]` holds the fine search radius LUT and `cand_lut[1]` holds
@@ -105,6 +97,7 @@ struct sh_motion_obj {
         pl_tex_pyramid levels; // luma pyramid of this call's frame `b`
         pl_tex_pyramid raw;    // per-level search output
         pl_tex_pyramid filtered; // per-level search output after smoothing
+        pl_buf hist;           // global motion histogram
     } scratch;
 
     struct pl_motion_estimate_params params;
@@ -557,13 +550,13 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
     pl_pyramid_destroy(gpu, &obj->scratch.raw);
     pl_pyramid_destroy(gpu, &obj->scratch.filtered);
     for (int i = 0; i < NUM_DIRS; i++) {
-        pl_pyramid_destroy(gpu, &obj->flow.field[i]);
-        pl_pyramid_destroy(gpu, &obj->flow.fine[i]);
-        pl_buf_destroy(gpu, &obj->global.buf[i]);
-        pl_tex_destroy(gpu, &obj->gain[i]);
-        pl_tex_destroy(gpu, &obj->quality.field[i]);
+        pl_pyramid_destroy(gpu, &obj->dir[i].coarse);
+        pl_pyramid_destroy(gpu, &obj->dir[i].fine);
+        pl_tex_destroy(gpu, &obj->dir[i].gain);
+        pl_tex_destroy(gpu, &obj->dir[i].quality);
+        pl_buf_destroy(gpu, &obj->dir[i].global_flow);
     }
-    pl_buf_destroy(gpu, &obj->global.hist);
+    pl_buf_destroy(gpu, &obj->scratch.hist);
     for (int i = 0; i < PL_ARRAY_SIZE(obj->cand_lut); i++)
         pl_shader_obj_destroy(&obj->cand_lut[i]);
     memset(obj, 0, sizeof(*obj));
@@ -582,8 +575,8 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
     obj->pyramid_valid = false;
 
     for (int i = 0; i < NUM_DIRS; i++)
-        pl_buf_destroy(gpu, &obj->global.buf[i]);
-    pl_buf_destroy(gpu, &obj->global.hist);
+        pl_buf_destroy(gpu, &obj->dir[i].global_flow);
+    pl_buf_destroy(gpu, &obj->scratch.hist);
 }
 
 int pl_motion_num_blocks(int w, int h,
@@ -616,8 +609,8 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
     if (!obj || d < 0 || !(obj->valid & dir))
         return NULL;
 
-    const pl_tex_pyramid *fine = &obj->flow.fine[d];
-    return fine->num ? fine->elem[0] : obj->flow.field[d].elem[0];
+    const pl_tex_pyramid *fine = &obj->dir[d].fine;
+    return fine->num ? fine->elem[0] : obj->dir[d].coarse.elem[0];
 }
 
 pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
@@ -629,7 +622,7 @@ pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
         !(obj->valid & dir))
         return NULL;
 
-    return obj->quality.field[d];
+    return obj->dir[d].quality;
 }
 
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
@@ -654,7 +647,7 @@ pl_buf pl_motion_get_global_buf(pl_shader_obj state,
         !(obj->valid & dir))
         return NULL;
 
-    return obj->global.buf[d];
+    return obj->dir[d].global_flow;
 }
 
 struct global_buf_data {
@@ -2047,16 +2040,16 @@ static bool estimate_global(pl_gpu gpu, pl_dispatch dispatch,
                             enum pl_motion_direction dir)
 {
     const int d = dir_index(dir);
-    pl_tex flow = obj->flow.field[d].elem[0];
-    pl_buf *global = &obj->global.buf[d];
+    pl_tex flow = obj->dir[d].coarse.elem[0];
+    pl_buf *global = &obj->dir[d].global_flow;
 
-    return global_buf_recreate(gpu, &obj->global.hist,
+    return global_buf_recreate(gpu, &obj->scratch.hist,
                                2 * MOTION_GLOBAL_BINS * sizeof(uint32_t),
                                false) &&
            global_buf_recreate(gpu, global, sizeof(struct global_buf_data),
                                true) &&
-           motion_global_hist_pass(gpu, dispatch, flow, obj->global.hist) &&
-           motion_global_median_pass(gpu, dispatch, obj->global.hist,
+           motion_global_hist_pass(gpu, dispatch, flow, obj->scratch.hist) &&
+           motion_global_median_pass(gpu, dispatch, obj->scratch.hist,
                                      flow->params.w * flow->params.h, *global,
                                      dir);
 }
@@ -2088,7 +2081,7 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
 
         const int qw = PL_DIV_UP(obj->frame_w, MOTION_QUALITY_SUB);
         const int qh = PL_DIV_UP(obj->frame_h, MOTION_QUALITY_SUB);
-        bool ok = pl_tex_recreate(gpu, &obj->quality.field[d], pl_tex_params(
+        bool ok = pl_tex_recreate(gpu, &obj->dir[d].quality, pl_tex_params(
             .w          = qw,
             .h          = qh,
             .format     = fmt,
@@ -2102,13 +2095,13 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
         }
 
         const bool fwd = d == FWD;
-        const pl_tex_pyramid *fine = &obj->flow.fine[d];
-        const pl_tex_pyramid *blocks = &obj->flow.field[d];
+        const pl_tex_pyramid *fine = &obj->dir[d].fine;
+        const pl_tex_pyramid *blocks = &obj->dir[d].coarse;
         ok = motion_quality_pass(gpu, dispatch, bs, fwd ? luma_a : luma_b,
                                  fwd ? luma_b : luma_a,
-                                 has_gain ? obj->gain[d] : NULL,
+                                 has_gain ? obj->dir[d].gain : NULL,
                                  num_refine ? fine->elem[0] : blocks->elem[0],
-                                 obj->quality.field[d]);
+                                 obj->dir[d].quality);
         if (!ok)
             return false;
     }
@@ -2237,10 +2230,10 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     // These are no-ops as long as the motion search shape stays the same.
     // Otherwise, they invalidate the no longer usable temporal prior that resides
-    // in `obj->flow.field`.
+    // in `obj->dir[].coarse`.
     for (int d = 0; d < NUM_DIRS; d++) {
         if ((input->direction & (1 << d)) &&
-            !pl_pyramid_recreate(gpu, obj, &obj->flow.field[d], levels,
+            !pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
                                  flow_params))
             goto error;
     }
@@ -2256,7 +2249,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     const int num_refine = refine_plan(params, refine);
     for (int d = 0; d < NUM_DIRS; d++) {
         if ((input->direction & (1 << d)) &&
-            !refine_pyramid_recreate(gpu, obj, &obj->flow.fine[d], w, h,
+            !refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
                                      refine, num_refine, mv_fmt))
             goto error;
     }
@@ -2264,7 +2257,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
 
     for (int i = 0; i < NUM_DIRS; i++) {
-        bool ok = pl_tex_recreate(gpu, &obj->gain[i], pl_tex_params(
+        bool ok = pl_tex_recreate(gpu, &obj->dir[i].gain, pl_tex_params(
             .w          = 1,
             .h          = 1,
             .format     = PL_DEF(gain_fmt, mv_fmt),
@@ -2314,16 +2307,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (!(input->direction & dir))
             continue;
 
-        pl_tex_pyramid *field = &obj->flow.field[d];
+        pl_tex_pyramid *field = &obj->dir[d].coarse;
 
         enum motion_prior prior_kind = MOTION_PRIOR_SAME;
         pl_tex_pyramid *prior_field = field;
         if (d == FWD && (obj->valid & PL_MOTION_BACKWARD)) {
             prior_kind = MOTION_PRIOR_NEGATE;
-            prior_field = &obj->flow.field[BWD];
+            prior_field = &obj->dir[BWD].coarse;
         } else if (d == BWD && (input->direction & PL_MOTION_FORWARD)) {
             prior_kind = MOTION_PRIOR_INVERT;
-            prior_field = &obj->flow.field[FWD];
+            prior_field = &obj->dir[FWD].coarse;
         }
 
         const bool has_prior = prior_kind != MOTION_PRIOR_SAME ||
@@ -2336,7 +2329,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             // the match of the content. Its vectors then measure that change,
             // which the levels below compensate.
             const bool top = i == levels - 1;
-            pl_tex gain = top ? NULL : obj->gain[d];
+            pl_tex gain = top ? NULL : obj->dir[d].gain;
             const bool coarsest = levels > 1 && top;
             const int radius = coarsest ? params->search_radius_coarse
                                         : params->search_radius_fine;
@@ -2393,7 +2386,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (top && i > 0) {
                 ok = motion_gain_pass(gpu, input->dispatch,
                                       params->block_size_coarse, luma[d],
-                                      luma[!d], out, obj->gain[d]);
+                                      luma[!d], out, obj->dir[d].gain);
                 if (!ok)
                     break;
             }
@@ -2408,9 +2401,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 obj->scratch.levels.elem[0],
             };
             // The gain is that of the levels below the top one, if any
-            ok = refine_flow(gpu, input->dispatch, refine, &obj->flow.fine[d],
+            ok = refine_flow(gpu, input->dispatch, refine, &obj->dir[d].fine,
                              params->block_size_coarse, luma[d], luma[!d],
-                             levels > 1 ? obj->gain[d] : NULL,
+                             levels > 1 ? obj->dir[d].gain : NULL,
                              obj->scratch.filtered.elem[0]);
             if (!ok)
                 break;
