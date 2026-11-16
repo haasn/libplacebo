@@ -190,30 +190,28 @@ PL_API bool pl_motion_get_global(pl_shader_obj state,
 
 // Algorithm used for frame interpolation when enabled.
 enum pl_frame_interp_algo {
-    // A modified frame mixing algorithm that offsets a sample by global
-    // motion.
+    // A naive frame mixing algorithm that simply samples from the source
+    // frames, offset by the global motion vector. Should be avoided for
+    // anything except static pans.
     PL_FRAME_INTERP_GLOBAL_MOTION = 0,
 
-    // Debugging aid: instead of interpolating, draws the forward motion
-    // vectors between the two frames with the Middlebury color wheel, on top
-    // of the earlier frame. Vectors of low quality fade to gray.
+    // --- Debugging aids to visualize the flow field and metadata
+
+    // Visualize the flow field using the Middlebury color wheel, with the
+    // flow quality as saturation.
     PL_FRAME_INTERP_VISUALIZE,
 
-    // Debugging aid: instead of interpolating, draws the quality of the
-    // forward motion vectors (see `pl_motion_get_quality`), from black for
-    // the lowest to white for the highest.
+    // Visualize the flow quality field as a grayscale image.
     PL_FRAME_INTERP_QUALITY,
 
     PL_FRAME_INTERP_ALGO_COUNT,
 };
 
-// Tunable parameters. Kept separate from the per-call inputs so that callers
-// can reuse unchanging configurations.
 struct pl_frame_interp_params {
     // Frame interpolation algorithm to use.
     enum pl_frame_interp_algo algo;
 
-    // Motion estimation parameters.
+    // Motion estimation parameters to use for this frame pair.
     struct pl_motion_estimate_params motion;
 };
 
@@ -229,21 +227,15 @@ PL_API extern const struct pl_frame_interp_params
 
 // Per-call inputs.
 struct pl_frame_interp_input {
-    // Must be the same GPU `dispatch` was created with.
+    // --- Inputs used for motion estimation, see pl_motion_estimate_input
     pl_gpu gpu;
-
-    // Used to allocate and execute motion estimation passes.
     pl_dispatch dispatch;
-
-    // Motion estimation state, as for `pl_motion_estimate_input.state`. After
-    // a successful call, the motion estimation results can be retrieved from
-    // this state.
     pl_shader_obj *state;
 
-    // The pair of frames to synthesize an intermediate frame between. These
-    // are directly sampled when generating the intermediate frame.
     struct pl_motion_estimate_frame a; // earlier frame
     struct pl_motion_estimate_frame b; // later frame
+
+    // --- Frame interpolation inputs
 
     // Position of the synthesized frame between `a` and `b`, in [0, 1]. 0.0
     // corresponds to `a`, 1.0 corresponds to `b`.
@@ -262,11 +254,10 @@ struct pl_frame_interp_input {
 // estimating motion between the two frames as needed. Repeated calls for the
 // same pair of frames reuse the motion estimate.
 //
-// Appends a shader writing `vec4 color` in `input->out_color`, with
+// Returns the result as `vec4 color`, using `input->out_color`, with
 // premultiplied alpha. The output size matches that of the input textures.
 //
-// Returns false on failure. Unless `sh` itself is unsuitable for appending a
-// sampling operation, it is left untouched in this case.
+// Returns false on failure.
 PL_API bool pl_shader_frame_interp(pl_shader sh,
                                    const struct pl_frame_interp_input *input,
                                    const struct pl_frame_interp_params *params);
