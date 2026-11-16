@@ -55,9 +55,9 @@ struct sh_motion_obj {
     // --- Persistent across frames
 
     // Signatures of the frame pair the persistent state below describes, i.e.
-    // the ones given to the most recent `pl_motion_estimate` call. `sig_b`
+    // the ones given to the most recent `pl_motion_estimate` call. `sig_next`
     // also identifies the frame `pyramid_prev` was built from.
-    uint64_t sig_a, sig_b;
+    uint64_t sig_prev, sig_next;
 
     // Luma pyramid of the *previous* call's frame `b`, reused as this call's
     // frame `a` pyramid. Only holds a usable pyramid if `pyramid_valid`.
@@ -113,7 +113,7 @@ struct sh_motion_obj {
     } scratch;
 
     struct pl_motion_estimate_params params;
-    int w, h;
+    int frame_w, frame_h;
 };
 
 // Binds `tex` for use with `texelFetch`.
@@ -581,7 +581,7 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
 {
     PL_DEBUG(gpu, "pl_motion: discarding temporal state: %s", reason);
 
-    obj->sig_a = obj->sig_b = 0;
+    obj->sig_prev = obj->sig_next = 0;
     obj->flow.valid = 0;
     obj->global.valid = false;
     obj->quality.valid = false;
@@ -2082,15 +2082,16 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(&obj->params, refine);
     const int bs = num_refine ? refine[0] : obj->params.block_size_coarse;
-    const bool has_gain = pyramid_num_levels(obj->w, obj->h, &obj->params) > 1;
+    const bool has_gain =
+        pyramid_num_levels(obj->frame_w, obj->frame_h, &obj->params) > 1;
 
     for (int d = 0; d < NUM_DIRS; d++) {
         const enum pl_motion_direction dir = 1 << d;
         if (!(obj->flow.valid & dir))
             continue;
 
-        const int qw = PL_DIV_UP(obj->w, MOTION_QUALITY_SUB);
-        const int qh = PL_DIV_UP(obj->h, MOTION_QUALITY_SUB);
+        const int qw = PL_DIV_UP(obj->frame_w, MOTION_QUALITY_SUB);
+        const int qh = PL_DIV_UP(obj->frame_h, MOTION_QUALITY_SUB);
         bool ok = pl_tex_recreate(gpu, &obj->quality.field[d], pl_tex_params(
             .w          = qw,
             .h          = qh,
@@ -2142,7 +2143,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     const int w = input->a.tex->params.w;
     const int h = input->a.tex->params.h;
     const char *changed = NULL;
-    if (w != obj->w || h != obj->h) {
+    if (w != obj->frame_w || h != obj->frame_h) {
         changed = "input dimensions changed";
     } else if (!params_eq(&obj->params, params)) {
         changed = "parameters changed";
@@ -2151,11 +2152,11 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (changed) {
         invalidate_temporal(gpu, obj, changed);
         obj->params = *params;
-        obj->w = w;
-        obj->h = h;
+        obj->frame_w = w;
+        obj->frame_h = h;
     }
 
-    if (obj->sig_a == input->a.sig && obj->sig_b == input->b.sig &&
+    if (obj->sig_prev == input->a.sig && obj->sig_next == input->b.sig &&
         (obj->flow.valid & input->direction) == input->direction)
     {
         // Same frame pair as the previous call, at most the global motion
@@ -2184,15 +2185,15 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         return true;
     }
 
-    if (obj->sig_b != input->a.sig) {
+    if (obj->sig_next != input->a.sig) {
         invalidate_temporal(
             gpu, obj,
             "frame signature of first frame not equal to frame signature "
             "of second frame from previous call");
     }
 
-    obj->sig_a = input->a.sig;
-    obj->sig_b = input->b.sig;
+    obj->sig_prev = input->a.sig;
+    obj->sig_next = input->b.sig;
 
     const int levels = pyramid_num_levels(w, h, params);
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
