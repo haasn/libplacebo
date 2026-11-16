@@ -424,12 +424,17 @@ static void cand_fill(int radius, int *out)
 
 // Selects an appropriate shader geometry (grid and workgroup dimensions) for
 // the motion estimation. Iteratively reduces the tile size that each workgroup
-// will process until a size is found that fits in shared memory.
-static bool motion_plan(pl_gpu gpu, void *alloc, int block_size, int radius,
-                        struct motion_seeds seeds, bool subpixel,
-                        bool zero_mean, int grid_w, int grid_h,
+// will process until a size is found that fits in shared memory. `coarsest`
+// selects the search radius of the coarsest pyramid level.
+static bool motion_plan(pl_gpu gpu, void *alloc,
+                        const struct pl_motion_estimate_params *params,
+                        bool coarsest, struct motion_seeds seeds,
+                        bool subpixel, bool zero_mean, int grid_w, int grid_h,
                         struct motion_geometry *out)
 {
+    const int block_size = params->block_size_coarse;
+    const int radius = coarsest ? params->search_radius_coarse
+                                : params->search_radius_fine;
     const int ncand = PL_SQUARE(2 * radius + 1);
     const int max_group = gpu->glsl.max_group_threads;
     const int max_x =
@@ -2348,8 +2353,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             const bool top = i == levels - 1;
             pl_tex gain = top ? NULL : obj->dir[d].gain;
             const bool coarsest = levels > 1 && top;
-            const int radius = coarsest ? params->search_radius_coarse
-                                        : params->search_radius_fine;
 
             pl_tex raw = obj->scratch.raw.elem[i];
             pl_tex out = field->elem[i];
@@ -2371,7 +2374,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             pl_tex prior = has_prior ? prior_field->elem[i] : NULL;
 
             struct motion_geometry geom;
-            ok = motion_plan(gpu, tmp, params->block_size_coarse, radius,
+            ok = motion_plan(gpu, tmp, params, coarsest,
                              motion_seeds_plan(parent != NULL, prior != NULL),
                              i == 0, top, out->params.w, out->params.h,
                              &geom);
