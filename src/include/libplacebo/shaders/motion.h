@@ -33,6 +33,13 @@ enum pl_motion_direction {
     PL_MOTION_BOTH = PL_MOTION_FORWARD | PL_MOTION_BACKWARD,
 };
 
+// Additional motion estimation outputs to compute, besides the
+// flow vectors themselves.
+enum pl_motion_feature {
+    PL_MOTION_GLOBAL    = 1 << 0,   // pl_motion_get_global()
+    PL_MOTION_QUALITY   = 1 << 1,   // pl_motion_get_quality()
+};
+
 // Tunable parameters. Kept separate from the per-call inputs so that callers
 // can reuse unchanging configurations.
 //
@@ -111,14 +118,8 @@ struct pl_motion_estimate_input {
     // Direction(s) of flow to compute. Must be non-zero.
     enum pl_motion_direction direction;
 
-    // Optionally compute the global motion vector of each direction. If true,
-    // it can later be retrieved using `pl_motion_get_global_buf`, or
-    // `pl_motion_get_global`.
-    bool estimate_global;
-
-    // Optionally estimate the quality of the vectors of each direction. If
-    // true, it can later be retrieved using `pl_motion_get_quality`.
-    bool estimate_quality;
+    // Optional extra set of features to compute.
+    enum pl_motion_feature features;
 
     // Persistent state, owned by the caller. May point at a NULL
     // `pl_shader_obj`, in which case it is allocated on first use. Must be
@@ -193,8 +194,8 @@ PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,
                                     enum pl_motion_direction dir);
 
 // Returns the buffer holding the global motion vector in the direction `dir`
-// or NULL if no `pl_motion_estimate` call for the current frame pair set
-// `estimate_global`, if it did not compute `dir`, or if no estimation has
+// or NULL if no `pl_motion_estimate` call for the current frame pair requested
+// `PL_MOTION_GLOBAL`, if it did not compute `dir`, or if no estimation has
 // been run at all. `dir` must name exactly one direction.
 //
 // Bind the buffer as a PL_DESC_BUF_STORAGE descriptor (see `pl_shader_desc`),

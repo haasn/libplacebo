@@ -400,7 +400,8 @@ static uint64_t motion_sig = 1;
 
 static void run_motion(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
                        pl_tex src_a, pl_tex src_b,
-                       enum pl_motion_direction dir, bool global,
+                       enum pl_motion_direction dir,
+                       enum pl_motion_feature features,
                        const struct pl_motion_estimate_params *params)
 {
     const uint64_t sig = motion_sig++;
@@ -421,7 +422,7 @@ static void run_motion(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
             .color  = pl_color_space_srgb,
         },
         .direction  = dir,
-        .estimate_global = global,
+        .features   = features,
         .state      = state,
     ), params));
 }
@@ -430,7 +431,8 @@ static void run_motion(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
 // state upon looping, or on every call if `cold`.
 static void run_motion_seq(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
                            pl_tex *srcs, int num_src, unsigned long iter,
-                           bool cold, enum pl_motion_direction dir, bool global,
+                           bool cold, enum pl_motion_direction dir,
+                           enum pl_motion_feature features,
                            const struct pl_motion_estimate_params *params)
 {
     const int i = iter % (num_src - 1);
@@ -442,35 +444,36 @@ static void run_motion_seq(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
     while (pl_tex_poll(gpu, srcs[i + 1], UINT64_MAX))
         ; // do nothing
 
-    run_motion(gpu, dp, state, srcs[i], srcs[i + 1], dir, global, params);
+    run_motion(gpu, dp, state, srcs[i], srcs[i + 1], dir, features,
+               params);
 }
 
 static void bench_motion(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
                          pl_tex *srcs, int num_src, unsigned long iter)
 {
     run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
-                   PL_MOTION_FORWARD, false, NULL);
+                   PL_MOTION_FORWARD, 0, NULL);
 }
 
 static void bench_motion_cold(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
                               pl_tex *srcs, int num_src, unsigned long iter)
 {
     run_motion_seq(gpu, dp, state, srcs, num_src, iter, true,
-                   PL_MOTION_FORWARD, false, NULL);
+                   PL_MOTION_FORWARD, 0, NULL);
 }
 
 static void bench_motion_bidir(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
                                pl_tex *srcs, int num_src, unsigned long iter)
 {
     run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
-                   PL_MOTION_BOTH, false, NULL);
+                   PL_MOTION_BOTH, 0, NULL);
 }
 
 static void bench_motion_block4(pl_gpu gpu, pl_dispatch dp, pl_shader_obj *state,
                                 pl_tex *srcs, int num_src, unsigned long iter)
 {
     run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
-                   PL_MOTION_FORWARD, false,
+                   PL_MOTION_FORWARD, 0,
                    pl_motion_estimate_params( .block_size_coarse = 4,
                                               .block_size_fine = 4 ));
 }
@@ -480,7 +483,7 @@ static void bench_motion_global(pl_gpu gpu, pl_dispatch dp,
                                 unsigned long iter)
 {
     run_motion_seq(gpu, dp, state, srcs, num_src, iter, false,
-                   PL_MOTION_FORWARD, true, NULL);
+                   PL_MOTION_FORWARD, PL_MOTION_GLOBAL, NULL);
 }
 
 static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)

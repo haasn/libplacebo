@@ -78,7 +78,7 @@ struct sh_motion_obj {
     int grid_w, grid_h;
 
     // Global motion of each direction, as an SSBO laid out as
-    // `global_buf_data`. Not allocated until `input->estimate_global` is set.
+    // `global_buf_data`. Not allocated until `PL_MOTION_GLOBAL` is requested.
     // One per direction, like `flow.field`. `valid` determines if they hold
     // the global motion of the directions in `flow.valid`. `hist` is scratch
     // for computation.
@@ -2159,7 +2159,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     {
         // Same frame pair as the previous call, at most the global motion
         // and the quality are left to compute.
-        if (input->estimate_global && !obj->global.valid) {
+        if ((input->features & PL_MOTION_GLOBAL) && !obj->global.valid) {
             for (int i = 0; i < NUM_DIRS; i++) {
                 const enum pl_motion_direction dir = 1 << i;
                 if ((obj->flow.valid & dir) &&
@@ -2170,7 +2170,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             obj->global.valid = true;
         }
 
-        if (input->estimate_quality && !obj->quality.valid) {
+        if ((input->features & PL_MOTION_QUALITY) && !obj->quality.valid) {
             // The pyramids were swapped at the end of the previous call
             if (!estimate_quality(gpu, input->dispatch, obj,
                                   obj->scratch.levels.elem[0],
@@ -2424,7 +2424,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         // forward direction results.
         PL_SWAP(*field, obj->scratch.filtered);
 
-        if (input->estimate_global) {
+        if (input->features & PL_MOTION_GLOBAL) {
             ok = estimate_global(gpu, input->dispatch, obj, dir);
             if (!ok)
                 break;
@@ -2436,16 +2436,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
 
     obj->flow.valid = input->direction;
-    obj->global.valid = input->estimate_global;
+    obj->global.valid = input->features & PL_MOTION_GLOBAL;
 
-    if (input->estimate_quality) {
+    if (input->features & PL_MOTION_QUALITY) {
         if (!estimate_quality(gpu, input->dispatch, obj,
                               obj->pyramid_prev.elem[0],
                               obj->scratch.levels.elem[0]))
             goto error;
     }
 
-    obj->quality.valid = input->estimate_quality;
+    obj->quality.valid = input->features & PL_MOTION_QUALITY;
 
     // Cache frame `b`'s luma pyramid, use reuse `a` buffers as scratch.
     PL_SWAP(obj->pyramid_prev, obj->scratch.levels);
@@ -2683,11 +2683,11 @@ bool pl_shader_frame_interp(pl_shader sh,
 
     struct pl_motion_estimate_params me_params = params->motion;
     enum pl_motion_direction me_dir;
-    bool me_global = false, me_quality = false;
+    enum pl_motion_feature me_features = 0;
     switch (params->algo) {
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         me_dir = PL_MOTION_FORWARD;
-        me_global = true;
+        me_features = PL_MOTION_GLOBAL;
         // The global motion is estimated from the blocks, refining the
         // fields would be wasted
         me_params.block_size_fine = me_params.block_size_coarse;
@@ -2695,7 +2695,7 @@ bool pl_shader_frame_interp(pl_shader sh,
     case PL_FRAME_INTERP_VISUALIZE:
     case PL_FRAME_INTERP_QUALITY:
         me_dir = PL_MOTION_FORWARD;
-        me_quality = true;
+        me_features = PL_MOTION_QUALITY;
         break;
     case PL_FRAME_INTERP_ALGO_COUNT:
     default:
@@ -2711,8 +2711,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         .a         = input->a,
         .b         = input->b,
         .direction = me_dir,
-        .estimate_global = me_global,
-        .estimate_quality = me_quality,
+        .features  = me_features,
         .state     = input->state,
     ), &me_params);
     if (!ok)
