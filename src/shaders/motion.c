@@ -73,10 +73,6 @@ struct sh_motion_obj {
         enum pl_motion_direction valid; // directions actually computed
     } flow;
 
-    // Dimensions of `flow.field[FWD].elem[0]` (number of blocks to cover the
-    // full resolution).
-    int grid_w, grid_h;
-
     // Global motion of each direction, as an SSBO laid out as
     // `global_buf_data`. Not allocated until `PL_MOTION_GLOBAL` is requested.
     // One per direction, like `flow.field`. `valid` determines if they hold
@@ -2206,8 +2202,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     // The search covers the trailing partial blocks as well, hence ceiling
     // division.
-    obj->grid_w = PL_DIV_UP(w, params->block_size_coarse);
-    obj->grid_h = PL_DIV_UP(h, params->block_size_coarse);
+    const int grid_w = PL_DIV_UP(w, params->block_size_coarse);
+    const int grid_h = PL_DIV_UP(h, params->block_size_coarse);
 
     pl_fmt mv_fmt = flow_fmt(gpu);
     if (!mv_fmt) {
@@ -2227,8 +2223,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     );
 
     const struct pl_tex_params *flow_params = pl_tex_params(
-        .w          = obj->grid_w,
-        .h          = obj->grid_h,
+        .w          = grid_w,
+        .h          = grid_h,
         .format     = mv_fmt,
         .sampleable = true,
         .storable   = true,
