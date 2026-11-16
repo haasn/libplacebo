@@ -59,6 +59,10 @@ struct sh_motion_obj {
     // also identifies the frame `pyramid_prev` was built from.
     uint64_t sig_prev, sig_next;
 
+    // Directions and features held for that frame pair
+    enum pl_motion_direction valid;
+    enum pl_motion_feature features;
+
     // Luma pyramid of the *previous* call's frame `b`, reused as this call's
     // frame `a` pyramid. Only holds a usable pyramid if `pyramid_valid`.
     pl_tex_pyramid pyramid_prev;
@@ -70,18 +74,15 @@ struct sh_motion_obj {
     struct {
         pl_tex_pyramid field[NUM_DIRS]; // indexed by dir_index()
         pl_tex_pyramid fine[NUM_DIRS];  // likewise, see refine_plan()
-        enum pl_motion_direction valid; // directions actually computed
     } flow;
 
     // Global motion of each direction, as an SSBO laid out as
     // `global_buf_data`. Not allocated until `PL_MOTION_GLOBAL` is requested.
-    // One per direction, like `flow.field`. `valid` determines if they hold
-    // the global motion of the directions in `flow.valid`. `hist` is scratch
-    // for computation.
+    // One per direction, like `flow.field`. `hist` is scratch for
+    // computation.
     struct {
         pl_buf buf[NUM_DIRS];
         pl_buf hist;
-        bool valid;
     } global;
 
     // Change in brightness between the frames, see `motion_gain_pass`. One
@@ -89,11 +90,9 @@ struct sh_motion_obj {
     pl_tex gain[NUM_DIRS];
 
     // Quality of the vectors of the forward and of the backward flow field,
-    // see `motion_quality_pass`. Only holds that of the directions in
-    // `flow.valid`, and only if `quality_valid`.
+    // see `motion_quality_pass`.
     struct {
         pl_tex field[2];
-        bool valid;
     } quality;
 
     // LUTs for the search candidate ordering.
@@ -578,9 +577,8 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
     PL_DEBUG(gpu, "pl_motion: discarding temporal state: %s", reason);
 
     obj->sig_prev = obj->sig_next = 0;
-    obj->flow.valid = 0;
-    obj->global.valid = false;
-    obj->quality.valid = false;
+    obj->valid = 0;
+    obj->features = 0;
     obj->pyramid_valid = false;
 
     for (int i = 0; i < NUM_DIRS; i++)
@@ -615,7 +613,7 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
                                               struct sh_motion_obj);
     // `dir` cannot name `PL_MOTION_BOTH`, we can only return one flow field.
     const int d = dir_index(dir);
-    if (!obj || d < 0 || !(obj->flow.valid & dir))
+    if (!obj || d < 0 || !(obj->valid & dir))
         return NULL;
 
     const pl_tex_pyramid *fine = &obj->flow.fine[d];
@@ -627,7 +625,8 @@ pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
     struct sh_motion_obj *obj = SH_OBJ_LOOKUP(state, PL_SHADER_OBJ_MOTION,
                                               struct sh_motion_obj);
     const int d = dir_index(dir);
-    if (!obj || d < 0 || !obj->quality.valid || !(obj->flow.valid & dir))
+    if (!obj || d < 0 || !(obj->features & PL_MOTION_QUALITY) ||
+        !(obj->valid & dir))
         return NULL;
 
     return obj->quality.field[d];
@@ -651,7 +650,8 @@ pl_buf pl_motion_get_global_buf(pl_shader_obj state,
     // `dir` cannot name `PL_MOTION_BOTH`, we can only return one global
     // motion vector.
     const int d = dir_index(dir);
-    if (!obj || d < 0 || !obj->global.valid || !(obj->flow.valid & dir))
+    if (!obj || d < 0 || !(obj->features & PL_MOTION_GLOBAL) ||
+        !(obj->valid & dir))
         return NULL;
 
     return obj->global.buf[d];
@@ -2062,7 +2062,7 @@ static bool estimate_global(pl_gpu gpu, pl_dispatch dispatch,
 }
 
 // Estimates the quality of the vectors of every direction in
-// `obj->flow.valid`, from the luma of the frames they were estimated between.
+// `obj->valid`, from the luma of the frames they were estimated between.
 static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
                              struct sh_motion_obj *obj, pl_tex luma_a,
                              pl_tex luma_b)
@@ -2083,7 +2083,7 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
 
     for (int d = 0; d < NUM_DIRS; d++) {
         const enum pl_motion_direction dir = 1 << d;
-        if (!(obj->flow.valid & dir))
+        if (!(obj->valid & dir))
             continue;
 
         const int qw = PL_DIV_UP(obj->frame_w, MOTION_QUALITY_SUB);
@@ -2153,29 +2153,33 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     }
 
     if (obj->sig_prev == input->a.sig && obj->sig_next == input->b.sig &&
-        (obj->flow.valid & input->direction) == input->direction)
+        (obj->valid & input->direction) == input->direction)
     {
         // Same frame pair as the previous call, at most the global motion
         // and the quality are left to compute.
-        if ((input->features & PL_MOTION_GLOBAL) && !obj->global.valid) {
+        if ((input->features & PL_MOTION_GLOBAL) &&
+            !(obj->features & PL_MOTION_GLOBAL))
+        {
             for (int i = 0; i < NUM_DIRS; i++) {
                 const enum pl_motion_direction dir = 1 << i;
-                if ((obj->flow.valid & dir) &&
+                if ((obj->valid & dir) &&
                     !estimate_global(gpu, input->dispatch, obj, dir))
                     goto error;
             }
 
-            obj->global.valid = true;
+            obj->features |= PL_MOTION_GLOBAL;
         }
 
-        if ((input->features & PL_MOTION_QUALITY) && !obj->quality.valid) {
+        if ((input->features & PL_MOTION_QUALITY) &&
+            !(obj->features & PL_MOTION_QUALITY))
+        {
             // The pyramids were swapped at the end of the previous call
             if (!estimate_quality(gpu, input->dispatch, obj,
                                   obj->scratch.levels.elem[0],
                                   obj->pyramid_prev.elem[0]))
                 goto error;
 
-            obj->quality.valid = true;
+            obj->features |= PL_MOTION_QUALITY;
         }
 
         return true;
@@ -2314,7 +2318,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
         enum motion_prior prior_kind = MOTION_PRIOR_SAME;
         pl_tex_pyramid *prior_field = field;
-        if (d == FWD && (obj->flow.valid & PL_MOTION_BACKWARD)) {
+        if (d == FWD && (obj->valid & PL_MOTION_BACKWARD)) {
             prior_kind = MOTION_PRIOR_NEGATE;
             prior_field = &obj->flow.field[BWD];
         } else if (d == BWD && (input->direction & PL_MOTION_FORWARD)) {
@@ -2323,7 +2327,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         }
 
         const bool has_prior = prior_kind != MOTION_PRIOR_SAME ||
-                               (obj->flow.valid & dir);
+                               (obj->valid & dir);
 
         for (int i = levels - 1; i >= 0; i--) {
             // The top level has no vectors of a coarser level to start from,
@@ -2433,8 +2437,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (!ok)
         goto error;
 
-    obj->flow.valid = input->direction;
-    obj->global.valid = input->features & PL_MOTION_GLOBAL;
+    obj->valid = input->direction;
 
     if (input->features & PL_MOTION_QUALITY) {
         if (!estimate_quality(gpu, input->dispatch, obj,
@@ -2443,7 +2446,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             goto error;
     }
 
-    obj->quality.valid = input->features & PL_MOTION_QUALITY;
+    obj->features = input->features;
 
     // Cache frame `b`'s luma pyramid, use reuse `a` buffers as scratch.
     PL_SWAP(obj->pyramid_prev, obj->scratch.levels);
