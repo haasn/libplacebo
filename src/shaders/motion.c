@@ -2094,6 +2094,94 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
     return true;
 }
 
+// Creates all GPU objects needed for this motion estimation call
+static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
+                         const struct pl_motion_estimate_params *params,
+                         enum pl_motion_direction direction)
+{
+    const int levels = pyramid_num_levels(w, h, params);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
+                             PL_FMT_CAP_LINEAR | PL_FMT_CAP_RENDERABLE);
+    if (!fmt) {
+        PL_ERR(gpu, "pl_motion_estimate: no renderable, linearly filterable "
+                    "single component float format available!");
+        return false;
+    }
+
+    pl_fmt mv_fmt = flow_fmt(gpu);
+    if (!mv_fmt) {
+        PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
+                    "two component float format available!");
+        return false;
+    }
+
+    // The search covers the trailing partial blocks as well
+    const int grid_w = PL_DIV_UP(w, params->block_size_coarse);
+    const int grid_h = PL_DIV_UP(h, params->block_size_coarse);
+
+    const struct pl_tex_params *input_params = pl_tex_params(
+        .w          = w,
+        .h          = h,
+        .format     = fmt,
+        .sampleable = true,
+        .renderable = true,
+        .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
+    );
+
+    const struct pl_tex_params *flow_params = pl_tex_params(
+        .w          = grid_w,
+        .h          = grid_h,
+        .format     = mv_fmt,
+        .sampleable = true,
+        .storable   = true,
+    );
+
+    // These preserve the previous contents on no-op
+    for (int d = 0; d < NUM_DIRS; d++) {
+        if (!(direction & (1 << d)))
+            continue;
+        if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
+                                 flow_params))
+            return false;
+    }
+
+    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.raw, levels, flow_params))
+        return false;
+
+    int refine[MOTION_MAX_REFINE_PASSES];
+    const int num_refine = refine_plan(params, refine);
+    for (int d = 0; d < NUM_DIRS; d++) {
+        if (!(direction & (1 << d)))
+            continue;
+        if (!refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
+                                     refine, num_refine, mv_fmt))
+            return false;
+    }
+
+    pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
+
+    for (int i = 0; i < NUM_DIRS; i++) {
+        bool ok = pl_tex_recreate(gpu, &obj->dir[i].gain, pl_tex_params(
+            .w          = 1,
+            .h          = 1,
+            .format     = PL_DEF(gain_fmt, mv_fmt),
+            .sampleable = true,
+            .storable   = true,
+        ));
+
+        if (!ok) {
+            PL_ERR(gpu, "pl_motion_estimate: failed creating gain texture!");
+            return false;
+        }
+    }
+
+    if (!pl_pyramid_recreate(gpu, obj, &obj->pyramid_prev,  levels, input_params) ||
+        !pl_pyramid_recreate(gpu, obj, &obj->scratch.input, levels, input_params))
+        return false;
+
+    return true;
+}
+
 bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                         const struct pl_motion_estimate_params *params)
 {
@@ -2173,91 +2261,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     obj->sig_prev = input->a.sig;
     obj->sig_next = input->b.sig;
 
+    if (!motion_setup(gpu, obj, w, h, params, input->direction))
+        goto error;
+
     const int levels = pyramid_num_levels(w, h, params);
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
-                             PL_FMT_CAP_LINEAR | PL_FMT_CAP_RENDERABLE);
-    if (!fmt) {
-        PL_ERR(gpu, "pl_motion_estimate: no renderable, linearly filterable "
-                    "single component float format available!");
-        goto error;
-    }
-
-    // The search covers the trailing partial blocks as well, hence ceiling
-    // division.
-    const int grid_w = PL_DIV_UP(w, params->block_size_coarse);
-    const int grid_h = PL_DIV_UP(h, params->block_size_coarse);
-
-    pl_fmt mv_fmt = flow_fmt(gpu);
-    if (!mv_fmt) {
-        PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
-                    "two component float format available!");
-        goto error;
-    }
-
-    const struct pl_tex_params *luma_params = pl_tex_params(
-        .w          = w,
-        .h          = h,
-        .format     = fmt,
-        .sampleable = true,
-        .renderable = true,
-        .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
-        .debug_tag  = PL_DEBUG_TAG,
-    );
-
-    const struct pl_tex_params *flow_params = pl_tex_params(
-        .w          = grid_w,
-        .h          = grid_h,
-        .format     = mv_fmt,
-        .sampleable = true,
-        .storable   = true,
-        .debug_tag  = PL_DEBUG_TAG,
-    );
-
-    // These are no-ops as long as the motion search shape stays the same.
-    // Otherwise, they invalidate the no longer usable temporal prior that resides
-    // in `obj->dir[].coarse`.
-    for (int d = 0; d < NUM_DIRS; d++) {
-        if ((input->direction & (1 << d)) &&
-            !pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
-                                 flow_params))
-            goto error;
-    }
-
-    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.raw, levels, flow_params))
-        goto error;
-
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(params, refine);
-    for (int d = 0; d < NUM_DIRS; d++) {
-        if ((input->direction & (1 << d)) &&
-            !refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
-                                     refine, num_refine, mv_fmt))
-            goto error;
-    }
-
-    pl_fmt gain_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 32, 32, PL_FMT_CAP_STORABLE);
-
-    for (int i = 0; i < NUM_DIRS; i++) {
-        bool ok = pl_tex_recreate(gpu, &obj->dir[i].gain, pl_tex_params(
-            .w          = 1,
-            .h          = 1,
-            .format     = PL_DEF(gain_fmt, mv_fmt),
-            .sampleable = true,
-            .storable   = true,
-        ));
-
-        if (!ok) {
-            PL_ERR(gpu, "pl_motion_estimate: failed creating brightness gain!");
-            goto error;
-        }
-    }
 
     // Upon cold start or after reset, build the image pyramid for frame `a`,
     // use cached pyramid otherwise.
     if (!obj->pyramid_valid) {
-        if (!pl_pyramid_recreate(gpu, obj, &obj->pyramid_prev, levels,
-                                 luma_params))
-            goto error;
         if (!convert_to_luma(input->dispatch, &input->a,
                              obj->pyramid_prev.elem[0]))
         {
@@ -2269,9 +2282,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             goto error;
     }
 
-    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.input, levels,
-                             luma_params))
-        goto error;
     if (!convert_to_luma(input->dispatch, &input->b,
                          obj->scratch.input.elem[0]))
     {
