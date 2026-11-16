@@ -802,6 +802,18 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
     return true;
 }
 
+static void fix_params(struct pl_motion_estimate_params *params)
+{
+    // Round to actually support refinement block sizes
+    if (params->block_size_fine <= 1) {
+        params->block_size_fine = 1;
+    } else if (params->block_size_fine <= 4 && params->block_size_coarse > 4) {
+        params->block_size_fine = 4;
+    } else {
+        params->block_size_fine = params->block_size_coarse;
+    }
+}
+
 // Convert an input frame to luma.
 static bool convert_to_luma(pl_dispatch dispatch,
                             const struct pl_motion_estimate_frame *frame,
@@ -2231,7 +2243,14 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (!input || !input->gpu || !input->dispatch || !input->state)
         return false;
 
-    params = PL_DEF(params, &pl_motion_estimate_default_params);
+    struct pl_motion_estimate_params fixed;
+    if (!params) {
+        params = &pl_motion_estimate_default_params;
+    } else {
+        fixed = *params;
+        fix_params(&fixed);
+        params = &fixed;
+    }
 
     pl_gpu gpu = input->gpu;
     struct sh_motion_obj *obj =
