@@ -964,7 +964,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     }
 
     VkMemoryPropertyFlags flags = ma->props.memoryTypes[ainfo.memoryTypeIndex].propertyFlags;
-    if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+    VkMemoryPropertyFlags flags_requested = flags & (params->required | params->optimal);
+    if (flags_requested & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
         VK(vk->MapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
         slab->coherent = flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         out->data = (uint8_t *) slab->data + out->offset;
