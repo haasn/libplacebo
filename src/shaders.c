@@ -1221,44 +1221,66 @@ ident_t sh_block_ssd(pl_shader sh, int bw, int bh, uint8_t comp, ident_t tex,
     return fn;
 }
 
-ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt, float B)
+ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt, float B, float C)
 {
+    if (C < 0) {
+        SH_FAIL(sh, "sh_bicubic: unsupported C = %f < 0", C);
+        return NULL_IDENT;
+    }
+
     ident_t fn = sh_fresh(sh, "bicubic");
 
-    // Explanation of how bicubic scaling with only 4 texel fetches is done:
+    // Polynomials in f, with ascending coefficients, giving the weights of the
+    // taps at the distances 1 + f (outer) and f (inner) from `pos`, where f is
+    // the offset of `pos` from the texel center below it. The taps on the
+    // other side, at 1 - f and 2 - f, use the same polynomials in 1 - f.
+    const float outer[4] = { B / 6, -(B + 2 * C) / 2, (B + 4 * C) / 2, -(B + 6 * C) / 6 };
+    const float inner[4] = { 1 - B / 3, 0, -3 + 2 * B + C, 2 - 1.5f * B - C };
+
+    // For C = 0, no weight is negative, so every pair of taps can be one
+    // bilinear fetch:
     //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
     //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
-#pragma GLSLH                                       \
-    vec4 $fn(vec2 pos)                              \
-    {                                               \
-    const float k0 = ${const float: B / 6};         \
-    const float k1 = ${const float: 1 - B / 3};     \
-    const float k2 = ${const float: 2 * B - 3};     \
-    const float k3 = ${const float: 2 - 1.5f * B};  \
-    vec2 size = vec2(textureSize($tex, 0));         \
-    vec2 f  = fract(pos * size + vec2(0.5));        \
-    vec2 f2 = f * f;                                \
-    vec2 f3 = f2 * f;                               \
-    vec2 g  = vec2(1.0) - f;                        \
-    vec2 g2 = g * g;                                \
-    vec2 g3 = g2 * g;                               \
-    /* compute filter weights directly */           \
-    vec2 w0 = k0 * g3;                              \
-    vec2 w1 = k1 + k2 * f2 + k3 * f3;               \
-    vec2 w2 = k1 + k2 * g2 + k3 * g3;               \
-    vec2 w3 = k0 * f3;                              \
-    vec4 s = vec4(w0 + w1, w2 + w3);                \
-    vec4 o = vec4(w1, w3) / s + g.xyxy;             \
-    o.xy -= vec2(2.0);                              \
-    /* sample four corners, then interpolate */     \
-    vec4 p = pos.xyxy + $pt.xyxy * o;               \
-    vec4 c00 = textureLod($tex, p.xy, 0.0);         \
-    vec4 c01 = textureLod($tex, p.xw, 0.0);         \
-    vec4 c0 = mix(c01, c00, s.y);                   \
-    vec4 c10 = textureLod($tex, p.zy, 0.0);         \
-    vec4 c11 = textureLod($tex, p.zw, 0.0);         \
-    vec4 c1 = mix(c11, c10, s.y);                   \
-    return mix(c1, c0, s.x);                        \
+    // Otherwise, only the inner ones can, and the corners, which weigh the
+    // least, are left out.
+
+#pragma GLSLH                                                                   \
+    vec4 $fn(vec2 pos)                                                          \
+    {                                                                           \
+        const vec4 o = vec4(${const float: outer[0]}, ${const float: outer[1]}, \
+                            ${const float: outer[2]}, ${const float: outer[3]});\
+        const vec4 i = vec4(${const float: inner[0]}, ${const float: inner[1]}, \
+                            ${const float: inner[2]}, ${const float: inner[3]});\
+        vec2 pt = $pt;                                                          \
+        vec2 c  = floor(pos / pt - 0.5) + 0.5;                                  \
+        vec2 f  = pos / pt - c;                                                 \
+        vec2 g  = 1.0 - f;                                                      \
+        vec2 w0 = o.x + f * (o.y + f * (o.z + f * o.w));                        \
+        vec2 w1 = i.x + f * (i.y + f * (i.z + f * i.w));                        \
+        vec2 w2 = i.x + g * (i.y + g * (i.z + g * i.w));                        \
+        vec2 w3 = o.x + g * (o.y + g * (o.z + g * o.w));                        \
+        @if (C == 0) {                                                          \
+        vec2 w01 = w0 + w1, w23 = w2 + w3;                                      \
+        vec2 p01 = (c - 1.0 + w1 / w01) * pt;                                   \
+        vec2 p23 = (c + 1.0 + w3 / w23) * pt;                                   \
+        return textureLod($tex, p01, 0.0) * w01.x * w01.y                       \
+             + textureLod($tex, vec2(p23.x, p01.y), 0.0) * w23.x * w01.y        \
+             + textureLod($tex, vec2(p01.x, p23.y), 0.0) * w01.x * w23.y        \
+             + textureLod($tex, p23, 0.0) * w23.x * w23.y;                      \
+        @} else {                                                               \
+        vec2 w12 = w1 + w2;                                                     \
+        vec2 p0  = (c - 1.0) * pt;                                              \
+        vec2 p12 = (c + w2 / w12) * pt;                                         \
+        vec2 p3  = (c + 2.0) * pt;                                              \
+        vec4 sum = textureLod($tex, vec2(p12.x, p0.y), 0.0) * w12.x * w0.y      \
+                 + textureLod($tex, vec2(p0.x, p12.y), 0.0) * w0.x * w12.y      \
+                 + textureLod($tex, p12, 0.0) * w12.x * w12.y                   \
+                 + textureLod($tex, vec2(p3.x, p12.y), 0.0) * w3.x * w12.y      \
+                 + textureLod($tex, vec2(p12.x, p3.y), 0.0) * w12.x * w3.y;     \
+        float total = w12.x * w0.y + (w0.x + w12.x + w3.x) * w12.y              \
+                    + w12.x * w3.y;                                             \
+        return sum / total;                                                     \
+        @}                                                                      \
     }
 
     return fn;
