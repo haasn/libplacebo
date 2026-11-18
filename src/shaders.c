@@ -1197,3 +1197,40 @@ ident_t sh_block_ssd(pl_shader sh, int bw, int bh, uint8_t comp, ident_t tex,
 
     return fn;
 }
+
+ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt)
+{
+    ident_t fn = sh_fresh(sh, "bicubic");
+
+    // Explanation of how bicubic scaling with only 4 texel fetches is done:
+    //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
+    //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
+#pragma GLSLH                                       \
+    vec4 $fn(vec2 pos)                              \
+    {                                               \
+    vec2 size = vec2(textureSize($tex, 0));         \
+    vec2 frac  = fract(pos * size + vec2(0.5));     \
+    vec2 frac2 = frac * frac;                       \
+    vec2 inv   = vec2(1.0) - frac;                  \
+    vec2 inv2  = inv * inv;                         \
+    /* compute filter weights directly */           \
+    vec2 w0 = 1.0/6.0 * inv2 * inv;                 \
+    vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac); \
+    vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);  \
+    vec2 w3 = 1.0/6.0 * frac2 * frac;               \
+    vec4 g = vec4(w0 + w1, w2 + w3);                \
+    vec4 h = vec4(w1, w3) / g + inv.xyxy;           \
+    h.xy -= vec2(2.0);                              \
+    /* sample four corners, then interpolate */     \
+    vec4 p = pos.xyxy + $pt.xyxy * h;               \
+    vec4 c00 = textureLod($tex, p.xy, 0.0);         \
+    vec4 c01 = textureLod($tex, p.xw, 0.0);         \
+    vec4 c0 = mix(c01, c00, g.y);                   \
+    vec4 c10 = textureLod($tex, p.zy, 0.0);         \
+    vec4 c11 = textureLod($tex, p.zw, 0.0);         \
+    vec4 c1 = mix(c11, c10, g.y);                   \
+    return mix(c1, c0, g.x);                        \
+    }
+
+    return fn;
+}

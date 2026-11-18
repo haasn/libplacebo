@@ -327,38 +327,9 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
                  "will most likely result in nasty aliasing!");
     }
 
-    // Explanation of how bicubic scaling with only 4 texel fetches is done:
-    //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
-    //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
-
+    ident_t fn = sh_bicubic(sh, tex, pt);
     sh_describe(sh, "bicubic");
-#pragma GLSL /* pl_shader_sample_bicubic */         \
-    vec4 color;                                     \
-    {                                               \
-    vec2 pos = $pos;                                \
-    vec2 size = vec2(textureSize($tex, 0));         \
-    vec2 frac  = fract(pos * size + vec2(0.5));     \
-    vec2 frac2 = frac * frac;                       \
-    vec2 inv   = vec2(1.0) - frac;                  \
-    vec2 inv2  = inv * inv;                         \
-    /* compute filter weights directly */           \
-    vec2 w0 = 1.0/6.0 * inv2 * inv;                 \
-    vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac); \
-    vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);  \
-    vec2 w3 = 1.0/6.0 * frac2 * frac;               \
-    vec4 g = vec4(w0 + w1, w2 + w3);                \
-    vec4 h = vec4(w1, w3) / g + inv.xyxy;           \
-    h.xy -= vec2(2.0);                              \
-    /* sample four corners, then interpolate */     \
-    vec4 p = pos.xyxy + $pt.xyxy * h;               \
-    vec4 c00 = textureLod($tex, p.xy, 0.0);         \
-    vec4 c01 = textureLod($tex, p.xw, 0.0);         \
-    vec4 c0 = mix(c01, c00, g.y);                   \
-    vec4 c10 = textureLod($tex, p.zy, 0.0);         \
-    vec4 c11 = textureLod($tex, p.zw, 0.0);         \
-    vec4 c1 = mix(c11, c10, g.y);                   \
-    color = ${float:scale} * mix(c1, c0, g.x);      \
-    }
+#pragma GLSL vec4 color = ${float:scale} * $fn($pos);
 
     return true;
 }
@@ -1180,7 +1151,10 @@ void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
         .data = transform.c,
     });
 
-    // See pl_shader_sample_bicubic
+    ident_t bicubic = NULL_IDENT;
+    if (params->bicubic)
+        bicubic = sh_bicubic(sh, tex, pt);
+
     sh_describe(sh, "distortion");
 #pragma GLSL /* pl_shader_sample_distort */                 \
     vec4 color;                                             \
@@ -1188,26 +1162,7 @@ void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
     vec2 pos = $tf * $pos + $tf_c;                          \
     vec2 pt = $pt;                                          \
     @if (params->bicubic) {                                 \
-        vec2 size = vec2(textureSize($tex, 0));             \
-        vec2 frac  = fract(pos * size + vec2(0.5));         \
-        vec2 frac2 = frac * frac;                           \
-        vec2 inv   = vec2(1.0) - frac;                      \
-        vec2 inv2  = inv * inv;                             \
-        vec2 w0 = 1.0/6.0 * inv2 * inv;                     \
-        vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);     \
-        vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);      \
-        vec2 w3 = 1.0/6.0 * frac2 * frac;                   \
-        vec4 g = vec4(w0 + w1, w2 + w3);                    \
-        vec4 h = vec4(w1, w3) / g + inv.xyxy;               \
-        h.xy -= vec2(2.0);                                  \
-        vec4 p = pos.xyxy + pt.xyxy * h;                    \
-        vec4 c00 = textureLod($tex, p.xy, 0.0);             \
-        vec4 c01 = textureLod($tex, p.xw, 0.0);             \
-        vec4 c0 = mix(c01, c00, g.y);                       \
-        vec4 c10 = textureLod($tex, p.zy, 0.0);             \
-        vec4 c11 = textureLod($tex, p.zw, 0.0);             \
-        vec4 c1 = mix(c11, c10, g.y);                       \
-        color = mix(c1, c0, g.x);                           \
+        color = $bicubic(pos);                              \
     @} else {                                               \
         color = texture($tex, pos);                         \
     @}                                                      \
