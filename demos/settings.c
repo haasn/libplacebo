@@ -455,6 +455,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             case PL_FRAME_INTERP_GATHER:
                 nk_property_float(nk, "Gather mix blend", 0.0,
                                   &ipar->gather_mix_blend, 1.0, 0.05, 0.01);
+                ipar->bicubic = nk_check_label(nk, "Bicubic", ipar->bicubic);
                 break;
             default:
                 break;

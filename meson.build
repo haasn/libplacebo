@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '404': 'add pl_frame_interp_params.bicubic',
       '403': 'add pl_frame_interp_params.gather_mix_blend',
       '402': 'add pl_frame_interp_algo PL_FRAME_INTERP_GATHER',
       '401': 'add PL_MOTION_OCCLUSION, pl_motion_get_occlusion and PL_FRAME_INTERP_OCCLUSION',

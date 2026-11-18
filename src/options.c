@@ -1273,6 +1273,8 @@ const struct pl_opt_t pl_option_list[] = {
              {"occlusion",      PL_FRAME_INTERP_OCCLUSION})),
     OPT_FLOAT("gather_mix_blend", "Gather mix fallback blend",
               frame_interp_params.gather_mix_blend, .max = 1.0),
+    OPT_BOOL("frame_interp_bicubic", "Frame interpolation bicubic interpolation",
+             frame_interp_params.bicubic),
     OPT_INT("motion_block_size_coarse", "Motion estimation block size",
             frame_interp_params.motion.block_size_coarse, .min = 2, .max = 64),
     OPT_INT("motion_block_size_fine", "Motion estimation block size (refined)",

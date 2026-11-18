@@ -246,12 +246,17 @@ struct pl_frame_interp_params {
     // Lower values maximize PSNR and visual smoothness, but result in the
     // most motion artefacts.
     float gather_mix_blend;
+
+    // If true, sample the frames with bicubic interpolation rather than
+    // faster bilinear interpolation. Sharper but slower.
+    bool bicubic;
 };
 
 #define PL_FRAME_INTERP_DEFAULTS                                               \
     .algo = PL_FRAME_INTERP_GATHER,                                            \
     .motion = {PL_MOTION_ESTIMATE_DEFAULTS},                                   \
-    .gather_mix_blend = 0.5f,
+    .gather_mix_blend = 0.5f,                                                  \
+    .bicubic = true,
 
 #define pl_frame_interp_params(...)                                            \
     (&(struct pl_frame_interp_params) {PL_FRAME_INTERP_DEFAULTS __VA_ARGS__})

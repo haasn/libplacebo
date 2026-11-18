@@ -2872,6 +2872,12 @@ static bool frame_interp_gather(pl_shader sh,
         return false;
     }
 
+    ident_t sharp_a = NULL_IDENT, sharp_b = NULL_IDENT;
+    if (params->bicubic) {
+        sharp_a = sh_bicubic(sh, fr.tex[0], fr.pt[0], 0.0f, 0.5f);
+        sharp_b = sh_bicubic(sh, fr.tex[1], fr.pt[1], 0.0f, 0.5f);
+    }
+
     sh_describe(sh, "frame interpolation (gather)");
     const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
     const int neighbour = MOTION_GATHER_MIX_NEIGHBOUR;
@@ -2899,7 +2905,22 @@ static bool frame_interp_gather(pl_shader sh,
             quality = 0.0;                                                      \
         return wa + wb > 0.0 ? (wa * ca + wb * cb) / (wa + wb)                  \
                              : mix(ca, cb, t);                                  \
-    }
+    }                                                                           \
+                                                                                \
+    @if (params->bicubic) {                                                     \
+    /* The same, with a sharper filter. */                                      \
+    vec4 gather_sample_sharp(vec2 pos_a, vec2 pos_b, vec2 mv, float t)          \
+    {                                                                           \
+        vec2 pa = pos_a - t * mv * ${fr.pt[0]};                                 \
+        vec2 pb = pos_b + (1.0 - t) * mv * ${fr.pt[1]};                         \
+        vec4 ca = ${fr.conv[0]}(${sharp_a}(pa));                                \
+        vec4 cb = ${fr.conv[1]}(${sharp_b}(pb));                                \
+        float wa = pa == clamp(pa, 0.0, 1.0) ? 1.0 - t : 0.0;                   \
+        float wb = pb == clamp(pb, 0.0, 1.0) ? t : 0.0;                         \
+        return wa + wb > 0.0 ? (wa * ca + wb * cb) / (wa + wb)                  \
+                             : mix(ca, cb, t);                                  \
+    }                                                                           \
+    @}
 
 #pragma GLSL /* frame_interp_gather */                                          \
     vec4 color;                                                                 \
@@ -2942,7 +2963,8 @@ static bool frame_interp_gather(pl_shader sh,
     /* The samples are weighted by their quality, which never is quite none,    \
      * to have a mean when all of them are bad. */                              \
     vec4 sum = vec4(0.0), plain = vec4(0.0);                                    \
-    float total = 0.0, quality = 0.0, q;                                        \
+    vec2 mean = vec2(0.0);                                                      \
+    float total = 0.0, quality = 0.0, spread = 0.0, q;                          \
     for (int k = 0; k < 6; k++) {                                               \
         if (count[k] == 0.0)                                                    \
             continue;                                                           \
@@ -2950,6 +2972,8 @@ static bool frame_interp_gather(pl_shader sh,
         float wt = count[k] * (q + 0.02);                                       \
         sum += wt * c;                                                          \
         plain += count[k] * c;                                                  \
+        mean += wt * mv[k];                                                     \
+        spread += wt * dot(mv[k], mv[k]);                                       \
         quality += wt * q;                                                      \
         total += wt;                                                            \
     }                                                                           \
@@ -2957,7 +2981,22 @@ static bool frame_interp_gather(pl_shader sh,
     vec4 blend = mix(${fr.conv[0]}(textureLod(${fr.tex[0]}, pos_a, 0.0)),       \
                      ${fr.conv[1]}(textureLod(${fr.tex[1]}, pos_b, 0.0)), t);   \
     vec4 fallback = mix(plain / 6.0, blend, ${float: blend});                   \
-    color = mix(fallback, sum / total, quality / total);                        \
+                                                                                \
+    /* Every sample is blurred by its interpolation, and their mean by as far   \
+     * as the vectors differ. As far as they do not, by their variance, one     \
+     * sample along their mean vector with a sharper filter is better. Only     \
+     * needed where the quality is not zero. */                                 \
+    quality /= total;                                                           \
+    vec4 gathered = sum / total;                                                \
+    @if (params->bicubic) {                                                     \
+    if (quality > 0.0) {                                                        \
+        mean /= total;                                                          \
+        spread = max(spread / total - dot(mean, mean), 0.0);                    \
+        vec4 sharp = gather_sample_sharp(pos_a, pos_b, mean, t);                \
+        gathered = mix(gathered, sharp, exp(-spread));                          \
+    }                                                                           \
+    @}                                                                          \
+    color = mix(fallback, gathered, quality);                                   \
     }
     // clang-format on
 
