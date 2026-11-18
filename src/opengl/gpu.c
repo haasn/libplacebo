@@ -83,7 +83,7 @@ static inline size_t get_page_size(void)
 #ifdef PL_HAVE_WIN32
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);
-    return sysInfo.dwAllocationGranularity;
+    return sysInfo.dwPageSize;
 #endif
 
     pl_assert(!"Unsupported platform!");
