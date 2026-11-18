@@ -235,11 +235,23 @@ struct pl_frame_interp_params {
 
     // Motion estimation parameters to use for this frame pair.
     struct pl_motion_estimate_params motion;
+
+    // --- PL_FRAME_INTERP_GATHER only
+
+    // When a pixel's motion vector is low quality, fall back to a regular
+    // in-place temporal mix. Setting this higher trades artefacts for
+    // blurriness or stutter. The default of 0.5 provides a reasonable visual
+    // balance.
+    //
+    // Lower values maximize PSNR and visual smoothness, but result in the
+    // most motion artefacts.
+    float gather_mix_blend;
 };
 
 #define PL_FRAME_INTERP_DEFAULTS                                               \
     .algo = PL_FRAME_INTERP_GATHER,                                            \
-    .motion = {PL_MOTION_ESTIMATE_DEFAULTS},
+    .motion = {PL_MOTION_ESTIMATE_DEFAULTS},                                   \
+    .gather_mix_blend = 0.5f,
 
 #define pl_frame_interp_params(...)                                            \
     (&(struct pl_frame_interp_params) {PL_FRAME_INTERP_DEFAULTS __VA_ARGS__})

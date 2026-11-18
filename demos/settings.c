@@ -450,6 +450,16 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                             &mpar->search_radius_coarse, 32, 1, 1);
             nk_property_int(nk, "Fine search radius", 0,
                             &mpar->search_radius_fine, 32, 1, 1);
+
+            switch (ipar->algo) {
+            case PL_FRAME_INTERP_GATHER:
+                nk_property_float(nk, "Gather mix blend", 0.0,
+                                  &ipar->gather_mix_blend, 1.0, 0.05, 0.01);
+                break;
+            default:
+                break;
+            }
+
             nk_tree_pop(nk);
         }
 

@@ -2851,7 +2851,8 @@ static bool bind_frames(pl_shader sh, const struct pl_frame_interp_input *input,
 // Gathers every pixel from both frames along a handful of vectors
 static bool frame_interp_gather(pl_shader sh,
                                 const struct pl_frame_interp_input *input,
-                                const struct pl_color_space *out_color)
+                                const struct pl_color_space *out_color,
+                                const struct pl_frame_interp_params *params)
 {
     const struct pl_tex_params *tpars = &input->a.tex->params;
     if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
@@ -2874,6 +2875,7 @@ static bool frame_interp_gather(pl_shader sh,
     sh_describe(sh, "frame interpolation (gather)");
     const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
     const int neighbour = MOTION_GATHER_MIX_NEIGHBOUR;
+    const float blend = PL_CLAMP(params->gather_mix_blend, 0.0f, 1.0f);
 
     // clang-format off
 #pragma GLSLH /* frame_interp_gather */                                         \
@@ -2952,7 +2954,10 @@ static bool frame_interp_gather(pl_shader sh,
         total += wt;                                                            \
     }                                                                           \
                                                                                 \
-    color = mix(plain / 6.0, sum / total, quality / total);                     \
+    vec4 blend = mix(${fr.conv[0]}(textureLod(${fr.tex[0]}, pos_a, 0.0)),       \
+                     ${fr.conv[1]}(textureLod(${fr.tex[1]}, pos_b, 0.0)), t);   \
+    vec4 fallback = mix(plain / 6.0, blend, ${float: blend});                   \
+    color = mix(fallback, sum / total, quality / total);                        \
     }
     // clang-format on
 
@@ -3021,7 +3026,7 @@ bool pl_shader_frame_interp(pl_shader sh,
     // `pl_shader_frame_interp` documentation
     switch (params->algo) {
     case PL_FRAME_INTERP_GATHER:
-        return frame_interp_gather(sh, input, &out_color);
+        return frame_interp_gather(sh, input, &out_color, params);
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         return frame_interp_global(sh, input, &out_color);
     case PL_FRAME_INTERP_VISUALIZE:
