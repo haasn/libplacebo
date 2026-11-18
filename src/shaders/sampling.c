@@ -327,7 +327,7 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
                  "will most likely result in nasty aliasing!");
     }
 
-    ident_t fn = sh_bicubic(sh, tex, pt);
+    ident_t fn = sh_bicubic(sh, tex, pt, 1.0f);
     sh_describe(sh, "bicubic");
 #pragma GLSL vec4 color = ${float:scale} * $fn($pos);
 
@@ -1153,7 +1153,7 @@ void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
 
     ident_t bicubic = NULL_IDENT;
     if (params->bicubic)
-        bicubic = sh_bicubic(sh, tex, pt);
+        bicubic = sh_bicubic(sh, tex, pt, 1.0f);
 
     sh_describe(sh, "distortion");
 #pragma GLSL /* pl_shader_sample_distort */                 \

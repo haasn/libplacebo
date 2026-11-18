@@ -346,7 +346,7 @@ ident_t sh_block_ssd(pl_shader sh, int bw, int bh, uint8_t comp, ident_t tex,
 // Defines a function `vec4 fn(vec2 pos)` sampling `tex` (with texels of the
 // size `pt`, bound with linear sampling) with a cubic B-spline, and returns
 // its name.
-ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt);
+ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt, float B);
 
 // Like `pl_shader_dither` and `pl_shader_error_diffusion`, but quantizing to
 // `steps` steps per unit instead of 2^new_depth - 1

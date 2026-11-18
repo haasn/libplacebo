@@ -1198,7 +1198,7 @@ ident_t sh_block_ssd(pl_shader sh, int bw, int bh, uint8_t comp, ident_t tex,
     return fn;
 }
 
-ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt)
+ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt, float B)
 {
     ident_t fn = sh_fresh(sh, "bicubic");
 
@@ -1208,16 +1208,22 @@ ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt)
 #pragma GLSLH                                       \
     vec4 $fn(vec2 pos)                              \
     {                                               \
+    const float k0 = ${const float: B / 6};         \
+    const float k1 = ${const float: 1 - B / 3};     \
+    const float k2 = ${const float: 2 * B - 3};     \
+    const float k3 = ${const float: 2 - 1.5f * B};  \
     vec2 size = vec2(textureSize($tex, 0));         \
     vec2 frac  = fract(pos * size + vec2(0.5));     \
     vec2 frac2 = frac * frac;                       \
+    vec2 frac3 = frac2 * frac;                      \
     vec2 inv   = vec2(1.0) - frac;                  \
     vec2 inv2  = inv * inv;                         \
+    vec2 inv3  = inv2 * inv;                        \
     /* compute filter weights directly */           \
-    vec2 w0 = 1.0/6.0 * inv2 * inv;                 \
-    vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac); \
-    vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);  \
-    vec2 w3 = 1.0/6.0 * frac2 * frac;               \
+    vec2 w0 = k0 * inv3;                            \
+    vec2 w1 = k1 + k2 * frac2 + k3 * frac3;         \
+    vec2 w2 = k1 + k2 * inv2  + k3 * inv3;          \
+    vec2 w3 = k0 * frac3;                           \
     vec4 g = vec4(w0 + w1, w2 + w3);                \
     vec4 h = vec4(w1, w3) / g + inv.xyxy;           \
     h.xy -= vec2(2.0);                              \
