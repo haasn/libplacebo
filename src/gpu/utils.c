@@ -576,10 +576,10 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         fixed.buf = pl_buf_create(gpu, pl_buf_params(
             .size = size,
             .host_writable = true,
+            .initial_data = params->ptr,
         ));
         if (!fixed.buf)
             return false;
-        pl_buf_write(gpu, fixed.buf, 0, params->ptr, size);
         if (params->callback)
             params->callback(params->priv);
         fixed.callback = NULL;
