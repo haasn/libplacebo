@@ -54,6 +54,7 @@ struct priv {
     pl_rc_t frames_in_flight;       // number of frames currently queued
     bool suboptimal;                // true once VK_SUBOPTIMAL_KHR is returned
     bool needs_recreate;            // swapchain needs to be recreated
+    bool hidden;                    // surface had no extent on the last update
     bool has_swapchain_maintenance1;
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
@@ -544,6 +545,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
                                   int w, int h)
 {
     struct vk_ctx *vk = p->vk;
+    p->hidden = false;
 
     // Query the supported capabilities and update this struct as needed
     VkSurfaceCapabilitiesKHR caps = {0};
@@ -581,6 +583,7 @@ caps_ready:
     // Check for hidden/invisible window
     if (!caps.currentExtent.width || !caps.currentExtent.height) {
         PL_DEBUG(vk, "maxImageExtent reported as 0x0, hidden window? skipping");
+        p->hidden = true;
         return false;
     }
 
@@ -1064,8 +1067,9 @@ static bool vk_sw_resize(pl_swapchain sw, int *width, int *height)
     bool width_changed = *width && *width != p->cur_width,
          height_changed = *height && *height != p->cur_height;
 
+    // A hidden surface is no error, `vk_sw_start_frame` fails until it is back
     if (p->suboptimal || p->needs_recreate || width_changed || height_changed)
-        ok = vk_sw_recreate(sw, *width, *height);
+        ok = vk_sw_recreate(sw, *width, *height) || p->hidden;
 
     *width = p->cur_width;
     *height = p->cur_height;
