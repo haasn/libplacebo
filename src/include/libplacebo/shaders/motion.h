@@ -204,10 +204,14 @@ PL_API bool pl_motion_get_global(pl_shader_obj state,
 
 // Algorithm used for frame interpolation when enabled.
 enum pl_frame_interp_algo {
+    // Every pixel is gathered from both frames, along the motion vectors
+    // estimated locally at its position.
+    PL_FRAME_INTERP_GATHER = 0,
+
     // A naive frame mixing algorithm that simply samples from the source
     // frames, offset by the global motion vector. Should be avoided for
     // anything except static pans.
-    PL_FRAME_INTERP_GLOBAL_MOTION = 0,
+    PL_FRAME_INTERP_GLOBAL_MOTION,
 
     // --- Debugging aids to visualize the flow field and metadata
 

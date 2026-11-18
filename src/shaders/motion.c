@@ -2795,6 +2795,107 @@ static bool frame_interp_map(pl_shader sh,
     return true;
 }
 
+// Both frames of `input`, bound to a shader for sampling any number of times
+struct interp_frames {
+    ident_t tex[2];  // bound with linear sampling
+    ident_t pos[2];  // position of the output pixel
+    ident_t pt[2];   // size of a texel
+    ident_t conv[2]; // convert from the texture to the output color space
+};
+
+static bool bind_frames(pl_shader sh, const struct pl_frame_interp_input *input,
+                        const struct pl_color_space *out_color,
+                        struct interp_frames *out)
+{
+    const struct pl_motion_estimate_frame *frames[2] = { &input->a, &input->b };
+    for (int i = 0; i < 2; i++) {
+        pl_shader sub = pl_dispatch_begin_ex(input->dispatch, true);
+        if (sub->prefix == sh->prefix) {
+            // `sh` may not come from `input->dispatch`, so the first unique
+            // prefix of the latter can be the one `sh` already has
+            pl_dispatch_abort(input->dispatch, &sub);
+            sub = pl_dispatch_begin_ex(input->dispatch, true);
+        }
+
+        sh_require(sub, PL_SHADER_SIG_COLOR, 0, 0);
+        interp_convert(sub, frames[i], out_color);
+
+        out->conv[i] = sh_subpass(sh, sub);
+        pl_dispatch_abort(input->dispatch, &sub);
+        if (!out->conv[i])
+            return false;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        out->tex[i] = sh_bind(sh, frames[i]->tex, PL_TEX_ADDRESS_CLAMP,
+                              PL_TEX_SAMPLE_LINEAR, "frame", NULL,
+                              &out->pos[i], &out->pt[i]);
+        if (!out->tex[i])
+            return false;
+    }
+
+    return true;
+}
+
+// Gathers every pixel from both frames along the vectors that the flow fields
+// hold at its own position. Those are the vectors of what is there in frame
+// `a` and in frame `b`, not of what passes through there in between, so this
+// is only right as far as the two are the same.
+static bool frame_interp_gather(pl_shader sh,
+                                const struct pl_frame_interp_input *input,
+                                const struct pl_color_space *out_color)
+{
+    const struct pl_tex_params *tpars = &input->a.tex->params;
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
+        return false;
+
+    struct interp_frames fr;
+    if (!bind_frames(sh, input, out_color, &fr))
+        return false;
+
+    const pl_shader_obj state = *input->state;
+    ident_t fwd = sh_motion_flow(sh, state, PL_MOTION_FORWARD);
+    ident_t bwd = sh_motion_flow(sh, state, PL_MOTION_BACKWARD);
+    if (!fwd || !bwd) {
+        PL_ERR(sh, "pl_shader_frame_interp: no flow fields available!");
+        return false;
+    }
+
+    sh_describe(sh, "frame interpolation (gather)");
+    const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
+
+    // clang-format off
+#pragma GLSLH /* frame_interp_gather */                                         \
+    /* The mix of both frames along `mv`, which leads from frame `a` to frame   \
+     * `b` and is at `pos_a` (`pos_b`) at the time `t`. */                      \
+    vec4 gather_sample(vec2 pos_a, vec2 pos_b, vec2 mv, float t)                \
+    {                                                                           \
+        vec2 pa = pos_a - t * mv * ${fr.pt[0]};                                 \
+        vec2 pb = pos_b + (1.0 - t) * mv * ${fr.pt[1]};                         \
+        vec4 ca = ${fr.conv[0]}(textureLod(${fr.tex[0]}, pa, 0.0));             \
+        vec4 cb = ${fr.conv[1]}(textureLod(${fr.tex[1]}, pb, 0.0));             \
+        /* Don't sample from outside the frame */                               \
+        float wa = pa == clamp(pa, 0.0, 1.0) ? 1.0 - t : 0.0;                   \
+        float wb = pb == clamp(pb, 0.0, 1.0) ? t : 0.0;                         \
+        return wa + wb > 0.0 ? (wa * ca + wb * cb) / (wa + wb)                  \
+                             : mix(ca, cb, t);                                  \
+    }
+
+#pragma GLSL /* frame_interp_gather */                                          \
+    vec4 color;                                                                 \
+    {                                                                           \
+    float t = ${dynamic float: t};                                              \
+    vec2 pos_a = ${fr.pos[0]}, pos_b = ${fr.pos[1]};                            \
+    vec2 mv_fwd =  textureLod($fwd, pos_a, 0.0).xy;                             \
+    vec2 mv_bwd = -textureLod($bwd, pos_a, 0.0).xy;                             \
+    color = 0.5 * (gather_sample(pos_a, pos_b, mv_fwd, t) +                     \
+                   gather_sample(pos_a, pos_b, mv_bwd, t));                     \
+    }
+    // clang-format on
+
+    return true;
+}
+
 bool pl_shader_frame_interp(pl_shader sh,
                             const struct pl_frame_interp_input *input,
                             const struct pl_frame_interp_params *params)
@@ -2826,6 +2927,10 @@ bool pl_shader_frame_interp(pl_shader sh,
         me_dir = PL_MOTION_BOTH;
         me_features = PL_MOTION_OCCLUSION;
         break;
+    case PL_FRAME_INTERP_GATHER:
+        me_dir = PL_MOTION_BOTH;
+        me_features = PL_MOTION_OCCLUSION;
+        break;
     case PL_FRAME_INTERP_ALGO_COUNT:
     default:
         PL_ERR(sh, "pl_shader_frame_interp: invalid algorithm %d!",
@@ -2852,6 +2957,8 @@ bool pl_shader_frame_interp(pl_shader sh,
     // Each algorithm must fail before modifying `sh` where possible, see
     // `pl_shader_frame_interp` documentation
     switch (params->algo) {
+    case PL_FRAME_INTERP_GATHER:
+        return frame_interp_gather(sh, input, &out_color);
     case PL_FRAME_INTERP_GLOBAL_MOTION:
         return frame_interp_global(sh, input, &out_color);
     case PL_FRAME_INTERP_VISUALIZE:
