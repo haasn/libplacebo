@@ -663,6 +663,19 @@ struct pl_frame {
     const struct pl_overlay *overlays;
     int num_overlays;
 
+    // If set, will be called right before the overlays of this frame are
+    // drawn, which is after everything else of the frame was dispatched. This
+    // function *may* update `overlays` and `num_overlays`, under the rules of
+    // `acquire`, and it *may* block, for example on a thread that still
+    // prepares the overlays. A user who is going to block *should* call
+    // `pl_gpu_flush` first, so that the GPU works on the frame in the
+    // meantime. If this returns false, no overlays are drawn.
+    //
+    // Note: Like `acquire`, this might be called multiple times on the same
+    // frame. It is not called for a frame that comes from the frame cache,
+    // which already has its overlays.
+    bool (*acquire_overlays)(pl_gpu gpu, struct pl_frame *frame);
+
     // Note on subsampling and plane correspondence: All planes belonging to
     // the same frame will only be stretched by an integer multiple (or inverse
     // thereof) in order to match the reference dimensions of this image. For

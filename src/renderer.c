@@ -413,6 +413,11 @@ struct pass_state {
     struct {
         bool target, image, prev, next, enhancement_layer;
     } acquired;
+
+    // Frames that had their `acquire_overlays` called
+    struct {
+        bool target, image;
+    } overlays_acquired;
 };
 
 static void find_fbo_format(struct pass_state *pass)
@@ -1088,6 +1093,9 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         }
     }
 }
+
+static void acquire_overlays(struct pass_state *pass, struct pl_frame *frame,
+                             bool *acquired);
 
 static pl_tex get_hook_tex(void *priv, int width, int height)
 {
@@ -2861,8 +2869,8 @@ static void translate_srgb_color(float out_color[3], const float in_color[3],
 static bool pass_output_target(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
-    const struct pl_frame *image = &pass->image;
-    const struct pl_frame *target = &pass->target;
+    struct pl_frame *image = &pass->image;
+    struct pl_frame *target = &pass->target;
     const struct pl_plane *ref = &target->planes[pass->dst_ref];
     pl_renderer rr = pass->rr;
 
@@ -3243,12 +3251,14 @@ static bool pass_output_target(struct pass_state *pass)
             return false;
 
         if (pass->info.stage != PL_RENDER_STAGE_BLEND) {
+            acquire_overlays(pass, image, &pass->overlays_acquired.image);
             draw_overlays(pass, plane->texture, plane->components,
                           plane->component_mapping, image->overlays,
                           image->num_overlays, target->color, target->repr,
                           &tscale);
         }
 
+        acquire_overlays(pass, target, &pass->overlays_acquired.target);
         draw_overlays(pass, plane->texture, plane->components,
                       plane->component_mapping, target->overlays,
                       target->num_overlays, target->color, target->repr,
@@ -3338,6 +3348,26 @@ static bool validate_structs(pl_renderer rr,
 
 error:
     return false;
+}
+
+static void acquire_overlays(struct pass_state *pass, struct pl_frame *frame,
+                             bool *acquired)
+{
+    pl_renderer rr = pass->rr;
+    if (!frame->acquire_overlays || *acquired)
+        return;
+
+    *acquired = true;
+    if (!frame->acquire_overlays(rr->gpu, frame))
+        goto error;
+
+    require(frame->num_overlays >= 0);
+    for (int i = 0; i < frame->num_overlays; i++)
+        validate_overlay(frame->overlays[i]);
+    return;
+
+error:
+    frame->num_overlays = 0;
 }
 
 // returns index
@@ -3738,11 +3768,12 @@ static bool draw_empty_overlays(pl_renderer rr,
         return false;
 
     clear_target(&pass, NULL, NULL, params);
-    if (!ptarget->num_overlays)
+    struct pl_frame *target = &pass.target;
+    acquire_overlays(&pass, target, &pass.overlays_acquired.target);
+    if (!target->num_overlays)
         goto done;
 
     pass_begin_frame(&pass);
-    struct pl_frame *target = &pass.target;
     pl_tex ref = target->planes[pass.dst_ref].texture;
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -4332,6 +4363,8 @@ retry:
                 PL_SWAP(shift.mat.m[1][0], shift.mat.m[1][1]);
             }
 
+            acquire_overlays(&inter_pass, &inter_pass.image,
+                             &inter_pass.overlays_acquired.image);
             draw_overlays(&inter_pass, f->tex, inter_pass.img.comps, NULL,
                           inter_pass.image.overlays,
                           inter_pass.image.num_overlays,
