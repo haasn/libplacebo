@@ -262,8 +262,8 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
     adaptation = PL_MIX(1.0f, adaptation,
                         pl_smoothstep(dst_min, dst_knee_min, src_knee));
 
-    float dst_knee = PL_MIX(src_knee, adapted, adaptation);
-    dst_knee = fclampf(dst_knee, dst_knee_min, dst_knee_max);
+    float dst_knee = PL_MIX(fminf(src_knee, dst_knee_max), adapted, adaptation);
+    dst_knee = fmaxf(dst_knee, dst_knee_min);
 
     *out_src_knee = pl_hdr_rescale(PL_HDR_PQ, params->input_scaling, src_knee);
     *out_dst_knee = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, dst_knee);
