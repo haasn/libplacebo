@@ -2749,7 +2749,8 @@ static void encode_target(struct pass_state *pass, pl_shader sh,
 }
 
 static void clear_target(struct pass_state *pass, const pl_tex background,
-                         float bg_scale, const struct pl_render_params *params)
+                         const struct img *bg_img,
+                         const struct pl_render_params *params)
 {
     pl_renderer rr = pass->rr;
     const struct pl_frame *target = &pass->target;
@@ -2767,7 +2768,9 @@ static void clear_target(struct pass_state *pass, const pl_tex background,
     case PL_CLEAR_TILES:
         pl_frame_clear_tiles(rr->gpu, target, params->tile_colors, params->tile_size);
         break;
-    case PL_CLEAR_BLUR:
+    case PL_CLEAR_BLUR:;
+        struct pl_color_repr bg_repr = target->repr;
+        const float bg_scale = pl_color_repr_normalize(&bg_repr);
         for (int p = 0; p < target->num_planes; p++) {
             const struct pl_plane *plane = &target->planes[p];
             pl_shader sh = pl_dispatch_begin(rr->dp);
@@ -2791,6 +2794,10 @@ static void clear_target(struct pass_state *pass, const pl_tex background,
                 .tex  = background,
                 .rect = rect,
             ));
+
+            struct pl_color_repr repr = bg_repr;
+            struct img img = *bg_img;
+            encode_target(pass, sh, &repr, &img);
 
             GLSL("color.%s *= vec%d(1.0 / "$"); \n",
                  params->blend_params ? "rgb" : "rgba",
@@ -2863,6 +2870,7 @@ static bool pass_output_target(struct pass_state *pass)
 
     bool need_clear = pl_frame_is_cropped(target);
     pl_tex border_tex = NULL;
+    const struct img border_img = *img;
     if (need_clear && params->border == PL_CLEAR_BLUR &&
         !(rr->errors & PL_RENDER_ERR_BLUR))
     {
@@ -3066,7 +3074,7 @@ static bool pass_output_target(struct pass_state *pass)
          flipped_y = dst_rect.y1 < dst_rect.y0;
 
     if (need_clear)
-        clear_target(pass, border_tex, scale, params);
+        clear_target(pass, border_tex, &border_img, params);
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -3729,7 +3737,7 @@ static bool draw_empty_overlays(pl_renderer rr,
     if (!pass_init(&pass, false))
         return false;
 
-    clear_target(&pass, NULL, 0.0f, params);
+    clear_target(&pass, NULL, NULL, params);
     if (!ptarget->num_overlays)
         goto done;
 
