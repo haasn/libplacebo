@@ -1213,29 +1213,29 @@ ident_t sh_bicubic(pl_shader sh, ident_t tex, ident_t pt, float B)
     const float k2 = ${const float: 2 * B - 3};     \
     const float k3 = ${const float: 2 - 1.5f * B};  \
     vec2 size = vec2(textureSize($tex, 0));         \
-    vec2 frac  = fract(pos * size + vec2(0.5));     \
-    vec2 frac2 = frac * frac;                       \
-    vec2 frac3 = frac2 * frac;                      \
-    vec2 inv   = vec2(1.0) - frac;                  \
-    vec2 inv2  = inv * inv;                         \
-    vec2 inv3  = inv2 * inv;                        \
+    vec2 f  = fract(pos * size + vec2(0.5));        \
+    vec2 f2 = f * f;                                \
+    vec2 f3 = f2 * f;                               \
+    vec2 g  = vec2(1.0) - f;                        \
+    vec2 g2 = g * g;                                \
+    vec2 g3 = g2 * g;                               \
     /* compute filter weights directly */           \
-    vec2 w0 = k0 * inv3;                            \
-    vec2 w1 = k1 + k2 * frac2 + k3 * frac3;         \
-    vec2 w2 = k1 + k2 * inv2  + k3 * inv3;          \
-    vec2 w3 = k0 * frac3;                           \
-    vec4 g = vec4(w0 + w1, w2 + w3);                \
-    vec4 h = vec4(w1, w3) / g + inv.xyxy;           \
-    h.xy -= vec2(2.0);                              \
+    vec2 w0 = k0 * g3;                              \
+    vec2 w1 = k1 + k2 * f2 + k3 * f3;               \
+    vec2 w2 = k1 + k2 * g2 + k3 * g3;               \
+    vec2 w3 = k0 * f3;                              \
+    vec4 s = vec4(w0 + w1, w2 + w3);                \
+    vec4 o = vec4(w1, w3) / s + g.xyxy;             \
+    o.xy -= vec2(2.0);                              \
     /* sample four corners, then interpolate */     \
-    vec4 p = pos.xyxy + $pt.xyxy * h;               \
+    vec4 p = pos.xyxy + $pt.xyxy * o;               \
     vec4 c00 = textureLod($tex, p.xy, 0.0);         \
     vec4 c01 = textureLod($tex, p.xw, 0.0);         \
-    vec4 c0 = mix(c01, c00, g.y);                   \
+    vec4 c0 = mix(c01, c00, s.y);                   \
     vec4 c10 = textureLod($tex, p.zy, 0.0);         \
     vec4 c11 = textureLod($tex, p.zw, 0.0);         \
-    vec4 c1 = mix(c11, c10, g.y);                   \
-    return mix(c1, c0, g.x);                        \
+    vec4 c1 = mix(c11, c10, s.y);                   \
+    return mix(c1, c0, s.x);                        \
     }
 
     return fn;
