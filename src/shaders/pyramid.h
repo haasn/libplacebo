@@ -42,3 +42,15 @@ bool pl_pyramid_recreate(pl_gpu gpu, void *alloc, pl_tex_pyramid *pyramid,
 // Fills every level of `pyramid` but the first by reducing the level before it.
 bool pl_pyramid_build(pl_gpu gpu, pl_dispatch dispatch,
                       const pl_tex_pyramid *pyramid);
+
+// Returns the coarsest (smallest) element of the pyramid
+static inline pl_tex pl_pyramid_tip(const pl_tex_pyramid pyramid)
+{
+    return pyramid.num ? pyramid.elem[pyramid.num - 1] : NULL;
+}
+
+// Returns the finest (largest) element of the pyramid
+static inline pl_tex pl_pyramid_base(const pl_tex_pyramid pyramid)
+{
+    return pyramid.num ? pyramid.elem[0] : NULL;
+}
