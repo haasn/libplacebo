@@ -140,6 +140,11 @@ void pl_dispatch_destroy(pl_dispatch *ptr)
     *ptr = NULL;
 }
 
+pl_gpu pl_dispatch_gpu(pl_dispatch dp)
+{
+    return dp->gpu;
+}
+
 pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
 {
     pl_mutex_lock(&dp->lock);

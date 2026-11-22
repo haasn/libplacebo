@@ -19,6 +19,9 @@
 
 #include "common.h"
 
+// Returns the internal GPU instance.
+pl_gpu pl_dispatch_gpu(pl_dispatch dp);
+
 // Like `pl_dispatch_begin`, but has an extra `unique` parameter. If this is
 // true, the generated shader will be uniquely namespaced `unique` and may be
 // freely merged with other shaders (`sh_subpass`). Otherwise, all shaders have
