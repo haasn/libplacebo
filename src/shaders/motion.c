@@ -36,7 +36,7 @@ const struct pl_frame_interp_params pl_frame_interp_default_params = {
     PL_FRAME_INTERP_DEFAULTS
 };
 
-enum {
+enum dir {
     FWD = 0,
     BWD = 1,
     NUM_DIRS = 2,
@@ -530,13 +530,13 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_motion_obj *obj = ptr;
     pl_pyramid_destroy(gpu, &obj->scratch.raw);
-    for (int i = 0; i < NUM_DIRS; i++) {
-        pl_pyramid_destroy(gpu, &obj->dir[i].input);
-        pl_pyramid_destroy(gpu, &obj->dir[i].coarse);
-        pl_pyramid_destroy(gpu, &obj->dir[i].fine);
-        pl_buf_destroy(gpu, &obj->dir[i].gain);
-        pl_tex_destroy(gpu, &obj->dir[i].quality);
-        pl_buf_destroy(gpu, &obj->dir[i].global_flow);
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        pl_pyramid_destroy(gpu, &obj->dir[d].input);
+        pl_pyramid_destroy(gpu, &obj->dir[d].coarse);
+        pl_pyramid_destroy(gpu, &obj->dir[d].fine);
+        pl_buf_destroy(gpu, &obj->dir[d].gain);
+        pl_tex_destroy(gpu, &obj->dir[d].quality);
+        pl_buf_destroy(gpu, &obj->dir[d].global_flow);
     }
     pl_buf_destroy(gpu, &obj->scratch.hist);
     for (int i = 0; i < PL_ARRAY_SIZE(obj->cand_lut); i++)
@@ -868,10 +868,11 @@ static ident_t get_target_gain(pl_shader sh, pl_buf gain_buf)
     return gain;
 }
 
-// Measures the change in brightness from `ref` to `tgt`, as on a fade, into
-// the buffer `gain`: the factor that brings `tgt` to the brightness of
-// `ref`. It is the ratio of the mean luma of the blocks of `ref` to that of
-// the blocks in `tgt` that their vectors in `flow` lead to.
+// Measures the change in brightness from `prev_tex` to `next_tex`, as on a
+// fade, into the buffer `gain_buf`: the factor that brings `next_tex` to the
+// brightness of `prev_tex`. It is the ratio of the mean luma of the blocks of
+// `prev_tex` to that of the blocks in `next_tex` that their vectors in
+// `flow_tex` lead to.
 //
 // Comparing the content that the vectors matched, instead of the means of the
 // frames, keeps content that moves into or out of the frame from counting as
@@ -879,17 +880,17 @@ static ident_t get_target_gain(pl_shader sh, pl_buf gain_buf)
 // frame are skipped, and the others are weighted by how well their textures
 // match once their means are removed.
 static bool motion_gain_pass(pl_dispatch dispatch,
-                             const struct sh_motion_obj *obj, int d)
+                             const struct sh_motion_obj *obj, enum dir d)
 {
-    const struct motion_dir *md = &obj->dir[d];
-    pl_tex ref = pl_pyramid_tip(md->input);
-    pl_tex tgt = pl_pyramid_tip(obj->dir[!d].input);
-    pl_tex flow = pl_pyramid_tip(md->coarse);
-    pl_buf gain = md->gain;
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex prev_tex = pl_pyramid_tip(dir->input);
+    pl_tex next_tex = pl_pyramid_tip(obj->dir[!d].input);
+    pl_tex flow_tex = pl_pyramid_tip(dir->coarse);
+    pl_buf gain_buf = dir->gain;
 
     const int bs = obj->params.block_size_coarse;
-    const int tex_w = ref->params.w, tex_h = ref->params.h;
-    const int grid_w = flow->params.w, grid_h = flow->params.h;
+    const int tex_w = prev_tex->params.w, tex_h = prev_tex->params.h;
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
     const int threads = 64;
     const float fbs = bs;
 
@@ -904,16 +905,16 @@ static bool motion_gain_pass(pl_dispatch dispatch,
     if (!sh)
         return false;
 
-    ident_t ref_id  = bind_tex(sh, "ref", ref);
-    ident_t flow_id = bind_tex(sh, "flow", flow);
-    bind_buf(sh, "gain_out", gain, PL_DESC_ACCESS_WRITEONLY, &gain_var, 1);
-    ident_t tgt_id  = bind_tex_linear(sh, "tgt", tgt, NULL, NULL);
-    if (!tgt_id) {
+    ident_t prev  = bind_tex(sh, "prev", prev_tex);
+    ident_t flow = bind_tex(sh, "flow", flow_tex);
+    bind_buf(sh, "gain_out", gain_buf, PL_DESC_ACCESS_WRITEONLY, &gain_var, 1);
+    ident_t next  = bind_tex_linear(sh, "next", next_tex, NULL, NULL);
+    if (!next) {
         pl_dispatch_abort(dispatch, &sh);
         return false;
     }
 
-    // Weighted sums of the block means of `ref` and `tgt`
+    // Weighted sums of the block means of `prev` and `next`
     ident_t put_means, total_means;
     sh_partial_sums(sh, PL_VAR_FLOAT, 0x3, 1, threads, 1, &put_means,
                     &total_means);
@@ -928,7 +929,7 @@ static bool motion_gain_pass(pl_dispatch dispatch,
          i += ${const int: threads})                                            \
     {                                                                           \
         ivec2 blk = ivec2(i % ${const int: grid_w}, i / ${const int: grid_w});  \
-        vec2 mv = texelFetch($flow_id, blk, 0).xy;                              \
+        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
         vec2 org = vec2(blk * ${const int: bs});                                \
         if (any(lessThan(org + mv, vec2(0.0))) ||                               \
             any(greaterThan(org + mv + ${const float: fbs}, size)) ||           \
@@ -938,8 +939,8 @@ static bool motion_gain_pass(pl_dispatch dispatch,
         vec2 mean = vec2(0.0);                                                  \
         for (int j = 0; j < ${const int: bs * bs}; j++) {                       \
             vec2 pos = org + vec2(j % ${const int: bs}, j / ${const int: bs});  \
-            mean.x += texelFetch($ref_id, ivec2(pos), 0).r;                     \
-            mean.y += textureLod($tgt_id, (pos + 0.5 + mv) / size, 0.0).r;      \
+            mean.x += texelFetch($prev, ivec2(pos), 0).r;                       \
+            mean.y += textureLod($next, (pos + 0.5 + mv) / size, 0.0).r;        \
         }                                                                       \
         mean /= ${const float: fbs * fbs};                                      \
                                                                                 \
@@ -948,8 +949,8 @@ static bool motion_gain_pass(pl_dispatch dispatch,
         float ssd = 0.0, energy = 0.0;                                          \
         for (int j = 0; j < ${const int: bs * bs}; j++) {                       \
             vec2 pos = org + vec2(j % ${const int: bs}, j / ${const int: bs});  \
-            float r = texelFetch($ref_id, ivec2(pos), 0).r - mean.x;            \
-            float t = textureLod($tgt_id, (pos + 0.5 + mv) / size, 0.0).r       \
+            float r = texelFetch($prev, ivec2(pos), 0).r - mean.x;              \
+            float t = textureLod($next, (pos + 0.5 + mv) / size, 0.0).r         \
                     - mean.y;                                                   \
             ssd += (r - t) * (r - t);                                           \
             energy += r * r + t * t;                                            \
@@ -992,14 +993,13 @@ enum motion_prior {
 // motion vector that describes the motion of a block of pixels from one
 // frame to the next.
 static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
-                               int d, int level)
+                               enum dir d, int level)
 {
     pl_gpu gpu = pl_dispatch_gpu(dispatch);
-    const enum pl_motion_direction dir = 1 << d;
-    const struct motion_dir *md = &obj->dir[d];
-    const pl_tex_pyramid *field = &md->coarse;
-    pl_tex ref_tex = md->input.elem[level];
-    pl_tex tgt_tex = obj->dir[!d].input.elem[level];
+    const struct motion_dir *dir = &obj->dir[d];
+    const pl_tex_pyramid *field = &dir->coarse;
+    pl_tex prev_tex = dir->input.elem[level];
+    pl_tex next_tex = obj->dir[!d].input.elem[level];
     pl_tex out_tex = obj->scratch.raw.elem[level];
 
     // The top level has no vectors of a coarser level to start from,
@@ -1011,7 +1011,7 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     const bool top = flow == pl_pyramid_tip(*field);
     const bool base = flow == pl_pyramid_base(*field);
     const bool coarsest = top && !base;
-    pl_buf gain_buf = top ? NULL : md->gain;
+    pl_buf gain_buf = top ? NULL : dir->gain;
 
     // Use the parent motion search to seed this levels search, for
     // all levels but the coarsest. The parent is the motion field
@@ -1031,7 +1031,7 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     }
 
     const bool use_prior = prior_kind != MOTION_PRIOR_SAME ||
-                           (obj->valid & dir);
+                           (obj->valid & (1 << d));
     pl_tex prior_tex = use_prior ? prior_field->elem[level] : NULL;
 
     struct motion_geometry geometry;
@@ -1066,7 +1066,7 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     const int win_stride = shmem.win_stride;
     const int block_stride = shmem.block_stride;
 
-    const int tex_w = ref_tex->params.w, tex_h = ref_tex->params.h;
+    const int tex_w = prev_tex->params.w, tex_h = prev_tex->params.h;
     const int grid_w = out_tex->params.w, grid_h = out_tex->params.h;
 
     pl_shader sh = pass_begin(dispatch, threads, 1, shmem.size,
@@ -1106,10 +1106,10 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     }
 
     // Describe the textures for the reference frames and motion vector output.
-    ident_t ref = bind_tex(sh, "ref", ref_tex);
-    ident_t tgt = bind_tex(sh, "tgt", tgt_tex);
-    ident_t ref_quad = sh_tex_quad(sh, 0, ref, &ref_tex->params);
-    ident_t tgt_quad = sh_tex_quad(sh, 0, tgt, &tgt_tex->params);
+    ident_t prev = bind_tex(sh, "prev", prev_tex);
+    ident_t next = bind_tex(sh, "next", next_tex);
+    ident_t prev_quad = sh_tex_quad(sh, 0, prev, &prev_tex->params);
+    ident_t next_quad = sh_tex_quad(sh, 0, next, &next_tex->params);
     ident_t out = bind_img(sh, "out_mv", out_tex);
     ident_t gain = get_target_gain(sh, gain_buf);
 
@@ -1321,9 +1321,9 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
             ivec2 pos = blk * ${const int: bs}                                  \
                       + 2 * ivec2(j % ${const int: bs / 2},                     \
                                   j / ${const int: bs / 2});                    \
-            uvec4 ref_px = luma8b($ref_quad(pos));                              \
+            uvec4 ref_px = luma8b($prev_quad(pos));                             \
             for (int i = 0; i < ${const int: nseed}; i++)                       \
-                sqdiff(ref_px, luma8b($gain * $tgt_quad(pos + sd[i])),          \
+                sqdiff(ref_px, luma8b($gain * $next_quad(pos + sd[i])),         \
                        psum[i], psum2[i]);                                      \
         }                                                                       \
         if (c0 < ${const int: parts}) {                                         \
@@ -1342,7 +1342,7 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     {                                                                           \
         ivec2 elem = 2 * ivec2(int(i) % ${const int: ref_w / 2},                \
                                int(i) / ${const int: ref_w / 2});               \
-        uvec4 px = luma8b($ref_quad(tile * ${const int: bs} + elem));           \
+        uvec4 px = luma8b($prev_quad(tile * ${const int: bs} + elem));          \
         int j = elem.y * ${const int: ref_w} + elem.x;                          \
         sRef[j] = px.x;                                                         \
         sRef[j + 1] = px.y;                                                     \
@@ -1374,7 +1374,7 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     for (int i = c0; i < ${const int: win * win / 4}; i += ${const int: tpb}) { \
         ivec2 elem = 2 * ivec2(i % ${const int: win / 2},                       \
                                i / ${const int: win / 2});                      \
-        uvec4 px = luma8b($gain * $tgt_quad(origin + elem));                    \
+        uvec4 px = luma8b($gain * $next_quad(origin + elem));                   \
         int j = win_base + elem.y * ${const int: win_stride} + elem.x;          \
         sTgt[j] = px.x;                                                         \
         sTgt[j + 1] = px.y;                                                     \
@@ -1451,19 +1451,19 @@ error:
 // Replace every block's motion vector with one derived from the surrounding 3x3
 // neighbourhood of blocks, to suppress vectors that the search got wrong.
 static bool motion_smooth_pass(pl_dispatch dispatch,
-                               const struct sh_motion_obj *obj, int d,
+                               const struct sh_motion_obj *obj, enum dir d,
                                int level)
 {
-    const struct motion_dir *md = &obj->dir[d];
-    pl_tex ref = md->input.elem[level];
-    pl_tex tgt = obj->dir[!d].input.elem[level];
-    pl_tex in = obj->scratch.raw.elem[level];
-    pl_tex out = md->coarse.elem[level];
-    pl_buf gain_buf = out == pl_pyramid_tip(md->coarse) ? NULL : md->gain;
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex prev_tex = dir->input.elem[level];
+    pl_tex next_tex = obj->dir[!d].input.elem[level];
+    pl_tex flow_tex = obj->scratch.raw.elem[level];
+    pl_tex out_tex = dir->coarse.elem[level];
+    pl_buf gain_buf = out_tex == pl_pyramid_tip(dir->coarse) ? NULL : dir->gain;
 
     const int bs = obj->params.block_size_coarse;
-    const int grid_w = out->params.w, grid_h = out->params.h;
-    const int tex_w = ref->params.w, tex_h = ref->params.h;
+    const int grid_w = out_tex->params.w, grid_h = out_tex->params.h;
+    const int tex_w = prev_tex->params.w, tex_h = prev_tex->params.h;
 
     // A work group covers `gx` x `gy` blocks, with one thread per row. Every
     // other row of a block tells the candidates apart as well as all of them,
@@ -1479,15 +1479,17 @@ static bool motion_smooth_pass(pl_dispatch dispatch,
     if (!sh)
         return false;
 
-    ident_t tex = bind_tex(sh, "flow_in", in);
-    ident_t dst = bind_img(sh, "flow_out", out);
-    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x3, tex, &in->params);
-    ident_t ref_id = bind_tex(sh, "ref", ref);
+    ident_t flow = bind_tex(sh, "flow_in", flow_tex);
+    ident_t out = bind_img(sh, "flow_out", out_tex);
+    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x3, flow,
+                                           &flow_tex->params);
+    ident_t prev = bind_tex(sh, "prev", prev_tex);
     ident_t gain = get_target_gain(sh, gain_buf);
 
     // The vectors are fractional
-    ident_t tgt_pt, tgt_id = bind_tex_linear(sh, "tgt", tgt, NULL, &tgt_pt);
-    if (!tgt_id)
+    ident_t next_pt, next = bind_tex_linear(sh, "next", next_tex, NULL,
+                                            &next_pt);
+    if (!next)
         goto error;
 
     // SSD of each neighbour over each row of each block of the group
@@ -1521,11 +1523,11 @@ static bool motion_smooth_pass(pl_dispatch dispatch,
     for (int j = 0; j < ${const int: span}; j++) {                              \
         ivec2 off = ivec2(j + (row & 1) * ${const int: span}, row & ~1);        \
         ivec2 pos = min(blk * ${const int: bs} + off, size - 1);                \
-        float r = texelFetch($ref_id, pos, 0).r;                                \
+        float r = texelFetch($prev, pos, 0).r;                                  \
         vec2 c = vec2(pos) + vec2(0.5);                                         \
         for (int k = 0; k < 8; k++) {                                           \
             vec2 v = mv[k < 4 ? k : k + 1].xy;                                  \
-            float t = $gain * textureLod($tgt_id, (c + v) * $tgt_pt, 0.0).r;    \
+            float t = $gain * textureLod($next, (c + v) * $next_pt, 0.0).r;     \
             float d = r - t;                                                    \
             ssd[k] += d * d;                                                    \
         }                                                                       \
@@ -1549,7 +1551,7 @@ static bool motion_smooth_pass(pl_dispatch dispatch,
             }                                                                   \
         }                                                                       \
                                                                                 \
-        imageStore($dst, blk, vec4(best, 0.0, 0.0));                            \
+        imageStore($out, blk, vec4(best, 0.0, 0.0));                            \
     }
     // clang-format on
 
@@ -1567,24 +1569,24 @@ error:
     return false;
 }
 
-// Writes a vector for every 4x4 sub-block of `out`: of the vectors of the 3x3
-// blocks around it in `blocks` (of `block_size_coarse` pixels squared), and
-// of `MOTION_REFINE_4X4_RINGS` rings of blocks further away, the one that best
-// matches the sub-block and a border of one pixel around it. The vector of the
-// sub-block's own block is preferred by a margin of one code value (8 bit).
+// Writes a vector for every 4x4 sub-block of `out_tex`: of the vectors of the
+// 3x3 blocks around it in `flow_tex` (of `block_size_coarse` pixels squared),
+// and of `MOTION_REFINE_4X4_RINGS` rings of blocks further away, the one that
+// best matches the sub-block and a border of one pixel around it. The vector of
+// the sub-block's own block is preferred by a margin of one code value (8 bit).
 static bool
 motion_refine_4x4_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
-                       int d, pl_tex blocks, pl_tex out)
+                       enum dir d, pl_tex flow_tex, pl_tex out_tex)
 {
-    const struct motion_dir *md = &obj->dir[d];
-    pl_tex ref = pl_pyramid_base(md->input);
-    pl_tex tgt = pl_pyramid_base(obj->dir[!d].input);
-    pl_buf gain_buf = md->gain;
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex prev_tex = pl_pyramid_base(dir->input);
+    pl_tex next_tex = pl_pyramid_base(obj->dir[!d].input);
+    pl_buf gain_buf = dir->gain;
 
     const int bs = obj->params.block_size_coarse;
-    const int w = ref->params.w, h = ref->params.h;
-    const int grid_w = blocks->params.w, grid_h = blocks->params.h;
-    const int sub_w = out->params.w, sub_h = out->params.h;
+    const int w = prev_tex->params.w, h = prev_tex->params.h;
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
+    const int sub_w = out_tex->params.w, sub_h = out_tex->params.h;
     const int sub = 4, win = sub + 2;
     const int ncand = 9 + 4 * MOTION_REFINE_4X4_RINGS;
 
@@ -1594,13 +1596,13 @@ motion_refine_4x4_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
     if (!sh)
         return false;
 
-    ident_t src = bind_tex(sh, "blocks", blocks);
-    ident_t dst = bind_img(sh, "sub_out", out);
-    ident_t ref_id = bind_tex(sh, "ref", ref);
-    ident_t tgt_id = bind_tex(sh, "tgt", tgt);
-    ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, ref_id,
-                                           &ref->params);
-    ident_t block_ssd = sh_block_ssd(sh, win, win, 0, tgt_id, &tgt->params);
+    ident_t flow = bind_tex(sh, "blocks", flow_tex);
+    ident_t out = bind_img(sh, "sub_out", out_tex);
+    ident_t prev = bind_tex(sh, "prev", prev_tex);
+    ident_t next = bind_tex(sh, "next", next_tex);
+    ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, prev,
+                                           &prev_tex->params);
+    ident_t block_ssd = sh_block_ssd(sh, win, win, 0, next, &next_tex->params);
     ident_t gain = get_target_gain(sh, gain_buf);
 
     // clang-format off
@@ -1639,7 +1641,7 @@ motion_refine_4x4_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
                 break;                                                          \
                                                                                 \
             ivec2 p = clamp(blk + cand[k], ivec2(0), grid - 1);                 \
-            vec2 mv = texelFetch($src, p, 0).xy;                                \
+            vec2 mv = texelFetch($flow, p, 0).xy;                               \
                                                                                 \
             /* Most candidates repeat the own, the previous or the best one. */ \
             vec2 d0 = mv - own, d1 = mv - last, d2 = mv - best;                 \
@@ -1660,7 +1662,7 @@ motion_refine_4x4_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
                 best = mv;                                                      \
             }                                                                   \
         }                                                                       \
-        imageStore($dst, sb, vec4(best, 0.0, 0.0));                             \
+        imageStore($out, sb, vec4(best, 0.0, 0.0));                             \
     }
     // clang-format on
 
@@ -1671,23 +1673,23 @@ motion_refine_4x4_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
     ));
 }
 
-// Writes a vector for every pixel of `out`, which has the dimensions of `ref`:
-// the vector of the pixel's block in `flow` (of `bs` pixels squared), or that
-// of one of the 8 neighbouring blocks if it matches the 3x3 pixels around the
-// pixel better by more than `MOTION_REFINE_1X1_MARGIN`.
+// Writes a vector for every pixel of `out_tex`, which has the dimensions of
+// `prev_tex`: the vector of the pixel's block in `flow_tex` (of `bs` pixels
+// squared), or that of one of the 8 neighbouring blocks if it matches the 3x3
+// pixels around the pixel better by more than `MOTION_REFINE_1X1_MARGIN`.
 static bool
 motion_refine_1x1_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
-                       int d, pl_tex flow, pl_tex out)
+                       enum dir d, pl_tex flow_tex, pl_tex out_tex)
 {
-    const struct motion_dir *md = &obj->dir[d];
-    pl_tex ref = pl_pyramid_base(md->input);
-    pl_tex tgt = pl_pyramid_base(obj->dir[!d].input);
-    pl_buf gain_buf = md->gain;
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex prev_tex = pl_pyramid_base(dir->input);
+    pl_tex next_tex = pl_pyramid_base(obj->dir[!d].input);
+    pl_buf gain_buf = dir->gain;
 
     // Refines the output of the 4x4 pass, if there is one
     const int bs = PL_MIN(obj->params.block_size_coarse, 4);
-    const int w = out->params.w, h = out->params.h;
-    const int grid_w = flow->params.w, grid_h = flow->params.h;
+    const int w = out_tex->params.w, h = out_tex->params.h;
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
 
     // SSD over the 9 pixels of the window, in units of the luma textures
     const float margin = MOTION_REFINE_1X1_MARGIN * 9.0f / (255.0f * 255.0f);
@@ -1697,12 +1699,13 @@ motion_refine_1x1_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
     if (!sh)
         return false;
 
-    ident_t src = bind_tex(sh, "flow_in", flow);
-    ident_t dst = bind_img(sh, "flow_out", out);
-    ident_t ref_id = bind_tex(sh, "ref", ref);
-    ident_t tgt_id = bind_tex(sh, "tgt", tgt);
-    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x1, ref_id, &ref->params);
-    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, tgt_id, &tgt->params);
+    ident_t flow = bind_tex(sh, "flow_in", flow_tex);
+    ident_t out = bind_img(sh, "flow_out", out_tex);
+    ident_t prev = bind_tex(sh, "prev", prev_tex);
+    ident_t next = bind_tex(sh, "next", next_tex);
+    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x1, prev,
+                                           &prev_tex->params);
+    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, next, &next_tex->params);
     ident_t gain = get_target_gain(sh, gain_buf);
 
     // clang-format off
@@ -1719,7 +1722,7 @@ motion_refine_1x1_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
         /* The vector of the pixel's own block comes first. The others pay the  \
          * margin, so none of them can win once it matches within that. */      \
         vec2 cand[9];                                                           \
-        cand[0] = texelFetch($src, blk, 0).xy;                                  \
+        cand[0] = texelFetch($flow, blk, 0).xy;                                 \
         vec2 best = cand[0];                                                    \
         float best_ssd = $block_ssd(ref_px, org + best, $gain, 1e30);           \
         if (best_ssd > ${const float: margin}) {                                \
@@ -1727,7 +1730,7 @@ motion_refine_1x1_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
                 int i = k <= 4 ? k - 1 : k;                                     \
                 ivec2 p = clamp(blk + ivec2(i % 3, i / 3) - 1, ivec2(0),        \
                                 grid - 1);                                      \
-                cand[k] = texelFetch($src, p, 0).xy;                            \
+                cand[k] = texelFetch($flow, p, 0).xy;                           \
                 /* A vector equal to an earlier one cannot win. */              \
                 bool dup = false;                                               \
                 for (int j = 0; j < k; j++)                                     \
@@ -1743,7 +1746,7 @@ motion_refine_1x1_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
                 }                                                               \
             }                                                                   \
         }                                                                       \
-        imageStore($dst, pos, vec4(best, 0.0, 0.0));                            \
+        imageStore($out, pos, vec4(best, 0.0, 0.0));                            \
     }
     // clang-format on
 
@@ -1804,52 +1807,52 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
 
 // Refines `obj->dir[d].coarse` into the levels of `fine`, from the coarsest.
 static bool refine_flow(pl_dispatch dispatch, const struct sh_motion_obj *obj,
-                        int d)
+                        enum dir d)
 {
     const pl_tex_pyramid *fine = &obj->dir[d].fine;
-    pl_tex in = pl_pyramid_base(obj->dir[d].coarse);
+    pl_tex flow = pl_pyramid_base(obj->dir[d].coarse);
     int size = obj->params.block_size_coarse;
     for (int i = fine->num - 1; i >= 0; i--) {
         size = refine_size(size);
         bool ok;
         switch (size) {
         case 4:
-            ok = motion_refine_4x4_pass(dispatch, obj, d, in, fine->elem[i]);
+            ok = motion_refine_4x4_pass(dispatch, obj, d, flow, fine->elem[i]);
             break;
         case 1:
-            ok = motion_refine_1x1_pass(dispatch, obj, d, in, fine->elem[i]);
+            ok = motion_refine_1x1_pass(dispatch, obj, d, flow, fine->elem[i]);
             break;
         }
         if (!ok)
             return false;
-        in = fine->elem[i];
+        flow = fine->elem[i];
     }
 
     return true;
 }
 
-// Estimates the quality of `flow`. The quality of a vector scales with the
+// Estimates the quality of `flow_tex`. The quality of a vector scales with the
 // consistency between the 3x3 window around its pixel and where it leads,
 // and with the consistency of the vector and its neighbors.
 //
 // A mismatch means less the more texture the window has, so it is taken
 // relative to that.
 static bool motion_quality_pass(pl_dispatch dispatch,
-                                const struct sh_motion_obj *obj, int d)
+                                const struct sh_motion_obj *obj, enum dir d)
 {
-    const struct motion_dir *md = &obj->dir[d];
-    pl_tex ref = pl_pyramid_base(md->input);
-    pl_tex tgt = pl_pyramid_base(obj->dir[!d].input);
-    pl_tex flow = md->fine.num ? pl_pyramid_base(md->fine)
-                               : pl_pyramid_base(md->coarse);
-    pl_tex out = md->quality;
-    pl_buf gain_buf = md->gain;
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex prev_tex = pl_pyramid_base(dir->input);
+    pl_tex next_tex = pl_pyramid_base(obj->dir[!d].input);
+    pl_tex flow_tex = dir->fine.num ? pl_pyramid_base(dir->fine)
+                               : pl_pyramid_base(dir->coarse);
+    pl_tex out_tex = dir->quality;
+    pl_buf gain_buf = dir->gain;
 
     const int bs = obj->params.block_size_fine;
-    const int w = ref->params.w, h = ref->params.h;
-    const int out_w = out->params.w, out_h = out->params.h;
+    const int w = prev_tex->params.w, h = prev_tex->params.h;
+    const int out_w = out_tex->params.w, out_h = out_tex->params.h;
     const int sub = MOTION_QUALITY_SUB, win = sub + 2;
-    const int grid_w = flow->params.w, grid_h = flow->params.h;
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
     const float noise = 9.0f * PL_SQUARE(MOTION_QUALITY_NOISE / 255.0f);
     const float outlier = 1.0f / PL_SQUARE(MOTION_QUALITY_OUTLIER);
 
@@ -1858,14 +1861,15 @@ static bool motion_quality_pass(pl_dispatch dispatch,
     if (!sh)
         return false;
 
-    ident_t src = bind_tex(sh, "flow", flow);
-    ident_t dst = bind_img(sh, "quality_out", out);
-    ident_t ref_id = bind_tex(sh, "ref", ref);
-    ident_t tgt_id = bind_tex(sh, "tgt", tgt);
-    ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, ref_id,
-                                           &ref->params);
-    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, tgt_id, &tgt->params);
-    ident_t load_vectors = sh_tex_load_block(sh, 4, 4, 0x3, src, &flow->params);
+    ident_t flow = bind_tex(sh, "flow", flow_tex);
+    ident_t out = bind_img(sh, "quality_out", out_tex);
+    ident_t prev = bind_tex(sh, "prev", prev_tex);
+    ident_t next = bind_tex(sh, "next", next_tex);
+    ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, prev,
+                                           &prev_tex->params);
+    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, next, &next_tex->params);
+    ident_t load_vectors = sh_tex_load_block(sh, 4, 4, 0x3, flow,
+                                             &flow_tex->params);
     ident_t median9 = sh_median(sh, 9, 0x3);
     ident_t gain = get_target_gain(sh, gain_buf);
 
@@ -1936,7 +1940,7 @@ static bool motion_quality_pass(pl_dispatch dispatch,
             }                                                                   \
         @}                                                                      \
         @}                                                                      \
-        imageStore($dst, sq, vec4(sum / num, 0.0, 0.0, 0.0));                   \
+        imageStore($out, sq, vec4(sum / num, 0.0, 0.0, 0.0));                   \
     }
     // clang-format on
 
@@ -1989,15 +1993,15 @@ static bool global_buf_create(pl_gpu gpu, pl_buf *buf, size_t size,
     return true;
 }
 
-// Create a histogram of motion from the blocks of `flow` into `hist`.
+// Create a histogram of motion from the blocks of `flow_tex` into `hist`.
 // NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
 static bool motion_global_hist_pass(pl_dispatch dispatch,
-                                    const struct sh_motion_obj *obj, int d)
+                                    const struct sh_motion_obj *obj, enum dir d)
 {
-    pl_tex flow = pl_pyramid_base(obj->dir[d].coarse);
+    pl_tex flow_tex = pl_pyramid_base(obj->dir[d].coarse);
     pl_buf hist = obj->scratch.hist;
-    const int grid_w = flow->params.w, grid_h = flow->params.h;
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
     const int dim = MOTION_GLOBAL_WORKGROUP_DIM;
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
 
@@ -2007,7 +2011,7 @@ static bool motion_global_hist_pass(pl_dispatch dispatch,
     if (!sh)
         return false;
 
-    ident_t src = bind_tex(sh, "flow_in", flow);
+    ident_t flow = bind_tex(sh, "flow_in", flow_tex);
     bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
              &global_hist_var, 1);
 
@@ -2024,7 +2028,7 @@ static bool motion_global_hist_pass(pl_dispatch dispatch,
     ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
     ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
     if (all(lessThan(blk, grid))) {                                             \
-        vec2 mv = texelFetch($src, blk, 0).xy;                                  \
+        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
         /* Shift mv in [-128, 128] to bin index in [0, 256). */                 \
         ivec2 bin = ivec2(round(mv)) + ${const int: MOTION_GLOBAL_BINS / 2};    \
         bin = clamp(bin, ivec2(0), ivec2(${const int: MOTION_GLOBAL_BINS - 1}));\
@@ -2052,9 +2056,9 @@ static bool motion_global_hist_pass(pl_dispatch dispatch,
 // TODO: estimate a confidence. It is always 1 for now. One approach would be
 // using the proportion of bins in the histogram that are close to the median.
 static bool motion_global_median_pass(pl_dispatch dispatch,
-                                      const struct sh_motion_obj *obj, int d)
+                                      const struct sh_motion_obj *obj,
+                                      enum dir d)
 {
-    const enum pl_motion_direction dir = 1 << d;
     pl_tex flow = pl_pyramid_base(obj->dir[d].coarse);
     pl_buf hist = obj->scratch.hist, out = obj->dir[d].global_flow;
     const int num = flow->params.w * flow->params.h;
@@ -2068,7 +2072,7 @@ static bool motion_global_median_pass(pl_dispatch dispatch,
     bind_buf(sh, "global_hist_buf", hist, PL_DESC_ACCESS_READWRITE,
              &global_hist_var, 1);
     bind_buf(sh, "global_motion_out", out, PL_DESC_ACCESS_WRITEONLY,
-             global_buf_vars[dir], GLOBAL_BUF_NUM_VARS);
+             global_buf_vars[1 << d], GLOBAL_BUF_NUM_VARS);
 
     // clang-format off
 #pragma GLSLH /* motion_global_median_pass */                                   \
@@ -2095,7 +2099,7 @@ static bool motion_global_median_pass(pl_dispatch dispatch,
         }                                                                       \
         /* Shift bin index in [0, 256) to mv in [-128, 128). */                 \
         float mv = float(i - ${const int: MOTION_GLOBAL_BINS / 2});             \
-        @if (dir == PL_MOTION_FORWARD) {                                        \
+        @if (d == FWD) {                                                        \
             global_mv_fwd[tid] = mv;                                            \
             if (tid == 0)                                                       \
                 global_confidence_fwd = 1.0;                                    \
@@ -2115,7 +2119,7 @@ static bool motion_global_median_pass(pl_dispatch dispatch,
 
 // Estimates the global motion of `d` from its flow field.
 static bool estimate_global(pl_dispatch dispatch,
-                            const struct sh_motion_obj *obj, int d)
+                            const struct sh_motion_obj *obj, enum dir d)
 {
     return motion_global_hist_pass(dispatch, obj, d) &&
            motion_global_median_pass(dispatch, obj, d);
@@ -2126,9 +2130,8 @@ static bool estimate_global(pl_dispatch dispatch,
 static bool estimate_quality(pl_dispatch dispatch,
                              const struct sh_motion_obj *obj)
 {
-    for (int d = 0; d < NUM_DIRS; d++) {
-        const enum pl_motion_direction dir = 1 << d;
-        if (!(obj->valid & dir))
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        if (!(obj->valid & (1 << d)))
             continue;
         if (!motion_quality_pass(dispatch, obj, d))
             return false;
@@ -2195,7 +2198,7 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
         .storable   = true,
     );
 
-    for (int d = 0; d < NUM_DIRS; d++) {
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
         if (!(direction & (1 << d)))
             continue;
         if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
@@ -2208,7 +2211,7 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
 
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(params, refine);
-    for (int d = 0; d < NUM_DIRS; d++) {
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
         if (!(direction & (1 << d)))
             continue;
         if (!refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
@@ -2217,23 +2220,23 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
     }
 
     // Only the levels below the top one compensate the gain
-    for (int i = 0; levels > 1 && i < NUM_DIRS; i++) {
-        if (!(direction & (1 << i)))
+    for (enum dir d = 0; levels > 1 && d < NUM_DIRS; d++) {
+        if (!(direction & (1 << d)))
             continue;
-        obj->dir[i].gain = pl_buf_create(gpu, pl_buf_params(
+        obj->dir[d].gain = pl_buf_create(gpu, pl_buf_params(
             .size        = sizeof(float),
             .storable    = true,
             .memory_type = PL_BUF_MEM_DEVICE,
             .debug_tag   = PL_DEBUG_TAG,
         ));
 
-        if (!obj->dir[i].gain) {
+        if (!obj->dir[d].gain) {
             PL_ERR(gpu, "pl_motion_estimate: failed creating gain buffer!");
             goto error;
         }
     }
 
-    for (int d = 0; d < NUM_DIRS; d++) {
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
         if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].input, levels,
                                  input_params))
             goto error;
@@ -2250,7 +2253,7 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
 
         const int qw = PL_DIV_UP(w, MOTION_QUALITY_SUB);
         const int qh = PL_DIV_UP(h, MOTION_QUALITY_SUB);
-        for (int d = 0; d < NUM_DIRS; d++) {
+        for (enum dir d = 0; d < NUM_DIRS; d++) {
             if (!(direction & (1 << d)))
                 continue;
             bool ok = pl_tex_recreate(gpu, &obj->dir[d].quality, pl_tex_params(
@@ -2274,7 +2277,7 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
                                false))
             goto error;
 
-        for (int d = 0; d < NUM_DIRS; d++) {
+        for (enum dir d = 0; d < NUM_DIRS; d++) {
             if (!(direction & (1 << d)))
                 continue;
             if (!global_buf_create(gpu, &obj->dir[d].global_flow,
@@ -2366,9 +2369,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
 
     bool ok = true;
-    for (int d = 0; d < NUM_DIRS; d++) {
-        const enum pl_motion_direction dir = 1 << d;
-        if (!(input->direction & dir))
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        if (!(input->direction & (1 << d)))
             continue;
 
         for (int i = levels - 1; ok && i >= 0; i--) {
@@ -2481,12 +2483,12 @@ static bool frame_interp_global(pl_shader sh,
     // clang-format on
 
     for (int i = 0; i < NUM_DIRS; i++) {
-        pl_tex tex = frames[i]->tex;
+        pl_tex frame_tex = frames[i]->tex;
         enum pl_tex_sample_mode sample_mode = PL_TEX_SAMPLE_NEAREST;
-        if (tex->params.format->caps & PL_FMT_CAP_LINEAR)
+        if (frame_tex->params.format->caps & PL_FMT_CAP_LINEAR)
             sample_mode = PL_TEX_SAMPLE_LINEAR; // offsets are fractional
 
-        ident_t pos, pt, frame = sh_bind(sh, tex, PL_TEX_ADDRESS_CLAMP,
+        ident_t pos, pt, frame = sh_bind(sh, frame_tex, PL_TEX_ADDRESS_CLAMP,
                                          sample_mode, "frame", NULL, &pos, &pt);
         if (!frame)
             return false;
@@ -2542,13 +2544,15 @@ static bool frame_interp_visualize(pl_shader sh,
         return false;
     }
 
-    pl_tex qtex = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
-    if (!qtex) {
+    pl_tex quality_tex = pl_motion_get_quality(*input->state,
+                                               PL_MOTION_FORWARD);
+    if (!quality_tex) {
         PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
         return false;
     }
 
-    ident_t quality = bind_tex_linear(sh, "motion_quality", qtex, NULL, NULL);
+    ident_t quality = bind_tex_linear(sh, "motion_quality", quality_tex, NULL,
+                                      NULL);
     ident_t pos, frame = sh_bind(sh, input->a.tex, PL_TEX_ADDRESS_CLAMP,
                                  PL_TEX_SAMPLE_NEAREST, "frame", NULL, &pos,
                                  NULL);
@@ -2615,14 +2619,15 @@ static bool frame_interp_quality(pl_shader sh,
     if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
         return false;
 
-    pl_tex qtex = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
-    if (!qtex) {
+    pl_tex quality_tex = pl_motion_get_quality(*input->state,
+                                               PL_MOTION_FORWARD);
+    if (!quality_tex) {
         PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
         return false;
     }
 
-    ident_t pos, quality = bind_tex_linear(sh, "motion_quality", qtex, &pos,
-                                           NULL);
+    ident_t pos, quality = bind_tex_linear(sh, "motion_quality", quality_tex,
+                                           &pos, NULL);
     if (!quality)
         return false;
 
