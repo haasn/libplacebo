@@ -2611,32 +2611,31 @@ static bool frame_interp_visualize(pl_shader sh,
     return true;
 }
 
-static bool frame_interp_quality(pl_shader sh,
-                                 const struct pl_frame_interp_input *input,
-                                 const struct pl_color_space *out_color)
+// Draws a grayscale map
+static bool frame_interp_map(pl_shader sh,
+                             const struct pl_frame_interp_input *input,
+                             pl_tex map_tex, const char *name,
+                             const struct pl_color_space *out_color)
 {
     const struct pl_tex_params *tpars = &input->a.tex->params;
     if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
         return false;
 
-    pl_tex quality_tex = pl_motion_get_quality(*input->state,
-                                               PL_MOTION_FORWARD);
-    if (!quality_tex) {
-        PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
+    if (!map_tex) {
+        PL_ERR(sh, "pl_shader_frame_interp: no %s available!", name);
         return false;
     }
 
-    ident_t pos, quality = bind_tex_linear(sh, "motion_quality", quality_tex,
-                                           &pos, NULL);
-    if (!quality)
+    ident_t pos, map = bind_tex_linear(sh, "motion_map", map_tex, &pos, NULL);
+    if (!map)
         return false;
 
-    sh_describe(sh, "frame interpolation (visualize quality)");
+    sh_describef(sh, "frame interpolation (visualize %s)", name);
 
     // clang-format off
-#pragma GLSL /* pl_shader_frame_interp (visualize quality) */                   \
-    float q = textureLod($quality, $pos, 0.0).x;                                \
-    vec4 color = vec4(vec3(q), 1.0);
+#pragma GLSL /* pl_shader_frame_interp (visualize map) */                       \
+    float v = textureLod($map, $pos, 0.0).x;                                    \
+    vec4 color = vec4(vec3(v), 1.0);
     // clang-format on
 
     struct pl_color_space csp = pl_color_space_srgb;
@@ -2699,8 +2698,9 @@ bool pl_shader_frame_interp(pl_shader sh,
         return frame_interp_global(sh, input, &out_color);
     case PL_FRAME_INTERP_VISUALIZE:
         return frame_interp_visualize(sh, input, &out_color);
-    case PL_FRAME_INTERP_QUALITY:
-        return frame_interp_quality(sh, input, &out_color);
+    case PL_FRAME_INTERP_QUALITY:;
+        pl_tex quality = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
+        return frame_interp_map(sh, input, quality, "flow quality", &out_color);
     case PL_FRAME_INTERP_ALGO_COUNT:
         break;
     }
