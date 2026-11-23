@@ -1088,26 +1088,41 @@ ident_t sh_tex_load_block(pl_shader sh, int bw, int bh, uint8_t comps,
     return fn;
 }
 
-ident_t sh_tex_quad(pl_shader sh, uint8_t comp, ident_t tex,
+ident_t sh_tex_quad(pl_shader sh, uint8_t comps, ident_t tex,
                     const struct pl_tex_params *tpars)
 {
-    // Gathering from components other than the first requires GLSL 400
-    const bool gather = tpars->format->gatherable &&
-                        (comp == 0 || sh_glsl(sh).version >= 400);
-    const uint8_t mask = 1 << comp;
-    ident_t fn = sh_fresh(sh, "tex_quad");
+    static const char * const types[] = { "vec4", "mat2x4", "mat3x4", "mat4" };
+    int comp[4], n = 0;
+    for (int c = 0; c < 4; c++) {
+        if (comps & (1 << c))
+            comp[n++] = c;
+    }
+    pl_assert(n > 0);
+
+    // Gathering from components other than the first requires GLSL 400. Past
+    // two components, fetching each texel once beats a gather per component.
+    const bool gather = tpars->format->gatherable && n <= 2 &&
+                        (comps == 0x1 || sh_glsl(sh).version >= 400);
+    ident_t type = sh_fresh(sh, "quad_t"), fn = sh_fresh(sh, "tex_quad");
+    GLSLH("#define "$" %s\n", type, types[n - 1]);
 
 #pragma GLSLH                                                                   \
-    vec4 $fn(ivec2 pos)                                                         \
+    $type $fn(ivec2 pos)                                                        \
     {                                                                           \
         @if (gather) {                                                          \
-            vec2 pt = vec2(${const float: 1.0f / tpars->w},                     \
-                           ${const float: 1.0f / tpars->h});                    \
-            @if (comp > 0) {                                                    \
-                return textureGather($tex, vec2(pos + 1) * pt,                  \
-                                     ${const int: comp}).wzxy;                  \
+            vec2 coord = vec2(pos + 1) * vec2(${const float: 1.0f / tpars->w},  \
+                                              ${const float: 1.0f / tpars->h}); \
+            @if (n == 1) {                                                      \
+                @if (comp[0] == 0) {                                            \
+                    return textureGather($tex, coord).wzxy;                     \
+                @} else {                                                       \
+                    return textureGather($tex, coord,                           \
+                                         ${const int: comp[0]}).wzxy;           \
+                @}                                                              \
             @} else {                                                           \
-                return textureGather($tex, vec2(pos + 1) * pt).wzxy;            \
+                return $type(                                                   \
+                    textureGather($tex, coord, ${const int: comp[0]}).wzxy,     \
+                    textureGather($tex, coord, ${const int: comp[1]}).wzxy);    \
             @}                                                                  \
         @} else {                                                               \
             ivec2 tex_range = ivec2(${const int: tpars->w - 1},                 \
@@ -1115,10 +1130,18 @@ ident_t sh_tex_quad(pl_shader sh, uint8_t comp, ident_t tex,
             ivec2 p0 = clamp(pos, ivec2(0), tex_range);                         \
             ivec2 p1 = clamp(pos + 1, ivec2(0), tex_range);                     \
             ivec2 p10 = ivec2(p1.x, p0.y), p01 = ivec2(p0.x, p1.y);             \
-            return vec4(texelFetch($tex, p0,  0).${swizzle: mask},              \
-                        texelFetch($tex, p10, 0).${swizzle: mask},              \
-                        texelFetch($tex, p01, 0).${swizzle: mask},              \
-                        texelFetch($tex, p1,  0).${swizzle: mask});             \
+            ${vecType: comps} t00 = texelFetch($tex, p0,  0).${swizzle: comps}; \
+            ${vecType: comps} t10 = texelFetch($tex, p10, 0).${swizzle: comps}; \
+            ${vecType: comps} t01 = texelFetch($tex, p01, 0).${swizzle: comps}; \
+            ${vecType: comps} t11 = texelFetch($tex, p1,  0).${swizzle: comps}; \
+            @if (n == 1) {                                                      \
+                return vec4(t00, t10, t01, t11);                                \
+            @} else {                                                           \
+                $type q;                                                        \
+                @for (c < n)                                                    \
+                    q[@c] = vec4(t00[@c], t10[@c], t01[@c], t11[@c]);           \
+                return q;                                                       \
+            @}                                                                  \
         @}                                                                      \
     }
 
@@ -1133,7 +1156,7 @@ ident_t sh_tex_quad(pl_shader sh, uint8_t comp, ident_t tex,
 static ident_t sh_tex_rows(pl_shader sh, int n, uint8_t comp, ident_t tex,
                            const struct pl_tex_params *tpars)
 {
-    ident_t quad = sh_tex_quad(sh, comp, tex, tpars);
+    ident_t quad = sh_tex_quad(sh, 1 << comp, tex, tpars);
     ident_t fn = sh_fresh(sh, "tex_rows");
     const int quads = n / 2 + 1;
 

@@ -1108,8 +1108,8 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     // Describe the textures for the reference frames and motion vector output.
     ident_t prev = bind_tex(sh, "prev", prev_tex);
     ident_t next = bind_tex(sh, "next", next_tex);
-    ident_t prev_quad = sh_tex_quad(sh, 0, prev, &prev_tex->params);
-    ident_t next_quad = sh_tex_quad(sh, 0, next, &next_tex->params);
+    ident_t prev_quad = sh_tex_quad(sh, 0x1, prev, &prev_tex->params);
+    ident_t next_quad = sh_tex_quad(sh, 0x1, next, &next_tex->params);
     ident_t out = bind_img(sh, "out_mv", out_tex);
     ident_t gain = get_target_gain(sh, gain_buf);
 
