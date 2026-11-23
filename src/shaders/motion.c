@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "shaders.h"
+#include "dispatch.h"
 #include "shaders/motion.h"
 #include "shaders/pyramid.h"
 
@@ -985,31 +986,62 @@ enum motion_prior {
     MOTION_PRIOR_INVERT, // the opposite direction, from the other frame
 };
 
-// All of the parameters for a motion search shader for one level of the image
-// pyramid.
-struct motion_search {
-    pl_tex ref;                         // reference frame luma
-    pl_tex tgt;                         // target frame luma
-    pl_tex parent; // flow field of the previous motion search image pyramid
-                   // level, or NULL at the coarsest level
-    pl_tex prior;  // flow field of the same image pyramid level to take the
-                   // temporal prior from, or NULL when there is none available
-    enum motion_prior prior_kind;
-    pl_buf gain;   // change in brightness from `ref` to `tgt` to compensate
-    pl_tex out_mv;                      // block granular flow field
-    const struct motion_geometry *geom; // compile time constants
-    pl_shader_obj *cand_lut;
-};
-
-// Dispatches the motion search shader for every block of `p->out_mv`.
+// Dispatches the motion search shader for every block of `out_tex`.
 //
 // Uses the sum of squared distances (SSD) to compute the most likely
 // motion vector that describes the motion of a block of pixels from one
 // frame to the next.
-static bool motion_search_pass(pl_dispatch dispatch,
-                               const struct motion_search *p)
+static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
+                               int d, int level)
 {
-    const struct motion_geometry *geom = p->geom;
+    pl_gpu gpu = pl_dispatch_gpu(dispatch);
+    const enum pl_motion_direction dir = 1 << d;
+    const struct motion_dir *md = &obj->dir[d];
+    const pl_tex_pyramid *field = &md->coarse;
+    pl_tex ref_tex = md->input.elem[level];
+    pl_tex tgt_tex = obj->dir[!d].input.elem[level];
+    pl_tex out_tex = obj->scratch.raw.elem[level];
+
+    // The top level has no vectors of a coarser level to start from,
+    // so it compares the blocks without their means: a change in
+    // brightness between the frames, as on a fade, otherwise outweighs
+    // the match of the content. Its vectors then measure that change,
+    // which the levels below compensate.
+    pl_tex flow = field->elem[level];
+    const bool top = flow == pl_pyramid_tip(*field);
+    const bool base = flow == pl_pyramid_base(*field);
+    const bool coarsest = top && !base;
+    pl_buf gain_buf = top ? NULL : md->gain;
+
+    // Use the parent motion search to seed this levels search, for
+    // all levels but the coarsest. The parent is the motion field
+    // after smoothing.
+    pl_tex parent_tex = top ? NULL : field->elem[level + 1];
+
+    // Seed the motion search using the prior at the corresponding
+    // level of the motion search pyramid.
+    enum motion_prior prior_kind = MOTION_PRIOR_SAME;
+    const pl_tex_pyramid *prior_field = field;
+    if (d == FWD && (obj->valid & PL_MOTION_BACKWARD)) {
+        prior_kind = MOTION_PRIOR_NEGATE;
+        prior_field = &obj->dir[BWD].coarse;
+    } else if (d == BWD && (obj->direction & PL_MOTION_FORWARD)) {
+        prior_kind = MOTION_PRIOR_INVERT;
+        prior_field = &obj->dir[FWD].coarse;
+    }
+
+    const bool use_prior = prior_kind != MOTION_PRIOR_SAME ||
+                           (obj->valid & dir);
+    pl_tex prior_tex = use_prior ? prior_field->elem[level] : NULL;
+
+    struct motion_geometry geometry;
+    if (!motion_plan(gpu, &obj->params, coarsest,
+                     motion_seeds_plan(parent_tex != NULL, prior_tex != NULL),
+                     base, top, out_tex->params.w, out_tex->params.h,
+                     &geometry))
+        return false;
+
+    const struct motion_geometry *geom = &geometry;
     const int bs      = geom->block_size;
     const int r       = geom->radius;
     const int bpgx    = geom->bpgx, bpgy = geom->bpgy;
@@ -1034,8 +1066,8 @@ static bool motion_search_pass(pl_dispatch dispatch,
     const int win_stride = shmem.win_stride;
     const int block_stride = shmem.block_stride;
 
-    const int tex_w = p->ref->params.w, tex_h = p->ref->params.h;
-    const int grid_w = p->out_mv->params.w, grid_h = p->out_mv->params.h;
+    const int tex_w = ref_tex->params.w, tex_h = ref_tex->params.h;
+    const int grid_w = out_tex->params.w, grid_h = out_tex->params.h;
 
     pl_shader sh = pass_begin(dispatch, threads, 1, shmem.size,
                               "exhaustive motion search (%dx%d blocks, radius "
@@ -1058,7 +1090,7 @@ static bool motion_search_pass(pl_dispatch dispatch,
     // index, so the reduction can minimize the rank to resolve ties
     // deterministically.
     ident_t cand = sh_lut(sh, sh_lut_params(
-        .object   = p->cand_lut,
+        .object   = &obj->cand_lut[coarsest],
         .var_type = PL_VAR_SINT,
         .lut_type = SH_LUT_UNIFORM,
         .method   = SH_LUT_NONE,
@@ -1074,40 +1106,40 @@ static bool motion_search_pass(pl_dispatch dispatch,
     }
 
     // Describe the textures for the reference frames and motion vector output.
-    ident_t ref = bind_tex(sh, "ref", p->ref);
-    ident_t tgt = bind_tex(sh, "tgt", p->tgt);
-    ident_t ref_quad = sh_tex_quad(sh, 0, ref, &p->ref->params);
-    ident_t tgt_quad = sh_tex_quad(sh, 0, tgt, &p->tgt->params);
-    ident_t out = bind_img(sh, "out_mv", p->out_mv);
-    ident_t gain = get_target_gain(sh, p->gain);
+    ident_t ref = bind_tex(sh, "ref", ref_tex);
+    ident_t tgt = bind_tex(sh, "tgt", tgt_tex);
+    ident_t ref_quad = sh_tex_quad(sh, 0, ref, &ref_tex->params);
+    ident_t tgt_quad = sh_tex_quad(sh, 0, tgt, &tgt_tex->params);
+    ident_t out = bind_img(sh, "out_mv", out_tex);
+    ident_t gain = get_target_gain(sh, gain_buf);
 
     // Bind the flow field of the previous motion search image pyramid level,
     // unless this is the coarsest (first) level of the motion search.
-    const bool has_parent = p->parent != NULL;
-    const int parent_w = has_parent ? p->parent->params.w : 0;
-    const int parent_h = has_parent ? p->parent->params.h : 0;
+    const bool has_parent = parent_tex != NULL;
+    const int parent_w = has_parent ? parent_tex->params.w : 0;
+    const int parent_h = has_parent ? parent_tex->params.h : 0;
     const int rank_parent = geom->seeds.rank[MOTION_SEED_PARENT];
     const int rank_x = geom->seeds.rank[MOTION_SEED_PARENT_X];
     const int rank_y = geom->seeds.rank[MOTION_SEED_PARENT_Y];
     ident_t parent = NULL_IDENT;
     if (has_parent) {
-        parent = bind_tex(sh, "parent", p->parent);
+        parent = bind_tex(sh, "parent", parent_tex);
     }
 
     // Bind the flow field of the same motion search image pyramid level that
     // provides the temporal prior. Don't bind anything when there is no usable
     // prior available (upon a cold start, after a reset, or a change in motion
     // estimation direction).
-    const bool has_prior = p->prior != NULL;
-    const int prior_w = has_prior ? p->prior->params.w : 0;
-    const int prior_h = has_prior ? p->prior->params.h : 0;
+    const bool has_prior = prior_tex != NULL;
+    const int prior_w = has_prior ? prior_tex->params.w : 0;
+    const int prior_h = has_prior ? prior_tex->params.h : 0;
     const int rank_prior = geom->seeds.rank[MOTION_SEED_PRIOR];
-    const bool prior_neg = p->prior_kind != MOTION_PRIOR_SAME;
-    const bool prior_inv = p->prior_kind == MOTION_PRIOR_INVERT;
+    const bool prior_neg = prior_kind != MOTION_PRIOR_SAME;
+    const bool prior_inv = prior_kind == MOTION_PRIOR_INVERT;
     const float fbs = bs;
     ident_t prior = NULL_IDENT;
     if (has_prior) {
-        prior = bind_tex(sh, "prior", p->prior);
+        prior = bind_tex(sh, "prior", prior_tex);
     }
 
     // Partial SSD of each seed candidate of each block of the tile, one per
@@ -2337,82 +2369,11 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             continue;
 
         pl_tex_pyramid *field = &obj->dir[d].coarse;
-
-        enum motion_prior prior_kind = MOTION_PRIOR_SAME;
-        pl_tex_pyramid *prior_field = field;
-        if (d == FWD && (obj->valid & PL_MOTION_BACKWARD)) {
-            prior_kind = MOTION_PRIOR_NEGATE;
-            prior_field = &obj->dir[BWD].coarse;
-        } else if (d == BWD && (input->direction & PL_MOTION_FORWARD)) {
-            prior_kind = MOTION_PRIOR_INVERT;
-            prior_field = &obj->dir[FWD].coarse;
-        }
-
-        const bool has_prior = prior_kind != MOTION_PRIOR_SAME ||
-                               (obj->valid & dir);
-
-        for (int i = levels - 1; i >= 0; i--) {
-            // The top level has no vectors of a coarser level to start from,
-            // so it compares the blocks without their means: a change in
-            // brightness between the frames, as on a fade, otherwise outweighs
-            // the match of the content. Its vectors then measure that change,
-            // which the levels below compensate.
-            const bool top = i == levels - 1;
-            pl_buf gain = top ? NULL : obj->dir[d].gain;
-            const bool coarsest = levels > 1 && top;
-
-            pl_tex raw = obj->scratch.raw.elem[i];
-            pl_tex out = field->elem[i];
-
-            // The frames in the order of the direction
-            pl_tex luma[2] = {
-                obj->dir[FWD].input.elem[i],
-                obj->dir[BWD].input.elem[i],
-            };
-
-            // Use the parent motion search to seed this levels search, for
-            // all levels but the coarsest. The parent is the motion field
-            // after smoothing.
-            pl_tex parent =
-                i < levels - 1 ? field->elem[i + 1] : NULL;
-
-            // Seed the motion search using the prior at the corresponding
-            // level of the motion search pyramid.
-            pl_tex prior = has_prior ? prior_field->elem[i] : NULL;
-
-            struct motion_geometry geom;
-            ok = motion_plan(gpu, params, coarsest,
-                             motion_seeds_plan(parent != NULL, prior != NULL),
-                             i == 0, top, out->params.w, out->params.h,
-                             &geom);
-            if (!ok)
-                break;
-
-            const struct motion_search search = {
-                .cand_lut = &obj->cand_lut[coarsest],
-                .ref    = luma[d],
-                .tgt    = luma[!d],
-                .parent = parent,
-                .prior  = prior,
-                .prior_kind = prior_kind,
-                .gain   = gain,
-                .out_mv = raw,
-                .geom   = &geom,
-            };
-
-            ok = motion_search_pass(input->dispatch, &search);
-            if (!ok)
-                break;
-
-            ok = motion_smooth_pass(input->dispatch, obj, d, i);
-            if (!ok)
-                break;
-
-            if (top && i > 0) {
+        for (int i = levels - 1; ok && i >= 0; i--) {
+            ok = motion_search_pass(input->dispatch, obj, d, i) &&
+                 motion_smooth_pass(input->dispatch, obj, d, i);
+            if (ok && i == levels - 1 && i > 0)
                 ok = motion_gain_pass(input->dispatch, obj, d);
-                if (!ok)
-                    break;
-            }
         }
 
         if (!ok)
