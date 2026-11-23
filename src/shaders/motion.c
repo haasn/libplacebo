@@ -1573,12 +1573,15 @@ error:
 // matches the sub-block and a border of one pixel around it. The vector of the
 // sub-block's own block is preferred by a margin of one code value (8 bit).
 static bool
-motion_refine_4x4_pass(pl_dispatch dispatch,
-                       const struct pl_motion_estimate_params *params,
-                       pl_tex ref, pl_tex tgt, pl_buf gain_buf, pl_tex blocks,
-                       pl_tex out)
+motion_refine_4x4_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
+                       int d, pl_tex blocks, pl_tex out)
 {
-    const int bs = params->block_size_coarse;
+    const struct motion_dir *md = &obj->dir[d];
+    pl_tex ref = pl_pyramid_base(md->input);
+    pl_tex tgt = pl_pyramid_base(obj->dir[!d].input);
+    pl_buf gain_buf = md->gain;
+
+    const int bs = obj->params.block_size_coarse;
     const int w = ref->params.w, h = ref->params.h;
     const int grid_w = blocks->params.w, grid_h = blocks->params.h;
     const int sub_w = out->params.w, sub_h = out->params.h;
@@ -1673,13 +1676,16 @@ motion_refine_4x4_pass(pl_dispatch dispatch,
 // of one of the 8 neighbouring blocks if it matches the 3x3 pixels around the
 // pixel better by more than `MOTION_REFINE_1X1_MARGIN`.
 static bool
-motion_refine_1x1_pass(pl_dispatch dispatch,
-                       const struct pl_motion_estimate_params *params,
-                       pl_tex ref, pl_tex tgt, pl_buf gain_buf, pl_tex flow,
-                       pl_tex out)
+motion_refine_1x1_pass(pl_dispatch dispatch, const struct sh_motion_obj *obj,
+                       int d, pl_tex flow, pl_tex out)
 {
+    const struct motion_dir *md = &obj->dir[d];
+    pl_tex ref = pl_pyramid_base(md->input);
+    pl_tex tgt = pl_pyramid_base(obj->dir[!d].input);
+    pl_buf gain_buf = md->gain;
+
     // Refines the output of the 4x4 pass, if there is one
-    const int bs = PL_MIN(params->block_size_coarse, 4);
+    const int bs = PL_MIN(obj->params.block_size_coarse, 4);
     const int w = out->params.w, h = out->params.h;
     const int grid_w = flow->params.w, grid_h = flow->params.h;
 
@@ -1796,25 +1802,22 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
     return true;
 }
 
-// Refines `blocks` into the levels of `fine`, from the coarsest.
-static bool refine_flow(pl_dispatch dispatch,
-                        const struct pl_motion_estimate_params *params,
-                        pl_tex_pyramid *fine, pl_tex ref, pl_tex tgt,
-                        pl_buf gain, pl_tex blocks)
+// Refines `obj->dir[d].coarse` into the levels of `fine`, from the coarsest.
+static bool refine_flow(pl_dispatch dispatch, const struct sh_motion_obj *obj,
+                        int d)
 {
-    pl_tex in = blocks;
-    int size = params->block_size_coarse;
+    const pl_tex_pyramid *fine = &obj->dir[d].fine;
+    pl_tex in = pl_pyramid_base(obj->dir[d].coarse);
+    int size = obj->params.block_size_coarse;
     for (int i = fine->num - 1; i >= 0; i--) {
         size = refine_size(size);
         bool ok;
         switch (size) {
         case 4:
-            ok = motion_refine_4x4_pass(dispatch, params, ref, tgt, gain,
-                                        in, fine->elem[i]);
+            ok = motion_refine_4x4_pass(dispatch, obj, d, in, fine->elem[i]);
             break;
         case 1:
-            ok = motion_refine_1x1_pass(dispatch, params, ref, tgt, gain,
-                                        in, fine->elem[i]);
+            ok = motion_refine_1x1_pass(dispatch, obj, d, in, fine->elem[i]);
             break;
         }
         if (!ok)
@@ -2368,7 +2371,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (!(input->direction & dir))
             continue;
 
-        pl_tex_pyramid *field = &obj->dir[d].coarse;
         for (int i = levels - 1; ok && i >= 0; i--) {
             ok = motion_search_pass(input->dispatch, obj, d, i) &&
                  motion_smooth_pass(input->dispatch, obj, d, i);
@@ -2380,14 +2382,8 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             break;
 
         if (obj->dir[d].fine.num) {
-            pl_tex luma[2] = {
-                obj->dir[FWD].input.elem[0],
-                obj->dir[BWD].input.elem[0],
-            };
             // The gain is that of the levels below the top one, if any
-            ok = refine_flow(input->dispatch, params, &obj->dir[d].fine,
-                             luma[d], luma[!d], obj->dir[d].gain,
-                             field->elem[0]);
+            ok = refine_flow(input->dispatch, obj, d);
             if (!ok)
                 break;
         }
