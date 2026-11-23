@@ -20,7 +20,6 @@
 #include <string.h>
 
 #include "shaders.h"
-#include "dispatch.h"
 #include "shaders/motion.h"
 #include "shaders/pyramid.h"
 
@@ -152,7 +151,6 @@ PL_PRINTF(5, 6)
 static pl_shader pass_begin(pl_dispatch dispatch, int bw, int bh, size_t shmem,
                             const char *fmt, ...)
 {
-    pl_gpu gpu = pl_dispatch_gpu(dispatch);
     pl_shader sh = pl_dispatch_begin(dispatch);
     sh->output = PL_SHADER_SIG_NONE;
 
@@ -163,8 +161,8 @@ static pl_shader pass_begin(pl_dispatch dispatch, int bw, int bh, size_t shmem,
 
     if (!sh_try_compute(sh, bw, bh, false, shmem)) {
         pl_assert(sh->info->steps.num == 1);
-        PL_ERR(gpu, "pl_motion_estimate: cannot run %s, it needs %dx%d threads "
-                    "and %zu bytes of shared memory per work group!",
+        PL_ERR(sh, "pl_motion_estimate: cannot run %s, it needs %dx%d threads "
+                   "and %zu bytes of shared memory per work group!",
                sh->info->steps.elem[0], bw, bh, shmem);
         pl_dispatch_abort(dispatch, &sh);
         return NULL;
@@ -1016,7 +1014,6 @@ struct motion_search {
 static bool motion_search_pass(pl_dispatch dispatch,
                                const struct motion_search *p)
 {
-    pl_gpu gpu = pl_dispatch_gpu(dispatch);
     const struct motion_geometry *geom = p->geom;
     const int bs      = geom->block_size;
     const int r       = geom->radius;
@@ -1056,7 +1053,7 @@ static bool motion_search_pass(pl_dispatch dispatch,
     const int units = bs * bs / 4; // fetches per block
     const int parts = PL_MIN(tpb, units); // threads scoring a block's seeds
 
-    PL_DEBUG(gpu, "pl_motion_estimate: searching %dx%d -> %dx%d blocks: block "
+    PL_DEBUG(sh, "pl_motion_estimate: searching %dx%d -> %dx%d blocks: block "
              "size %d, radius %d, %d candidates, %dx%d block tile, %d threads, "
              "%zu bytes of shared memory",
              tex_w, tex_h, grid_w, grid_h, bs, r, ncand, bpgx, bpgy, threads,
@@ -1077,7 +1074,7 @@ static bool motion_search_pass(pl_dispatch dispatch,
     ));
 
     if (!cand) {
-        PL_ERR(gpu, "pl_motion_estimate: failed uploading candidate LUT!");
+        PL_ERR(sh, "pl_motion_estimate: failed uploading candidate LUT!");
         goto error;
     }
 
