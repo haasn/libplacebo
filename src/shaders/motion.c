@@ -888,10 +888,15 @@ static ident_t get_target_gain(pl_shader sh, pl_buf gain_buf)
 // frame are skipped, and the others are weighted by how well their textures
 // match once their means are removed.
 static bool motion_gain_pass(pl_dispatch dispatch,
-                             const struct pl_motion_estimate_params *params,
-                             pl_tex ref, pl_tex tgt, pl_tex flow, pl_buf gain)
+                             const struct sh_motion_obj *obj, int d)
 {
-    const int bs = params->block_size_coarse;
+    const struct motion_dir *md = &obj->dir[d];
+    pl_tex ref = pl_pyramid_tip(md->input);
+    pl_tex tgt = pl_pyramid_tip(obj->dir[!d].input);
+    pl_tex flow = pl_pyramid_tip(md->coarse);
+    pl_buf gain = md->gain;
+
+    const int bs = obj->params.block_size_coarse;
     const int tex_w = ref->params.w, tex_h = ref->params.h;
     const int grid_w = flow->params.w, grid_h = flow->params.h;
     const int threads = 64;
@@ -1424,11 +1429,17 @@ error:
 // Replace every block's motion vector with one derived from the surrounding 3x3
 // neighbourhood of blocks, to suppress vectors that the search got wrong.
 static bool motion_smooth_pass(pl_dispatch dispatch,
-                               const struct pl_motion_estimate_params *params,
-                               pl_tex ref, pl_tex tgt, pl_buf gain_buf,
-                               pl_tex in, pl_tex out)
+                               const struct sh_motion_obj *obj, int d,
+                               int level)
 {
-    const int bs = params->block_size_coarse;
+    const struct motion_dir *md = &obj->dir[d];
+    pl_tex ref = md->input.elem[level];
+    pl_tex tgt = obj->dir[!d].input.elem[level];
+    pl_tex in = obj->scratch.raw.elem[level];
+    pl_tex out = md->coarse.elem[level];
+    pl_buf gain_buf = out == pl_pyramid_tip(md->coarse) ? NULL : md->gain;
+
+    const int bs = obj->params.block_size_coarse;
     const int grid_w = out->params.w, grid_h = out->params.h;
     const int tex_w = ref->params.w, tex_h = ref->params.h;
 
@@ -1799,11 +1810,17 @@ static bool refine_flow(pl_dispatch dispatch,
 // A mismatch means less the more texture the window has, so it is taken
 // relative to that.
 static bool motion_quality_pass(pl_dispatch dispatch,
-                                const struct pl_motion_estimate_params *params,
-                                pl_tex ref, pl_tex tgt, pl_buf gain_buf,
-                                pl_tex flow, pl_tex out)
+                                const struct sh_motion_obj *obj, int d)
 {
-    const int bs = params->block_size_fine;
+    const struct motion_dir *md = &obj->dir[d];
+    pl_tex ref = pl_pyramid_base(md->input);
+    pl_tex tgt = pl_pyramid_base(obj->dir[!d].input);
+    pl_tex flow = md->fine.num ? pl_pyramid_base(md->fine)
+                               : pl_pyramid_base(md->coarse);
+    pl_tex out = md->quality;
+    pl_buf gain_buf = md->gain;
+
+    const int bs = obj->params.block_size_fine;
     const int w = ref->params.w, h = ref->params.h;
     const int out_w = out->params.w, out_h = out->params.h;
     const int sub = MOTION_QUALITY_SUB, win = sub + 2;
@@ -1951,8 +1968,10 @@ static bool global_buf_create(pl_gpu gpu, pl_buf *buf, size_t size,
 // NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
 static bool motion_global_hist_pass(pl_dispatch dispatch,
-                                    pl_tex flow, pl_buf hist)
+                                    const struct sh_motion_obj *obj, int d)
 {
+    pl_tex flow = pl_pyramid_base(obj->dir[d].coarse);
+    pl_buf hist = obj->scratch.hist;
     const int grid_w = flow->params.w, grid_h = flow->params.h;
     const int dim = MOTION_GLOBAL_WORKGROUP_DIM;
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
@@ -2008,9 +2027,12 @@ static bool motion_global_hist_pass(pl_dispatch dispatch,
 // TODO: estimate a confidence. It is always 1 for now. One approach would be
 // using the proportion of bins in the histogram that are close to the median.
 static bool motion_global_median_pass(pl_dispatch dispatch,
-                                      pl_buf hist, int num, pl_buf out,
-                                      enum pl_motion_direction dir)
+                                      const struct sh_motion_obj *obj, int d)
 {
+    const enum pl_motion_direction dir = 1 << d;
+    pl_tex flow = pl_pyramid_base(obj->dir[d].coarse);
+    pl_buf hist = obj->scratch.hist, out = obj->dir[d].global_flow;
+    const int num = flow->params.w * flow->params.h;
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
 
     pl_shader sh = pass_begin(dispatch, MOTION_GLOBAL_BINS, 1, shmem,
@@ -2066,41 +2088,24 @@ static bool motion_global_median_pass(pl_dispatch dispatch,
     ));
 }
 
-// Estimates the global motion of `dir` from its flow field.
+// Estimates the global motion of `d` from its flow field.
 static bool estimate_global(pl_dispatch dispatch,
-                            struct sh_motion_obj *obj,
-                            enum pl_motion_direction dir)
+                            const struct sh_motion_obj *obj, int d)
 {
-    const int d = dir_index(dir);
-    pl_tex flow = obj->dir[d].coarse.elem[0];
-    pl_buf global = obj->dir[d].global_flow;
-
-    return motion_global_hist_pass(dispatch, flow, obj->scratch.hist) &&
-           motion_global_median_pass(dispatch, obj->scratch.hist,
-                                     flow->params.w * flow->params.h, global,
-                                     dir);
+    return motion_global_hist_pass(dispatch, obj, d) &&
+           motion_global_median_pass(dispatch, obj, d);
 }
 
 // Estimates the quality of the vectors of every direction in
 // `obj->valid`, from the luma of the frames they were estimated between.
 static bool estimate_quality(pl_dispatch dispatch,
-                             struct sh_motion_obj *obj, pl_tex luma_a,
-                             pl_tex luma_b)
+                             const struct sh_motion_obj *obj)
 {
     for (int d = 0; d < NUM_DIRS; d++) {
         const enum pl_motion_direction dir = 1 << d;
         if (!(obj->valid & dir))
             continue;
-
-        const bool fwd = d == FWD;
-        const struct motion_dir *md = &obj->dir[d];
-        bool ok = motion_quality_pass(dispatch, &obj->params,
-                                      fwd ? luma_a : luma_b,
-                                      fwd ? luma_b : luma_a, md->gain,
-                                      md->fine.num ? md->fine.elem[0]
-                                                   : md->coarse.elem[0],
-                                      md->quality);
-        if (!ok)
+        if (!motion_quality_pass(dispatch, obj, d))
             return false;
     }
 
@@ -2410,14 +2415,12 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             if (!ok)
                 break;
 
-            ok = motion_smooth_pass(input->dispatch, params, luma[d],
-                                    luma[!d], gain, raw, out);
+            ok = motion_smooth_pass(input->dispatch, obj, d, i);
             if (!ok)
                 break;
 
             if (top && i > 0) {
-                ok = motion_gain_pass(input->dispatch, params, luma[d],
-                                      luma[!d], out, obj->dir[d].gain);
+                ok = motion_gain_pass(input->dispatch, obj, d);
                 if (!ok)
                     break;
             }
@@ -2446,7 +2449,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         // forward direction results.
 
         if (input->features & PL_MOTION_GLOBAL) {
-            ok = estimate_global(input->dispatch, obj, dir);
+            ok = estimate_global(input->dispatch, obj, d);
             if (!ok)
                 break;
         }
@@ -2459,9 +2462,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     obj->valid = input->direction;
 
     if (input->features & PL_MOTION_QUALITY) {
-        if (!estimate_quality(input->dispatch, obj,
-                              obj->dir[FWD].input.elem[0],
-                              obj->dir[BWD].input.elem[0]))
+        if (!estimate_quality(input->dispatch, obj))
             goto error;
     }
 
