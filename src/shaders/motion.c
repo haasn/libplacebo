@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "shaders.h"
+#include "dispatch.h"
 #include "shaders/motion.h"
 #include "shaders/pyramid.h"
 
@@ -147,10 +148,11 @@ static void bind_buf(pl_shader sh, const char *name, pl_buf buf,
 // Begins a compute shader with work groups of `bw` x `bh` threads and `shmem`
 // bytes of shared memory, described by `fmt`. Returns NULL and aborts the
 // shader if the GPU cannot run it.
-PL_PRINTF(6, 7)
-static pl_shader pass_begin(pl_gpu gpu, pl_dispatch dispatch, int bw, int bh,
-                            size_t shmem, const char *fmt, ...)
+PL_PRINTF(5, 6)
+static pl_shader pass_begin(pl_dispatch dispatch, int bw, int bh, size_t shmem,
+                            const char *fmt, ...)
 {
+    pl_gpu gpu = pl_dispatch_gpu(dispatch);
     pl_shader sh = pl_dispatch_begin(dispatch);
     sh->output = PL_SHADER_SIG_NONE;
 
@@ -887,7 +889,7 @@ static ident_t get_target_gain(pl_shader sh, pl_buf gain_buf)
 // a change in brightness. For the same reason, blocks whose vectors leave the
 // frame are skipped, and the others are weighted by how well their textures
 // match once their means are removed.
-static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch,
+static bool motion_gain_pass(pl_dispatch dispatch,
                              const struct pl_motion_estimate_params *params,
                              pl_tex ref, pl_tex tgt, pl_tex flow, pl_buf gain)
 {
@@ -901,7 +903,7 @@ static bool motion_gain_pass(pl_gpu gpu, pl_dispatch dispatch,
     // mean squared error of 4 code values (8 bit) per pixel.
     const float flat = 4.0f * bs * bs / (255.0f * 255.0f);
 
-    pl_shader sh = pass_begin(gpu, dispatch, threads, 1,
+    pl_shader sh = pass_begin(dispatch, threads, 1,
                               threads * sizeof(float[2]),
                               "motion brightness gain (%dx%d blocks)", grid_w,
                               grid_h);
@@ -1011,9 +1013,10 @@ struct motion_search {
 // Uses the sum of squared distances (SSD) to compute the most likely
 // motion vector that describes the motion of a block of pixels from one
 // frame to the next.
-static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
+static bool motion_search_pass(pl_dispatch dispatch,
                                const struct motion_search *p)
 {
+    pl_gpu gpu = pl_dispatch_gpu(dispatch);
     const struct motion_geometry *geom = p->geom;
     const int bs      = geom->block_size;
     const int r       = geom->radius;
@@ -1042,7 +1045,7 @@ static bool motion_search_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int tex_w = p->ref->params.w, tex_h = p->ref->params.h;
     const int grid_w = p->out_mv->params.w, grid_h = p->out_mv->params.h;
 
-    pl_shader sh = pass_begin(gpu, dispatch, threads, 1, shmem.size,
+    pl_shader sh = pass_begin(dispatch, threads, 1, shmem.size,
                               "exhaustive motion search (%dx%d blocks, radius "
                               "%d, %d seed candidates)", bs, bs, r, nseed);
     if (!sh)
@@ -1423,7 +1426,7 @@ error:
 
 // Replace every block's motion vector with one derived from the surrounding 3x3
 // neighbourhood of blocks, to suppress vectors that the search got wrong.
-static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch,
+static bool motion_smooth_pass(pl_dispatch dispatch,
                                const struct pl_motion_estimate_params *params,
                                pl_tex ref, pl_tex tgt, pl_buf gain_buf,
                                pl_tex in, pl_tex out)
@@ -1440,7 +1443,7 @@ static bool motion_smooth_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int bw = gx * bs, bh = gy;
     const size_t shmem = bw * bh * 8 * sizeof(float);
 
-    pl_shader sh = pass_begin(gpu, dispatch, bw, bh, shmem,
+    pl_shader sh = pass_begin(dispatch, bw, bh, shmem,
                               "motion vector smoothing (3x3, %dx%d blocks)",
                               grid_w, grid_h);
     if (!sh)
@@ -1540,7 +1543,7 @@ error:
 // matches the sub-block and a border of one pixel around it. The vector of the
 // sub-block's own block is preferred by a margin of one code value (8 bit).
 static bool
-motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
+motion_refine_4x4_pass(pl_dispatch dispatch,
                        const struct pl_motion_estimate_params *params,
                        pl_tex ref, pl_tex tgt, pl_buf gain_buf, pl_tex blocks,
                        pl_tex out)
@@ -1552,7 +1555,7 @@ motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
     const int sub = 4, win = sub + 2;
     const int ncand = 9 + 4 * MOTION_REFINE_4X4_RINGS;
 
-    pl_shader sh = pass_begin(gpu, dispatch, 8, 8, 0,
+    pl_shader sh = pass_begin(dispatch, 8, 8, 0,
                               "motion vector refinement (4x4, %dx%d)", sub_w,
                               sub_h);
     if (!sh)
@@ -1640,7 +1643,7 @@ motion_refine_4x4_pass(pl_gpu gpu, pl_dispatch dispatch,
 // of one of the 8 neighbouring blocks if it matches the 3x3 pixels around the
 // pixel better by more than `MOTION_REFINE_1X1_MARGIN`.
 static bool
-motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch,
+motion_refine_1x1_pass(pl_dispatch dispatch,
                        const struct pl_motion_estimate_params *params,
                        pl_tex ref, pl_tex tgt, pl_buf gain_buf, pl_tex flow,
                        pl_tex out)
@@ -1653,7 +1656,7 @@ motion_refine_1x1_pass(pl_gpu gpu, pl_dispatch dispatch,
     // SSD over the 9 pixels of the window, in units of the luma textures
     const float margin = MOTION_REFINE_1X1_MARGIN * 9.0f / (255.0f * 255.0f);
 
-    pl_shader sh = pass_begin(gpu, dispatch, 16, 16, 0,
+    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
                               "motion vector refinement (1x1, %dx%d)", w, h);
     if (!sh)
         return false;
@@ -1764,7 +1767,7 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
 }
 
 // Refines `blocks` into the levels of `fine`, from the coarsest.
-static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch,
+static bool refine_flow(pl_dispatch dispatch,
                         const struct pl_motion_estimate_params *params,
                         pl_tex_pyramid *fine, pl_tex ref, pl_tex tgt,
                         pl_buf gain, pl_tex blocks)
@@ -1776,11 +1779,11 @@ static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch,
         bool ok;
         switch (size) {
         case 4:
-            ok = motion_refine_4x4_pass(gpu, dispatch, params, ref, tgt, gain,
+            ok = motion_refine_4x4_pass(dispatch, params, ref, tgt, gain,
                                         in, fine->elem[i]);
             break;
         case 1:
-            ok = motion_refine_1x1_pass(gpu, dispatch, params, ref, tgt, gain,
+            ok = motion_refine_1x1_pass(dispatch, params, ref, tgt, gain,
                                         in, fine->elem[i]);
             break;
         }
@@ -1798,7 +1801,7 @@ static bool refine_flow(pl_gpu gpu, pl_dispatch dispatch,
 //
 // A mismatch means less the more texture the window has, so it is taken
 // relative to that.
-static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch,
+static bool motion_quality_pass(pl_dispatch dispatch,
                                 const struct pl_motion_estimate_params *params,
                                 pl_tex ref, pl_tex tgt, pl_buf gain_buf,
                                 pl_tex flow, pl_tex out)
@@ -1811,7 +1814,7 @@ static bool motion_quality_pass(pl_gpu gpu, pl_dispatch dispatch,
     const float noise = 9.0f * PL_SQUARE(MOTION_QUALITY_NOISE / 255.0f);
     const float outlier = 1.0f / PL_SQUARE(MOTION_QUALITY_OUTLIER);
 
-    pl_shader sh = pass_begin(gpu, dispatch, 16, 16, 0,
+    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
                               "motion vector quality (%dx%d)", out_w, out_h);
     if (!sh)
         return false;
@@ -1950,14 +1953,14 @@ static bool global_buf_create(pl_gpu gpu, pl_buf *buf, size_t size,
 // Create a histogram of motion from the blocks of `flow` into `hist`.
 // NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
-static bool motion_global_hist_pass(pl_gpu gpu, pl_dispatch dispatch,
+static bool motion_global_hist_pass(pl_dispatch dispatch,
                                     pl_tex flow, pl_buf hist)
 {
     const int grid_w = flow->params.w, grid_h = flow->params.h;
     const int dim = MOTION_GLOBAL_WORKGROUP_DIM;
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
 
-    pl_shader sh = pass_begin(gpu, dispatch, dim, dim, shmem,
+    pl_shader sh = pass_begin(dispatch, dim, dim, shmem,
                               "global motion histogram (%dx%d blocks)", grid_w,
                               grid_h);
     if (!sh)
@@ -2007,13 +2010,13 @@ static bool motion_global_hist_pass(pl_gpu gpu, pl_dispatch dispatch,
 // the shader that builds the histogram uses many blocks.
 // TODO: estimate a confidence. It is always 1 for now. One approach would be
 // using the proportion of bins in the histogram that are close to the median.
-static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
+static bool motion_global_median_pass(pl_dispatch dispatch,
                                       pl_buf hist, int num, pl_buf out,
                                       enum pl_motion_direction dir)
 {
     const size_t shmem = 2 * MOTION_GLOBAL_BINS * sizeof(uint32_t);
 
-    pl_shader sh = pass_begin(gpu, dispatch, MOTION_GLOBAL_BINS, 1, shmem,
+    pl_shader sh = pass_begin(dispatch, MOTION_GLOBAL_BINS, 1, shmem,
                               "global motion median (%d blocks)", num);
     if (!sh)
         return false;
@@ -2067,7 +2070,7 @@ static bool motion_global_median_pass(pl_gpu gpu, pl_dispatch dispatch,
 }
 
 // Estimates the global motion of `dir` from its flow field.
-static bool estimate_global(pl_gpu gpu, pl_dispatch dispatch,
+static bool estimate_global(pl_dispatch dispatch,
                             struct sh_motion_obj *obj,
                             enum pl_motion_direction dir)
 {
@@ -2075,15 +2078,15 @@ static bool estimate_global(pl_gpu gpu, pl_dispatch dispatch,
     pl_tex flow = obj->dir[d].coarse.elem[0];
     pl_buf global = obj->dir[d].global_flow;
 
-    return motion_global_hist_pass(gpu, dispatch, flow, obj->scratch.hist) &&
-           motion_global_median_pass(gpu, dispatch, obj->scratch.hist,
+    return motion_global_hist_pass(dispatch, flow, obj->scratch.hist) &&
+           motion_global_median_pass(dispatch, obj->scratch.hist,
                                      flow->params.w * flow->params.h, global,
                                      dir);
 }
 
 // Estimates the quality of the vectors of every direction in
 // `obj->valid`, from the luma of the frames they were estimated between.
-static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
+static bool estimate_quality(pl_dispatch dispatch,
                              struct sh_motion_obj *obj, pl_tex luma_a,
                              pl_tex luma_b)
 {
@@ -2094,7 +2097,7 @@ static bool estimate_quality(pl_gpu gpu, pl_dispatch dispatch,
 
         const bool fwd = d == FWD;
         const struct motion_dir *md = &obj->dir[d];
-        bool ok = motion_quality_pass(gpu, dispatch, &obj->params,
+        bool ok = motion_quality_pass(dispatch, &obj->params,
                                       fwd ? luma_a : luma_b,
                                       fwd ? luma_b : luma_a, md->gain,
                                       md->fine.num ? md->fine.elem[0]
@@ -2406,17 +2409,17 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 .geom   = &geom,
             };
 
-            ok = motion_search_pass(gpu, input->dispatch, &search);
+            ok = motion_search_pass(input->dispatch, &search);
             if (!ok)
                 break;
 
-            ok = motion_smooth_pass(gpu, input->dispatch, params, luma[d],
+            ok = motion_smooth_pass(input->dispatch, params, luma[d],
                                     luma[!d], gain, raw, out);
             if (!ok)
                 break;
 
             if (top && i > 0) {
-                ok = motion_gain_pass(gpu, input->dispatch, params, luma[d],
+                ok = motion_gain_pass(input->dispatch, params, luma[d],
                                       luma[!d], out, obj->dir[d].gain);
                 if (!ok)
                     break;
@@ -2432,7 +2435,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 obj->dir[BWD].input.elem[0],
             };
             // The gain is that of the levels below the top one, if any
-            ok = refine_flow(gpu, input->dispatch, params, &obj->dir[d].fine,
+            ok = refine_flow(input->dispatch, params, &obj->dir[d].fine,
                              luma[d], luma[!d], obj->dir[d].gain,
                              field->elem[0]);
             if (!ok)
@@ -2446,7 +2449,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         // forward direction results.
 
         if (input->features & PL_MOTION_GLOBAL) {
-            ok = estimate_global(gpu, input->dispatch, obj, dir);
+            ok = estimate_global(input->dispatch, obj, dir);
             if (!ok)
                 break;
         }
@@ -2459,7 +2462,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     obj->valid = input->direction;
 
     if (input->features & PL_MOTION_QUALITY) {
-        if (!estimate_quality(gpu, input->dispatch, obj,
+        if (!estimate_quality(input->dispatch, obj,
                               obj->dir[FWD].input.elem[0],
                               obj->dir[BWD].input.elem[0]))
             goto error;
