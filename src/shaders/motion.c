@@ -93,6 +93,13 @@ struct sh_motion_obj {
     bool skip_input;
 };
 
+// The final flow field of `dir`, at the finest resolution it was refined to.
+static pl_tex final_flow(const struct motion_dir *dir)
+{
+    return dir->fine.num ? pl_pyramid_base(dir->fine)
+                         : pl_pyramid_base(dir->coarse);
+}
+
 // Binds `tex` for use with `texelFetch`.
 static ident_t bind_tex(pl_shader sh, const char *name, pl_tex tex)
 {
@@ -586,8 +593,7 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
     if (!obj || d < 0 || !(obj->valid & dir))
         return NULL;
 
-    const pl_tex_pyramid *fine = &obj->dir[d].fine;
-    return fine->num ? fine->elem[0] : obj->dir[d].coarse.elem[0];
+    return final_flow(&obj->dir[d]);
 }
 
 pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
@@ -1843,8 +1849,7 @@ static bool motion_quality_pass(pl_dispatch dispatch,
     const struct motion_dir *dir = &obj->dir[d];
     pl_tex prev_tex = pl_pyramid_base(dir->input);
     pl_tex next_tex = pl_pyramid_base(obj->dir[!d].input);
-    pl_tex flow_tex = dir->fine.num ? pl_pyramid_base(dir->fine)
-                               : pl_pyramid_base(dir->coarse);
+    pl_tex flow_tex = final_flow(dir);
     pl_tex out_tex = dir->quality;
     pl_buf gain_buf = dir->gain;
 
