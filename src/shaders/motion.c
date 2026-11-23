@@ -73,6 +73,7 @@ struct sh_motion_obj {
         pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
         pl_buf gain;           // brightness gain (float), or NULL
+        pl_tex occlusion;      // occlusion map, or NULL
         pl_tex quality;        // flow quality estimate, or NULL
         pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
@@ -277,6 +278,10 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // Distance, in pixels, of a vector from the median of the 3x3 vectors around
 // it at which its quality falls to 1/e.
 #define MOTION_QUALITY_OUTLIER 4.0f
+
+// Tolerance margins for the occlusion pass.
+#define MOTION_OCCLUSION_ALPHA 16.0f
+#define MOTION_OCCLUSION_BETA  0.03f
 
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
@@ -542,6 +547,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].coarse);
         pl_pyramid_destroy(gpu, &obj->dir[d].fine);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
+        pl_tex_destroy(gpu, &obj->dir[d].occlusion);
         pl_tex_destroy(gpu, &obj->dir[d].quality);
         pl_buf_destroy(gpu, &obj->dir[d].global_flow);
     }
@@ -606,6 +612,18 @@ pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
         return NULL;
 
     return obj->dir[d].quality;
+}
+
+pl_tex pl_motion_get_occlusion(pl_shader_obj state, enum pl_motion_direction dir)
+{
+    struct sh_motion_obj *obj = SH_OBJ_LOOKUP(state, PL_SHADER_OBJ_MOTION,
+                                              struct sh_motion_obj);
+    const int d = dir_index(dir);
+    if (!obj || d < 0 || !(obj->features & PL_MOTION_OCCLUSION) ||
+        !(obj->valid & dir))
+        return NULL;
+
+    return obj->dir[d].occlusion;
 }
 
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
@@ -758,6 +776,12 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
     if (input->direction & ~(unsigned) PL_MOTION_BOTH || !input->direction) {
         PL_ERR(gpu, "pl_motion_estimate: invalid direction %d!",
                (int) input->direction);
+        return false;
+    }
+
+    if ((input->features & PL_MOTION_OCCLUSION) && input->direction != PL_MOTION_BOTH) {
+        PL_ERR(gpu, "pl_motion_estimate: PL_MOTION_OCCLUSION requires "
+               "PL_MOTION_BOTH!");
         return false;
     }
 
@@ -1837,6 +1861,77 @@ static bool refine_flow(pl_dispatch dispatch, const struct sh_motion_obj *obj,
     return true;
 }
 
+// Generates the occlusion map from both directions of the flow map
+static bool motion_occlusion_pass(pl_dispatch dispatch,
+                                  const struct sh_motion_obj *obj, enum dir d)
+{
+    const struct motion_dir *dir = &obj->dir[d], *dir_inv = &obj->dir[!d];
+    pl_tex prev_tex = pl_pyramid_base(dir->input);
+    pl_tex flow_tex = final_flow(dir), flow_inv_tex = final_flow(dir_inv);
+    pl_tex out_tex  = dir->occlusion;
+
+    const int bs = obj->params.block_size_fine;
+    const int w = prev_tex->params.w, h = prev_tex->params.h;
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
+    const float noise = 9.0f / (255.0f * 255.0f);
+
+    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
+                              "motion occlusion (%dx%d)", grid_w, grid_h);
+    if (!sh)
+        return false;
+
+    ident_t flow = bind_tex(sh, "flow", flow_tex);
+    ident_t flow_inv = bind_tex(sh, "flow_inv", flow_inv_tex);
+    ident_t quad_inv = sh_tex_quad(sh, 0x3, flow_inv, &flow_inv_tex->params);
+    ident_t out = bind_img(sh, "occlusion_out", out_tex);
+    ident_t prev = bind_tex(sh, "prev", prev_tex);
+    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x1, prev, &prev_tex->params);
+    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, prev, &prev_tex->params);
+
+    // clang-format off
+#pragma GLSL /* motion_occlusion_pass */                                        \
+    ivec2 size = ivec2(${const int: w}, ${const int: h});                       \
+    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
+    ivec2 blk  = ivec2(gl_GlobalInvocationID.xy);                               \
+    if (all(lessThan(blk, grid))) {                                             \
+        ivec2 pos = min(blk * ${const int: bs} + ${const int: bs / 2}, size - 1);\
+        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
+                                                                                \
+        /* Take whichever reverse vector comes closest */                       \
+        ivec2 pos_b = blk + ivec2(floor(mv * ${const float: 1.0f / bs}));       \
+        mat2x4 inv = $quad_inv(pos_b);                                          \
+        vec4 bx = inv[0] + vec4(mv.x), by = inv[1] + vec4(mv.y);                \
+        vec4 d2 = bx * bx + by * by;                                            \
+        vec2 back = vec2(bx[0], by[0]);                                         \
+        for (int j = 1; j < 4; j++) {                                           \
+            if (d2[j] < dot(back, back))                                        \
+                back = vec2(bx[j], by[j]);                                      \
+        }                                                                       \
+                                                                                \
+        const float alpha_inv = ${const float: 1.0f / MOTION_OCCLUSION_ALPHA};  \
+        float occl = 1.0 - exp(-length(back) * alpha_inv);                      \
+        if (occl > 0.0) {                                                       \
+            /* False positive check */                                          \
+            float px[9];                                                        \
+            $load_block(pos - 1, px);                                           \
+            float texture = ${const float: noise};                              \
+            for (int j = 0; j < 9; j++)                                         \
+                texture += (px[j] - px[4]) * (px[j] - px[4]);                   \
+            float ssd = $block_ssd(px, vec2(pos - 1) + back, 1.0, 1e30);        \
+            const float beta_inv = ${const float: 1.0f / MOTION_OCCLUSION_BETA};\
+            occl *= 1.0 - exp(-ssd / texture * beta_inv);                       \
+        }                                                                       \
+        imageStore($out, blk, vec4(occl, 0.0, 0.0, 0.0));                       \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = grid_w,
+        .height = grid_h,
+    ));
+}
+
 // Estimates the quality of `flow_tex`. The quality of a vector scales with the
 // consistency between the 3x3 window around its pixel and where it leads,
 // and with the consistency of the vector and its neighbors.
@@ -2130,6 +2225,15 @@ static bool estimate_global(pl_dispatch dispatch,
            motion_global_median_pass(dispatch, obj, d);
 }
 
+// Estimates the occlusion maps of both directions, from each other's fields.
+static bool estimate_occlusion(pl_dispatch dispatch,
+                               const struct sh_motion_obj *obj)
+{
+    pl_assert(obj->valid == PL_MOTION_BOTH);
+    return motion_occlusion_pass(dispatch, obj, FWD) &&
+           motion_occlusion_pass(dispatch, obj, BWD);
+}
+
 // Estimates the quality of the vectors of every direction in
 // `obj->valid`, from the luma of the frames they were estimated between.
 static bool estimate_quality(pl_dispatch dispatch,
@@ -2245,6 +2349,33 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
         if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].input, levels,
                                  input_params))
             goto error;
+    }
+
+    if (features & PL_MOTION_OCCLUSION) {
+        pl_fmt ofmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
+                                  PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR);
+        if (!ofmt) {
+            PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
+                        "single component format available!");
+            goto error;
+        }
+
+        for (enum dir d = 0; d < NUM_DIRS; d++) {
+            pl_tex flow = final_flow(&obj->dir[d]);
+            const int ow = flow->params.w, oh = flow->params.h;
+            bool ok = pl_tex_recreate(gpu, &obj->dir[d].occlusion, pl_tex_params(
+                .w          = ow,
+                .h          = oh,
+                .format     = ofmt,
+                .sampleable = true,
+                .storable   = true,
+            ));
+            if (!ok) {
+                PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d "
+                            "occlusion map!", ow, oh);
+                goto error;
+            }
+        }
     }
 
     if (features & PL_MOTION_QUALITY) {
@@ -2412,6 +2543,11 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
 
     obj->valid = input->direction;
+
+    if (input->features & PL_MOTION_OCCLUSION) {
+        if (!estimate_occlusion(input->dispatch, obj))
+            goto error;
+    }
 
     if (input->features & PL_MOTION_QUALITY) {
         if (!estimate_quality(input->dispatch, obj))
@@ -2673,6 +2809,10 @@ bool pl_shader_frame_interp(pl_shader sh,
         me_dir = PL_MOTION_FORWARD;
         me_features = PL_MOTION_QUALITY;
         break;
+    case PL_FRAME_INTERP_OCCLUSION:
+        me_dir = PL_MOTION_BOTH;
+        me_features = PL_MOTION_OCCLUSION;
+        break;
     case PL_FRAME_INTERP_ALGO_COUNT:
     default:
         PL_ERR(sh, "pl_shader_frame_interp: invalid algorithm %d!",
@@ -2706,6 +2846,9 @@ bool pl_shader_frame_interp(pl_shader sh,
     case PL_FRAME_INTERP_QUALITY:;
         pl_tex quality = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
         return frame_interp_map(sh, input, quality, "flow quality", &out_color);
+    case PL_FRAME_INTERP_OCCLUSION:;
+        pl_tex occl = pl_motion_get_occlusion(*input->state, PL_MOTION_FORWARD);
+        return frame_interp_map(sh, input, occl, "occlusion", &out_color);
     case PL_FRAME_INTERP_ALGO_COUNT:
         break;
     }

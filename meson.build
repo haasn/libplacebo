@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '401': 'add PL_MOTION_OCCLUSION, pl_motion_get_occlusion and PL_FRAME_INTERP_OCCLUSION',
       '400': 'add pl_tone_map_constants.spline_shoulder',
       '399': 'add pl_opengl_swapchain_params.recreate_surface',
       '398': 'remove pl_motion_global_buf_vars and its accessors',

@@ -38,6 +38,7 @@ enum pl_motion_direction {
 enum pl_motion_feature {
     PL_MOTION_GLOBAL    = 1 << 0,   // pl_motion_get_global()
     PL_MOTION_QUALITY   = 1 << 1,   // pl_motion_get_quality()
+    PL_MOTION_OCCLUSION = 1 << 2,   // pl_motion_get_occlusion()
 };
 
 // Tunable parameters. Kept separate from the per-call inputs so that callers
@@ -164,6 +165,18 @@ PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
 PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,
                                     enum pl_motion_direction dir);
 
+// Returns the occlusion estimate of a single direction, or NULL. The
+// returned texture is owned by the state object, and has the same dimensions
+// as the flow field.
+//
+// This is a single component UNORM texture estimating how likely the source
+// content of each vector is to be occluded in the target frame, from 0.0 for
+// visible to 1.0 for occluded content.
+//
+// See pl_motion_get_flow(), PL_MOTION_OCCLUSION. Requires PL_MOTION_BOTH.
+PL_API pl_tex pl_motion_get_occlusion(pl_shader_obj state,
+                                      enum pl_motion_direction dir);
+
 // Returns the buffer holding the global motion vector, or NULL. The returned
 // buffer is owned by the state object.
 //
@@ -203,6 +216,10 @@ enum pl_frame_interp_algo {
 
     // Visualize the flow quality field as a grayscale image.
     PL_FRAME_INTERP_QUALITY,
+
+    // Visualize the forward occlusion map as a grayscale image, with occluded
+    // content in white.
+    PL_FRAME_INTERP_OCCLUSION,
 
     PL_FRAME_INTERP_ALGO_COUNT,
 };

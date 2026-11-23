@@ -430,6 +430,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_FRAME_INTERP_GLOBAL_MOTION] = "Global motion",
                 [PL_FRAME_INTERP_VISUALIZE]     = "Visualize motion vectors",
                 [PL_FRAME_INTERP_QUALITY]       = "Visualize quality",
+                [PL_FRAME_INTERP_OCCLUSION]     = "Visualize occlusion",
             };
 
             nk_label(nk, "Algorithm", NK_TEXT_LEFT);
