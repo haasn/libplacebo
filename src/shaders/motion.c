@@ -335,15 +335,6 @@ struct motion_geometry {
 
     // The seed candidates every block of this level scores before searching.
     struct motion_seeds seeds;
-
-    // "Candidate" will be used to refer to a motion vector (a vector of (dx, dy)
-    // with 0 <= dx,dy <= radius) that is considered for a given block of pixels.
-    // The ordering of the `(2 * radius + 1)^2` motion candidates in the
-    // search radius, for tie breaking order.
-    // For i in [0, `(2 * radius + 1)^2`), i is the ordering for tie breaking,
-    // and (cand[2*i], cand[2*i+1]) represents (dx, dy) of the corresponding
-    // motion search candidate.
-    const int *cand;
 };
 
 // The size and stride of the various contents of shared memory that a motion
@@ -394,6 +385,9 @@ motion_compute_shmem_layout(int block_size, int radius, int bpgx, int bpgy,
     };
 }
 
+// "Candidate" will be used to refer to a motion vector (a vector of (dx, dy)
+// with 0 <= dx,dy <= radius) that is considered for a given block of pixels.
+//
 // Fills the `out` array with `(2 * radius + 1)^2` many candidate displacements
 // of the search window. Candidate i will always represent the displacement at
 // (out[2*i], out[2*i + 1]), and the index i will be used to make the tie
@@ -425,7 +419,7 @@ static void cand_fill(int radius, int *out)
 // the motion estimation. Iteratively reduces the tile size that each workgroup
 // will process until a size is found that fits in shared memory. `coarsest`
 // selects the search radius of the coarsest pyramid level.
-static bool motion_plan(pl_gpu gpu, void *alloc,
+static bool motion_plan(pl_gpu gpu,
                         const struct pl_motion_estimate_params *params,
                         bool coarsest, struct motion_seeds seeds,
                         bool subpixel, bool zero_mean, int grid_w, int grid_h,
@@ -481,9 +475,6 @@ static bool motion_plan(pl_gpu gpu, void *alloc,
         return false;
     }
 
-    int *cand = pl_calloc(alloc, 2 * ncand, sizeof(*cand));
-    cand_fill(radius, cand);
-
     *out = (struct motion_geometry) {
         .block_size = block_size,
         .radius = radius,
@@ -493,7 +484,6 @@ static bool motion_plan(pl_gpu gpu, void *alloc,
         .subpixel = subpixel,
         .zero_mean = zero_mean,
         .seeds = seeds,
-        .cand = cand,
     };
 
     return true;
@@ -986,7 +976,7 @@ static bool motion_gain_pass(pl_dispatch dispatch,
 static void cand_lut_fill(void *data, const struct sh_lut_params *params)
 {
     const struct motion_geometry *geom = params->priv;
-    memcpy(data, geom->cand, 2 * (size_t) params->width * sizeof(int));
+    cand_fill(geom->radius, data);
 }
 
 enum motion_prior {
@@ -2340,7 +2330,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (!pl_pyramid_build(gpu, input->dispatch, &obj->dir[BWD].input))
         goto error;
 
-    void *tmp = pl_tmp(NULL);
     bool ok = true;
     for (int d = 0; d < NUM_DIRS; d++) {
         const enum pl_motion_direction dir = 1 << d;
@@ -2392,7 +2381,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
             pl_tex prior = has_prior ? prior_field->elem[i] : NULL;
 
             struct motion_geometry geom;
-            ok = motion_plan(gpu, tmp, params, coarsest,
+            ok = motion_plan(gpu, params, coarsest,
                              motion_seeds_plan(parent != NULL, prior != NULL),
                              i == 0, top, out->params.w, out->params.h,
                              &geom);
@@ -2454,7 +2443,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 break;
         }
     }
-    pl_free(tmp);
 
     if (!ok)
         goto error;
