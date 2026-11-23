@@ -158,8 +158,9 @@ PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
 // Returns the quality of the flow field of a single direction, or NULL. The
 // returned texture is owned by the state object.
 //
-// This is a single component float texture in the range [0, 1], with a value
+// This is a single component UNORM texture in the range [0, 1], with a value
 // of 1.0 corresponding to high quality and 0.0 meaning low quality vectors.
+// With PL_MOTION_OCCLUSION, occluded vectors have a lowered quality.
 //
 // See pl_motion_get_flow(), PL_MOTION_QUALITY.
 PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,

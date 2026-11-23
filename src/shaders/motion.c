@@ -1946,6 +1946,7 @@ static bool motion_quality_pass(pl_dispatch dispatch,
     pl_tex next_tex = pl_pyramid_base(obj->dir[!d].input);
     pl_tex flow_tex = final_flow(dir);
     pl_tex out_tex = dir->quality;
+    pl_tex occl_tex = dir->occlusion;
     pl_buf gain_buf = dir->gain;
 
     const int bs = obj->params.block_size_fine;
@@ -1972,6 +1973,7 @@ static bool motion_quality_pass(pl_dispatch dispatch,
                                              &flow_tex->params);
     ident_t median9 = sh_median(sh, 9, 0x3);
     ident_t gain = get_target_gain(sh, gain_buf);
+    ident_t occl = occl_tex ? bind_tex(sh, "occlusion", occl_tex) : NULL_IDENT;
 
     // clang-format off
 #pragma GLSL /* motion_quality_pass */                                          \
@@ -2034,6 +2036,9 @@ static bool motion_quality_pass(pl_dispatch dispatch,
                         ${const float: MOTION_QUALITY_COST_HI},                 \
                         sqrt(ssd / texture));                                   \
                 }                                                               \
+                                                                                \
+                @if (occl_tex)                                                  \
+                    q *= 1.0 - texelFetch($occl, pos / ${const int: bs}, 0).x;  \
                                                                                 \
                 sum += q;                                                       \
                 num += 1.0;                                                     \
