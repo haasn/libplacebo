@@ -2815,6 +2815,9 @@ bool pl_shader_frame_interp(pl_shader sh,
         me_params.block_size_fine = me_params.block_size_coarse;
         break;
     case PL_FRAME_INTERP_VISUALIZE:
+        me_dir = PL_MOTION_BOTH;
+        me_features = PL_MOTION_QUALITY | PL_MOTION_OCCLUSION;
+        break;
     case PL_FRAME_INTERP_QUALITY:
         me_dir = PL_MOTION_FORWARD;
         me_features = PL_MOTION_QUALITY;
