@@ -283,6 +283,10 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 #define MOTION_OCCLUSION_ALPHA 16.0f
 #define MOTION_OCCLUSION_BETA  0.03f
 
+// Round-trip distance, in pixels, below which a vector counts as visible
+// without checking the content at the end of the round trip.
+#define MOTION_OCCLUSION_MIN   0.5f
+
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
@@ -1909,8 +1913,9 @@ static bool motion_occlusion_pass(pl_dispatch dispatch,
         }                                                                       \
                                                                                 \
         const float alpha_inv = ${const float: 1.0f / MOTION_OCCLUSION_ALPHA};  \
-        float occl = 1.0 - exp(-length(back) * alpha_inv);                      \
-        if (occl > 0.0) {                                                       \
+        float occl = 0.0;                                                       \
+        if (length(back) >= ${const float: MOTION_OCCLUSION_MIN}) {             \
+            occl = 1.0 - exp(-length(back) * alpha_inv);                        \
             /* False positive check */                                          \
             float px[9];                                                        \
             $load_block(pos - 1, px);                                           \
