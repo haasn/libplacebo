@@ -64,6 +64,10 @@ struct sh_motion_obj {
     enum pl_motion_direction direction;
     enum pl_motion_feature features;
 
+    // Size of a pixel of the estimation in pixels of the frames, see
+    // `pl_motion_estimate_params.scale`
+    float mv_scale[2];
+
     // Which directions of `dir` are currently valid
     enum pl_motion_direction valid;
 
@@ -74,6 +78,8 @@ struct sh_motion_obj {
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
         pl_buf gain;           // brightness gain (float), or NULL
         pl_tex occlusion;      // occlusion map, or NULL
+        pl_tex scaled;         // output flow field in pixels of the frames,
+                               // or NULL if those are the estimated ones
         pl_tex quality;        // flow quality estimate, or NULL
         pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
@@ -556,6 +562,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].fine);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
         pl_tex_destroy(gpu, &obj->dir[d].occlusion);
+        pl_tex_destroy(gpu, &obj->dir[d].scaled);
         pl_tex_destroy(gpu, &obj->dir[d].quality);
         pl_buf_destroy(gpu, &obj->dir[d].global_flow);
     }
@@ -577,12 +584,21 @@ static void invalidate_temporal(pl_gpu gpu, struct sh_motion_obj *obj,
     obj->skip_input = false;
 }
 
+// Size of a frame dimension at the resolution the motion is estimated at
+static int scaled_size(int size, const struct pl_motion_estimate_params *params)
+{
+    return PL_MAX(1, lrintf(size * params->scale));
+}
+
 int pl_motion_num_blocks(int w, int h,
                          const struct pl_motion_estimate_params *params)
 {
     const int bs = params->block_size_coarse;
     if (w <= 0 || h <= 0 || bs <= 0)
         return 0;
+
+    w = scaled_size(w, params);
+    h = scaled_size(h, params);
 
     // Must match the grid computed by `pl_motion_estimate`.
     return PL_DIV_UP(w, bs) * PL_DIV_UP(h, bs);
@@ -607,7 +623,7 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
     if (!obj || d < 0 || !(obj->valid & dir))
         return NULL;
 
-    return final_flow(&obj->dir[d]);
+    return obj->dir[d].scaled ? obj->dir[d].scaled : final_flow(&obj->dir[d]);
 }
 
 pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
@@ -755,7 +771,8 @@ static bool params_eq(const struct pl_motion_estimate_params *a,
            a->block_size_fine == b->block_size_fine &&
            a->pyramid_levels == b->pyramid_levels &&
            a->search_radius_coarse == b->search_radius_coarse &&
-           a->search_radius_fine == b->search_radius_fine;
+           a->search_radius_fine == b->search_radius_fine &&
+           a->scale == b->scale;
 }
 
 static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
@@ -841,6 +858,11 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
         return false;
     }
 
+    if (!(params->scale > 0.0f && params->scale <= 1.0f)) {
+        PL_ERR(gpu, "pl_motion_estimate: scale must be in (0, 1]!");
+        return false;
+    }
+
     return true;
 }
 
@@ -856,7 +878,7 @@ static void fix_params(struct pl_motion_estimate_params *params)
     }
 }
 
-// Convert an input frame to luma.
+// Convert an input frame to luma, at the resolution of `out`.
 static bool convert_to_luma(pl_dispatch dispatch,
                             const struct pl_motion_estimate_frame *frame,
                             pl_tex out)
@@ -866,7 +888,12 @@ static bool convert_to_luma(pl_dispatch dispatch,
     pl_color_space_infer(&color);
 
     pl_shader sh = pl_dispatch_begin(dispatch);
-    if (!pl_shader_sample_direct(sh, pl_sample_src( .tex = frame->tex ))) {
+    if (!pl_shader_sample_direct(sh, pl_sample_src(
+            .tex   = frame->tex,
+            .new_w = out->params.w,
+            .new_h = out->params.h,
+        )))
+    {
         pl_dispatch_abort(dispatch, &sh);
         return false;
     }
@@ -2222,7 +2249,9 @@ static bool motion_global_median_pass(pl_dispatch dispatch,
                 break;                                                          \
         }                                                                       \
         /* Shift bin index in [0, 256) to mv in [-128, 128). */                 \
-        float mv = float(i - ${const int: MOTION_GLOBAL_BINS / 2});             \
+        float mv = float(i - ${const int: MOTION_GLOBAL_BINS / 2})              \
+                 * vec2(${float: obj->mv_scale[0]},                             \
+                        ${float: obj->mv_scale[1]})[tid];                       \
         @if (d == FWD) {                                                        \
             global_mv_fwd[tid] = mv;                                            \
             if (tid == 0)                                                       \
@@ -2256,6 +2285,74 @@ static bool estimate_occlusion(pl_dispatch dispatch,
     pl_assert(obj->valid == PL_MOTION_BOTH);
     return motion_occlusion_pass(dispatch, obj, FWD) &&
            motion_occlusion_pass(dispatch, obj, BWD);
+}
+
+// Converts the output flow field of `d` to pixels of the frames.
+static bool motion_scale_pass(pl_dispatch dispatch,
+                              const struct sh_motion_obj *obj, enum dir d)
+{
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex in_tex = final_flow(dir);
+    const int grid_w = in_tex->params.w, grid_h = in_tex->params.h;
+
+    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
+                              "motion vector scaling (%dx%d)", grid_w, grid_h);
+    if (!sh)
+        return false;
+
+    ident_t in  = bind_tex(sh, "flow", in_tex);
+    ident_t out = bind_img(sh, "flow_out", dir->scaled);
+
+    // clang-format off
+#pragma GLSL /* motion_scale_pass */                                            \
+    ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
+    if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h})))) {\
+        vec2 scale = vec2(${float: obj->mv_scale[0]},                           \
+                          ${float: obj->mv_scale[1]});                          \
+        vec2 mv = texelFetch($in, blk, 0).xy * scale;                           \
+        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = grid_w,
+        .height = grid_h,
+    ));
+}
+
+// Converts the output flow fields of every direction in `obj->valid` to pixels
+// of the frames, unless those are the pixels they were estimated in.
+static bool scale_output(pl_gpu gpu, pl_dispatch dispatch,
+                         struct sh_motion_obj *obj)
+{
+    const bool scaled = obj->mv_scale[0] != 1.0f || obj->mv_scale[1] != 1.0f;
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        struct motion_dir *dir = &obj->dir[d];
+        if (!scaled || !(obj->valid & (1 << d))) {
+            pl_tex_destroy(gpu, &dir->scaled);
+            continue;
+        }
+
+        pl_tex flow = final_flow(dir);
+        bool ok = pl_tex_recreate(gpu, &dir->scaled, pl_tex_params(
+            .w          = flow->params.w,
+            .h          = flow->params.h,
+            .format     = flow->params.format,
+            .sampleable = true,
+            .storable   = true,
+        ));
+        if (!ok) {
+            PL_ERR(gpu, "pl_motion_estimate: failed creating scaled flow "
+                        "field!");
+            return false;
+        }
+
+        if (!motion_scale_pass(dispatch, obj, d))
+            return false;
+    }
+
+    return true;
 }
 
 // Estimates the quality of the vectors of every direction in
@@ -2480,11 +2577,16 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         return false;
     }
 
-    const int w = input->a.tex->params.w;
-    const int h = input->a.tex->params.h;
+    const int frame_w = input->a.tex->params.w;
+    const int frame_h = input->a.tex->params.h;
+    const int w = scaled_size(frame_w, params);
+    const int h = scaled_size(frame_h, params);
     if (!motion_setup(gpu, obj, w, h, params, input->direction,
                       input->features))
         return false;
+
+    obj->mv_scale[0] = (float) frame_w / w;
+    obj->mv_scale[1] = (float) frame_h / h;
 
     if (obj->sig_prev == input->a.sig && obj->sig_next == input->b.sig &&
         (obj->valid & input->direction) == input->direction)
@@ -2577,6 +2679,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         if (!estimate_quality(input->dispatch, obj))
             goto error;
     }
+
+    if (!scale_output(gpu, input->dispatch, obj))
+        goto error;
 
 
     // Reuse frame `b`'s luma pyramid as the next frame `a`, and `a`'s buffers

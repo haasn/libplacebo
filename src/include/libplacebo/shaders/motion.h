@@ -68,6 +68,15 @@ struct pl_motion_estimate_params {
     // level to detect large motion. If `pyramid_levels` == 1, we use `search_radius_fine` on the only image pyramid level.
     int search_radius_coarse;
     int search_radius_fine;
+
+    // Scale, relative to the frames, to estimate the motion at. Must be in the
+    // range (0, 1]. Lower values trade the detail of the flow fields for
+    // speed. Frames that were upscaled hold no more detail than their source,
+    // so their motion is found as well at the resolution of the source. The
+    // frames are sampled bilinearly, so this should not go below half of the
+    // resolution they hold detail at. The vectors remain in pixels of the
+    // frames.
+    float scale;
 };
 
 #define PL_MOTION_ESTIMATE_DEFAULTS                                            \
@@ -75,7 +84,8 @@ struct pl_motion_estimate_params {
     .block_size_fine        = 1,                                               \
     .pyramid_levels         = 0,                                               \
     .search_radius_coarse   = 4,                                               \
-    .search_radius_fine     = 1,
+    .search_radius_fine     = 1,                                               \
+    .scale                  = 1.0,
 
 #define pl_motion_estimate_params(...)                                         \
     (&(struct pl_motion_estimate_params) {                                     \
@@ -85,7 +95,8 @@ PL_API extern const struct pl_motion_estimate_params
     pl_motion_estimate_default_params;
 
 // Returns the number of blocks `pl_motion_estimate` searches at full
-// resolution, for frames of dimensions `w` x `h`. Purely informative.
+// resolution, for frames of dimensions `w` x `h` (after applying any
+// `pl_motion_estimate_params.scale`). Purely informative.
 PL_API int pl_motion_num_blocks(int w, int h,
                                 const struct pl_motion_estimate_params *params);
 
@@ -150,8 +161,9 @@ PL_API void pl_motion_reset(pl_shader_obj state);
 //
 // This texture may have a size that differs from the inputs themselves.
 // However, the granularity is guaranteed to lie somewhere in the range
-// [block_size_fine, block_size_coarse]. `tex->params` provides the exact
-// dimensions and format.
+// [block_size_fine, block_size_coarse], in pixels of the resolution the motion
+// was estimated at (see `pl_motion_estimate_params.scale`). `tex->params`
+// provides the exact dimensions and format.
 PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
                                  enum pl_motion_direction dir);
 
