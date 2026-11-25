@@ -85,7 +85,7 @@ struct pl_motion_estimate_params {
     .pyramid_levels         = 0,                                               \
     .search_radius_coarse   = 4,                                               \
     .search_radius_fine     = 1,                                               \
-    .scale                  = 1.0,
+    .scale                  = 0.5,
 
 #define pl_motion_estimate_params(...)                                         \
     (&(struct pl_motion_estimate_params) {                                     \
