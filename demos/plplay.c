@@ -474,10 +474,21 @@ static bool render_loop(struct plplay *p)
     window_poll(p->win, false);
 
     double pts_target = 0.0, prev_pts = 0.0;
+    double pts_offset = 0.0; // time spent paused, minus the time stepped
+    bool was_paused = false, key_space = false, key_period = false;
 
     while (!p->win->window_lost) {
         if (window_get_key(p->win, KEY_ESC))
             break;
+
+        bool key = window_get_key(p->win, KEY_SPACE);
+        if (key && !key_space)
+            p->paused = !p->paused;
+        key_space = key;
+        key = window_get_key(p->win, KEY_PERIOD);
+        if (key && !key_period)
+            p->paused = p->step = true;
+        key_period = key;
 
         if (p->toggle_fullscreen)
             window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
@@ -497,7 +508,17 @@ static bool render_loop(struct plplay *p)
 
         struct pl_queue_params *qparams = &params;
         qparams->timeout = 0; // non-blocking update
-        qparams->pts = fmax(pts_target, pl_clock_diff(ts_pre_update, ts_start));
+        double clock = pl_clock_diff(ts_pre_update, ts_start);
+        if (p->paused) {
+            qparams->pts = prev_pts + (p->step ? 1.0 / 120 : 0.0);
+            pts_target = 0.0;
+        } else {
+            if (was_paused)
+                pts_offset = clock - prev_pts;
+            qparams->pts = fmax(pts_target, clock - pts_offset);
+        }
+        was_paused = p->paused;
+        p->step = false;
         p->stats.current_pts = qparams->pts;
         if (qparams->pts != prev_pts)
             log_time(&p->stats.pts_interval, qparams->pts - prev_pts);
@@ -533,7 +554,7 @@ retry:
         if (pts_target) {
             pl_gpu_flush(p->win->gpu);
             pl_clock_t ts_wait = pl_clock_now();
-            double pts_now = pl_clock_diff(ts_wait, ts_start);
+            double pts_now = pl_clock_diff(ts_wait, ts_start) - pts_offset;
             if (pts_target >= pts_now) {
                 log_time(&p->stats.sleep, pts_target - pts_now);
                 pl_thread_sleep(pts_target - pts_now);
@@ -580,7 +601,9 @@ retry:
             }
         }
 
-        if (p->fps_override)
+        if (p->paused)
+            pts_target = 0.0;
+        else if (p->fps_override)
             pts_target = fmax(pts_target, qparams->pts + 1.0 / p->fps);
     }
 

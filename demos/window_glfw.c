@@ -439,6 +439,8 @@ static bool glfw_get_key(const struct window *window, enum key key)
 {
     static const int key_map[] = {
         [KEY_ESC] = GLFW_KEY_ESCAPE,
+        [KEY_SPACE] = GLFW_KEY_SPACE,
+        [KEY_PERIOD] = GLFW_KEY_PERIOD,
     };
 
     struct priv *p = (struct priv *) window;

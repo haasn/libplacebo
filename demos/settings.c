@@ -230,6 +230,10 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
             p->toggle_fullscreen = nk_checkbox_label(nk, "Fullscreen", &fullscreen);
             nk_property_float(nk, "Corner rounding", 0.0, &par->corner_rounding, 1.0, 0.1, 0.01);
 
+            nk_checkbox_label(nk, "Paused (space)", &p->paused);
+            if (nk_button_label(nk, "Step 1/120 s (.)"))
+                p->paused = p->step = true;
+
             struct nk_colorf bg = {
                 par->background_color[0],
                 par->background_color[1],

@@ -49,6 +49,8 @@ struct plplay {
     bool colorspace_hint_dynamic;
     bool ignore_dovi;
     bool toggle_fullscreen;
+    bool paused;
+    bool step; // advance by one step while paused
     bool advanced_scalers;
 
     bool target_override; // if false, fields below are ignored
