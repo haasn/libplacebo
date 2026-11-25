@@ -34,6 +34,7 @@ struct cached_frame {
     struct pl_color_repr repr;
     struct pl_icc_profile profile;
     pl_rect2df crop;
+    float src_scale; // resolution of the source relative to `tex`
     pl_tex tex;
     int comps;
     bool evict; // for garbage collection
@@ -4322,8 +4323,14 @@ retry:
                           inter_pass.img.repr,
                           &shift);
 
+            float src_w = fabsf(pl_rect_w(inter_pass.ref_rect)),
+                  src_h = fabsf(pl_rect_h(inter_pass.ref_rect));
+            if (inter_pass.rotation % PL_ROTATION_180 == PL_ROTATION_90)
+                PL_SWAP(src_w, src_h);
+
             f->params_hash = par_info.hash;
             f->crop = img->crop;
+            f->src_scale = PL_MAX(src_w / out_w, src_h / out_h);
             f->color = inter_pass.img.color;
             f->repr = inter_pass.img.repr;
             f->comps = inter_pass.img.comps;
@@ -4391,6 +4398,12 @@ inter_pass_error:
         // Attribute the passes dispatched by motion estimation to their own
         // stage
         pl_dispatch_callback(rr->dp, &motion_pass, info_callback);
+
+        // The frames were scaled to the output resolution already, which adds
+        // no detail for the motion estimation to find.
+        struct pl_frame_interp_params interp_params = *params->frame_interp_params;
+        float src_scale = PL_MAX(frames[0].src_scale, frames[1].src_scale);
+        interp_params.motion.scale *= PL_MIN(src_scale, 1.0f);
         bool ok = pl_shader_frame_interp(sh, pl_frame_interp_input(
             .gpu       = rr->gpu,
             .dispatch  = rr->dp,
@@ -4399,7 +4412,7 @@ inter_pass_error:
             .t         = interp_t,
             .out_color = mix_csp,
             .state     = &rr->motion_state,
-        ), params->frame_interp_params);
+        ), &interp_params);
         pl_dispatch_callback(rr->dp, &pass, info_callback);
 
         if (!ok) {
