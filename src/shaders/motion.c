@@ -271,12 +271,8 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // a mean squared error in 8 bit code values.
 #define MOTION_REFINE_1X1_MARGIN 1.0f
 
-// Tolerance margins for the occlusion pass.
-#define MOTION_OCCLUSION_ALPHA 16.0f
-#define MOTION_OCCLUSION_BETA  0.03f
-
-// Round-trip distance, in pixels, below which a vector counts as visible
-// without checking the content at the end of the round trip.
+// Round trip distance, in pixels, below which `motion_check_pass` fully trusts
+// a vector.
 #define MOTION_OCCLUSION_MIN   0.5f
 
 // Round trip distance, in pixels, at which `motion_check_pass` starts to count
@@ -1544,6 +1540,8 @@ struct check_field {
     pl_tex parent, parent_vis; // the next coarser field and its visibility,
                                // or NULL
     pl_tex quality_out;       // the confidence in the checked field, or NULL
+    pl_tex occlusion_out;     // how likely the content of each of its vectors
+                              // is occluded, or NULL
     int w, h;                 // size of the frames at the field's resolution
     int bs;                   // pixels per vector of the field
     int parent_bs;            // pixels per vector of the parent, in its own
@@ -1560,7 +1558,8 @@ struct check_field {
 // it is the one the next finer field starts from.
 //
 // Writes the visibility, the confidence in each vector and whether it was
-// filled in. The confidence is how close the nearest vector of the other
+// filled in. The occlusion is the lack of confidence in the vector as found,
+// before any of this. The confidence is how close the nearest vector of the other
 // direction comes to leading back, which counts more strictly than the
 // visibility: replacing a vector takes a clear failure, trusting one takes a
 // clear success. A filled vector, and any vector refined from one, keeps the
@@ -1590,9 +1589,12 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
         parent_vis = bind_tex(sh, "parent_vis", f->parent_vis);
     }
     const bool has_quality = f->quality_out != NULL;
-    ident_t quality_out = NULL_IDENT;
+    const bool has_occlusion = f->occlusion_out != NULL;
+    ident_t quality_out = NULL_IDENT, occlusion_out = NULL_IDENT;
     if (has_quality)
         quality_out = bind_img(sh, "quality_out", f->quality_out);
+    if (has_occlusion)
+        occlusion_out = bind_img(sh, "occlusion_out", f->occlusion_out);
 
     // clang-format off
 #pragma GLSL /* motion_check_pass */                                            \
@@ -1625,6 +1627,8 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
         }                                                                       \
         if (dist >= ${const float: MOTION_OCCLUSION_MIN})                       \
             conf = exp(-dist * ${const float: 1.0f / MOTION_CHECK_FALLOFF});    \
+        @if (has_occlusion)                                                     \
+            imageStore($occlusion_out, blk, vec4(1.0 - conf, 0.0, 0.0, 0.0));   \
                                                                                 \
         @if (has_parent) {                                                      \
             ivec2 pblk = min(ivec2(c) / ${const int: ratio * pbs},              \
@@ -1687,6 +1691,7 @@ static bool motion_check_coarse_pass(pl_dispatch dispatch,
         .out        = dir->raw.elem[level],
         .vis_out    = dir->coarse_vis.elem[level],
         .quality_out = level == 0 && !dir->fine.num ? dir->quality : NULL,
+        .occlusion_out = level == 0 && !dir->fine.num ? dir->occlusion : NULL,
         .parent     = top ? NULL : dir->coarse.elem[level + 1],
         .parent_vis = top ? NULL : dir->coarse_vis.elem[level + 1],
         .w          = dir->input.elem[level]->params.w,
@@ -2099,6 +2104,7 @@ static bool refine_flow(pl_dispatch dispatch, struct sh_motion_obj *obj,
                 .out        = dir->fine_tmp.elem[i],
                 .vis_out    = dir->fine_vis.elem[i],
                 .quality_out = i == 0 ? dir->quality : NULL,
+                .occlusion_out = i == 0 ? dir->occlusion : NULL,
                 .parent     = first ? pl_pyramid_base(dir->coarse)
                                     : dir->fine.elem[i + 1],
                 .parent_vis = first ? pl_pyramid_base(dir->coarse_vis)
@@ -2117,78 +2123,6 @@ static bool refine_flow(pl_dispatch dispatch, struct sh_motion_obj *obj,
     }
 
     return true;
-}
-
-// Generates the occlusion map from both directions of the flow map
-static bool motion_occlusion_pass(pl_dispatch dispatch,
-                                  const struct sh_motion_obj *obj, enum dir d)
-{
-    const struct motion_dir *dir = &obj->dir[d], *dir_inv = &obj->dir[!d];
-    pl_tex prev_tex = pl_pyramid_base(dir->input);
-    pl_tex flow_tex = final_flow(dir), flow_inv_tex = final_flow(dir_inv);
-    pl_tex out_tex  = dir->occlusion;
-
-    const int bs = obj->params.block_size_fine;
-    const int w = prev_tex->params.w, h = prev_tex->params.h;
-    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
-    const float noise = 9.0f / (255.0f * 255.0f);
-
-    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
-                              "motion occlusion (%dx%d)", grid_w, grid_h);
-    if (!sh)
-        return false;
-
-    ident_t flow = bind_tex(sh, "flow", flow_tex);
-    ident_t flow_inv = bind_tex(sh, "flow_inv", flow_inv_tex);
-    ident_t quad_inv = sh_tex_quad(sh, 0x3, flow_inv, &flow_inv_tex->params);
-    ident_t out = bind_img(sh, "occlusion_out", out_tex);
-    ident_t prev = bind_tex(sh, "prev", prev_tex);
-    ident_t load_block = sh_tex_load_block(sh, 3, 3, 0x1, prev, &prev_tex->params);
-    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, prev, &prev_tex->params);
-
-    // clang-format off
-#pragma GLSL /* motion_occlusion_pass */                                        \
-    ivec2 size = ivec2(${const int: w}, ${const int: h});                       \
-    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
-    ivec2 blk  = ivec2(gl_GlobalInvocationID.xy);                               \
-    if (all(lessThan(blk, grid))) {                                             \
-        ivec2 pos = min(blk * ${const int: bs} + ${const int: bs / 2}, size - 1);\
-        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
-                                                                                \
-        /* Take whichever reverse vector comes closest */                       \
-        ivec2 pos_b = blk + ivec2(floor(mv * ${const float: 1.0f / bs}));       \
-        mat2x4 inv = $quad_inv(pos_b);                                          \
-        vec4 bx = inv[0] + vec4(mv.x), by = inv[1] + vec4(mv.y);                \
-        vec4 d2 = bx * bx + by * by;                                            \
-        vec2 back = vec2(bx[0], by[0]);                                         \
-        for (int j = 1; j < 4; j++) {                                           \
-            if (d2[j] < dot(back, back))                                        \
-                back = vec2(bx[j], by[j]);                                      \
-        }                                                                       \
-                                                                                \
-        const float alpha_inv = ${const float: 1.0f / MOTION_OCCLUSION_ALPHA};  \
-        float occl = 0.0;                                                       \
-        if (length(back) >= ${const float: MOTION_OCCLUSION_MIN}) {             \
-            occl = 1.0 - exp(-length(back) * alpha_inv);                        \
-            /* False positive check */                                          \
-            float px[9];                                                        \
-            $load_block(pos - 1, px);                                           \
-            float texture = ${const float: noise};                              \
-            for (int j = 0; j < 9; j++)                                         \
-                texture += (px[j] - px[4]) * (px[j] - px[4]);                   \
-            float ssd = $block_ssd(px, vec2(pos - 1) + back, 1.0, 1e30);        \
-            const float beta_inv = ${const float: 1.0f / MOTION_OCCLUSION_BETA};\
-            occl *= 1.0 - exp(-ssd / texture * beta_inv);                       \
-        }                                                                       \
-        imageStore($out, blk, vec4(occl, 0.0, 0.0, 0.0));                       \
-    }
-    // clang-format on
-
-    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
-        .shader = &sh,
-        .width  = grid_w,
-        .height = grid_h,
-    ));
 }
 
 // Two contiguous histograms describing the global motion in the frame.
@@ -2365,15 +2299,6 @@ static bool estimate_global(pl_dispatch dispatch,
 {
     return motion_global_hist_pass(dispatch, obj, d) &&
            motion_global_median_pass(dispatch, obj, d);
-}
-
-// Estimates the occlusion maps of both directions, from each other's fields.
-static bool estimate_occlusion(pl_dispatch dispatch,
-                               const struct sh_motion_obj *obj)
-{
-    pl_assert(obj->valid == PL_MOTION_BOTH);
-    return motion_occlusion_pass(dispatch, obj, FWD) &&
-           motion_occlusion_pass(dispatch, obj, BWD);
 }
 
 // Converts the output flow field of `d` to pixels of the frames.
@@ -2779,11 +2704,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
 
     obj->valid = input->direction;
-
-    if (input->features & PL_MOTION_OCCLUSION) {
-        if (!estimate_occlusion(input->dispatch, obj))
-            goto error;
-    }
 
     if (!scale_output(gpu, input->dispatch, obj))
         goto error;
