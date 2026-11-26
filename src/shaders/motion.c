@@ -74,6 +74,7 @@ struct sh_motion_obj {
     // --- Inputs/outputs for the current frame pair, in each direction
     struct motion_dir {
         pl_tex_pyramid input;  // input features
+        pl_tex_pyramid raw;    // coarse flow field (blocks), before smoothing
         pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
         pl_buf gain;           // brightness gain (float), or NULL
@@ -86,7 +87,6 @@ struct sh_motion_obj {
 
     // --- Temporary buffers used only within a motion estimation call
     struct {
-        pl_tex_pyramid raw;   // Raw motion vectors (before smoothing)
         pl_buf hist;          // Histogram for global motion estimation
     } scratch;
 
@@ -555,9 +555,9 @@ static pl_fmt flow_fmt(pl_gpu gpu)
 static void motion_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_motion_obj *obj = ptr;
-    pl_pyramid_destroy(gpu, &obj->scratch.raw);
     for (enum dir d = 0; d < NUM_DIRS; d++) {
         pl_pyramid_destroy(gpu, &obj->dir[d].input);
+        pl_pyramid_destroy(gpu, &obj->dir[d].raw);
         pl_pyramid_destroy(gpu, &obj->dir[d].coarse);
         pl_pyramid_destroy(gpu, &obj->dir[d].fine);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
@@ -1075,7 +1075,7 @@ static bool motion_search_pass(pl_dispatch dispatch, struct sh_motion_obj *obj,
     const pl_tex_pyramid *field = &dir->coarse;
     pl_tex prev_tex = dir->input.elem[level];
     pl_tex next_tex = obj->dir[!d].input.elem[level];
-    pl_tex out_tex = obj->scratch.raw.elem[level];
+    pl_tex out_tex = dir->raw.elem[level];
 
     // The top level has no vectors of a coarser level to start from,
     // so it compares the blocks without their means: a change in
@@ -1532,7 +1532,7 @@ static bool motion_smooth_pass(pl_dispatch dispatch,
     const struct motion_dir *dir = &obj->dir[d];
     pl_tex prev_tex = dir->input.elem[level];
     pl_tex next_tex = obj->dir[!d].input.elem[level];
-    pl_tex flow_tex = obj->scratch.raw.elem[level];
+    pl_tex flow_tex = dir->raw.elem[level];
     pl_tex out_tex = dir->coarse.elem[level];
     pl_buf gain_buf = out_tex == pl_pyramid_tip(dir->coarse) ? NULL : dir->gain;
 
@@ -2431,13 +2431,12 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
     for (enum dir d = 0; d < NUM_DIRS; d++) {
         if (!(direction & (1 << d)))
             continue;
-        if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
+        if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].raw, levels,
+                                 flow_params) ||
+            !pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse, levels,
                                  flow_params))
             goto error;
     }
-
-    if (!pl_pyramid_recreate(gpu, obj, &obj->scratch.raw, levels, flow_params))
-        goto error;
 
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(params, refine);
@@ -2605,7 +2604,7 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     obj->sig_prev = input->a.sig;
     obj->sig_next = input->b.sig;
 
-    const int levels = obj->scratch.raw.num;
+    const int levels = PL_MAX(obj->dir[FWD].coarse.num, obj->dir[BWD].coarse.num);
 
     // Upon cold start or after reset, build the image pyramid for frame `a`,
     // use cached pyramid otherwise.
@@ -2630,20 +2629,23 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (!pl_pyramid_build(gpu, input->dispatch, &obj->dir[BWD].input))
         goto error;
 
+    // Both directions level by level, the forward one first, which is the order
+    // the temporal prior of the backward direction expects
     bool ok = true;
-    for (enum dir d = 0; d < NUM_DIRS; d++) {
-        if (!(input->direction & (1 << d)))
-            continue;
-
-        for (int i = levels - 1; ok && i >= 0; i--) {
+    for (int i = levels - 1; ok && i >= 0; i--) {
+        for (enum dir d = 0; ok && d < NUM_DIRS; d++) {
+            if (!(input->direction & (1 << d)))
+                continue;
             ok = motion_search_pass(input->dispatch, obj, d, i) &&
                  motion_smooth_pass(input->dispatch, obj, d, i);
             if (ok && i == levels - 1 && i > 0)
                 ok = motion_gain_pass(input->dispatch, obj, d);
         }
+    }
 
-        if (!ok)
-            break;
+    for (enum dir d = 0; ok && d < NUM_DIRS; d++) {
+        if (!(input->direction & (1 << d)))
+            continue;
 
         if (obj->dir[d].fine.num) {
             // The gain is that of the levels below the top one, if any
