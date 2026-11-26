@@ -78,6 +78,8 @@ struct sh_motion_obj {
         pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
         pl_tex_pyramid coarse_vis; // visibility of `coarse`, or {0}
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
+        pl_tex_pyramid fine_vis; // visibility of `fine`, or {0}
+        pl_tex_pyramid fine_tmp; // like `fine`, to check it into, or {0}
         pl_buf gain;           // brightness gain (float), or NULL
         pl_tex occlusion;      // occlusion map, or NULL
         pl_tex scaled;         // output flow field in pixels of the frames,
@@ -577,6 +579,8 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].coarse);
         pl_pyramid_destroy(gpu, &obj->dir[d].coarse_vis);
         pl_pyramid_destroy(gpu, &obj->dir[d].fine);
+        pl_pyramid_destroy(gpu, &obj->dir[d].fine_vis);
+        pl_pyramid_destroy(gpu, &obj->dir[d].fine_tmp);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
         pl_tex_destroy(gpu, &obj->dir[d].occlusion);
         pl_tex_destroy(gpu, &obj->dir[d].scaled);
@@ -2024,27 +2028,65 @@ static bool refine_pyramid_recreate(pl_gpu gpu, void *alloc,
     return true;
 }
 
-// Refines `obj->dir[d].coarse` into the levels of `fine`, from the coarsest.
-static bool refine_flow(pl_dispatch dispatch, const struct sh_motion_obj *obj,
-                        enum dir d)
+// Refines the coarse fields of the directions in `dirs` into the levels
+// of their fine fields, from the coarsest. With both directions, checks each
+// level against the other direction, see `motion_check_pass`, before the next
+// one starts from it.
+static bool refine_flow(pl_dispatch dispatch, struct sh_motion_obj *obj,
+                        enum pl_motion_direction dirs)
 {
-    const pl_tex_pyramid *fine = &obj->dir[d].fine;
-    pl_tex flow = pl_pyramid_base(obj->dir[d].coarse);
+    const bool check = dirs == PL_MOTION_BOTH;
+    const int levels = obj->dir[dirs == PL_MOTION_BACKWARD].fine.num;
     int size = obj->params.block_size_coarse;
-    for (int i = fine->num - 1; i >= 0; i--) {
+    for (int i = levels - 1; i >= 0; i--) {
+        const int parent_size = size;
         size = refine_size(size);
-        bool ok;
-        switch (size) {
-        case 4:
-            ok = motion_refine_4x4_pass(dispatch, obj, d, flow, fine->elem[i]);
-            break;
-        case 1:
-            ok = motion_refine_1x1_pass(dispatch, obj, d, flow, fine->elem[i]);
-            break;
+        for (enum dir d = 0; d < NUM_DIRS; d++) {
+            if (!(dirs & (1 << d)))
+                continue;
+            const struct motion_dir *dir = &obj->dir[d];
+            pl_tex flow = i == levels - 1 ? pl_pyramid_base(dir->coarse)
+                                          : dir->fine.elem[i + 1];
+            bool ok;
+            switch (size) {
+            case 4:
+                ok = motion_refine_4x4_pass(dispatch, obj, d, flow, dir->fine.elem[i]);
+                break;
+            case 1:
+                ok = motion_refine_1x1_pass(dispatch, obj, d, flow, dir->fine.elem[i]);
+                break;
+            }
+            if (!ok)
+                return false;
         }
-        if (!ok)
-            return false;
-        flow = fine->elem[i];
+
+        if (!check)
+            continue;
+
+        for (enum dir d = 0; d < NUM_DIRS; d++) {
+            const struct motion_dir *dir = &obj->dir[d];
+            const bool first = i == levels - 1;
+            pl_tex base = pl_pyramid_base(dir->input);
+            bool ok = motion_check_pass(dispatch, &(struct check_field) {
+                .flow       = dir->fine.elem[i],
+                .other      = obj->dir[!d].fine.elem[i],
+                .out        = dir->fine_tmp.elem[i],
+                .vis_out    = dir->fine_vis.elem[i],
+                .parent     = first ? pl_pyramid_base(dir->coarse)
+                                    : dir->fine.elem[i + 1],
+                .parent_vis = first ? pl_pyramid_base(dir->coarse_vis)
+                                    : dir->fine_vis.elem[i + 1],
+                .w          = base->params.w,
+                .h          = base->params.h,
+                .bs         = size,
+                .parent_bs  = parent_size,
+                .ratio      = 1,
+            });
+            if (!ok)
+                return false;
+        }
+        for (enum dir d = 0; d < NUM_DIRS; d++)
+            PL_SWAP(obj->dir[d].fine.elem[i], obj->dir[d].fine_tmp.elem[i]);
     }
 
     return true;
@@ -2582,6 +2624,16 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
             goto error;
     }
 
+    int refine[MOTION_MAX_REFINE_PASSES];
+    const int num_refine = refine_plan(params, refine);
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        if (!(direction & (1 << d)))
+            continue;
+        if (!refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
+                                     refine, num_refine, mv_fmt))
+            goto error;
+    }
+
     // Visibility of the vectors, for checking them against each other
     if (direction == PL_MOTION_BOTH) {
         pl_fmt vis_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
@@ -2596,19 +2648,13 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
         vis_params.format = vis_fmt;
         for (enum dir d = 0; d < NUM_DIRS; d++) {
             if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse_vis, levels,
-                                     &vis_params))
+                                     &vis_params) ||
+                !refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine_vis, w, h,
+                                         refine, num_refine, vis_fmt) ||
+                !refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine_tmp, w, h,
+                                         refine, num_refine, mv_fmt))
                 goto error;
         }
-    }
-
-    int refine[MOTION_MAX_REFINE_PASSES];
-    const int num_refine = refine_plan(params, refine);
-    for (enum dir d = 0; d < NUM_DIRS; d++) {
-        if (!(direction & (1 << d)))
-            continue;
-        if (!refine_pyramid_recreate(gpu, obj, &obj->dir[d].fine, w, h,
-                                     refine, num_refine, mv_fmt))
-            goto error;
     }
 
     // Only the levels below the top one compensate the gain
@@ -2821,16 +2867,13 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         }
     }
 
+    // The gain is that of the levels below the top one, if any
+    if (ok)
+        ok = refine_flow(input->dispatch, obj, input->direction);
+
     for (enum dir d = 0; ok && d < NUM_DIRS; d++) {
         if (!(input->direction & (1 << d)))
             continue;
-
-        if (obj->dir[d].fine.num) {
-            // The gain is that of the levels below the top one, if any
-            ok = refine_flow(input->dispatch, obj, d);
-            if (!ok)
-                break;
-        }
 
         // NOTE: motion estimation that succeeds on the forward motion
         // estimation call but fails on the backward motion estimation call
