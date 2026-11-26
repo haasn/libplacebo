@@ -450,6 +450,8 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                             &mpar->search_radius_coarse, 32, 1, 1);
             nk_property_int(nk, "Fine search radius", 0,
                             &mpar->search_radius_fine, 32, 1, 1);
+            nk_property_float(nk, "Occlusion fill threshold", 0.0,
+                              &mpar->fill_threshold, 1.0, 0.05, 0.01);
             nk_property_float(nk, "Resolution scale", 0.1, &mpar->scale,
                               1.0, 0.05, 0.01);
 
