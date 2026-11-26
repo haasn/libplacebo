@@ -3349,7 +3349,7 @@ static bool frame_interp_gather(pl_shader sh,
     vec4 sum = vec4(0.0), plain = vec4(0.0);                                    \
     vec2 mean = vec2(0.0);                                                      \
     float total = 0.0, quality = 0.0, spread = 0.0, q, tc;                      \
-    float total_q = 0.0;                                                        \
+    float total_q = 0.0, plain_w = 0.0, count_total = 0.0;                      \
     for (int k = 0; k < 8; k++) {                                               \
         if (count[k] == 0.0)                                                    \
             continue;                                                           \
@@ -3360,7 +3360,9 @@ static bool frame_interp_gather(pl_shader sh,
         float wt = wq * tc;                                                     \
         total_q += wq;                                                          \
         sum += wt * c;                                                          \
-        plain += count[k] * c;                                                  \
+        plain += count[k] * tc * c;                                             \
+        plain_w += count[k] * tc;                                               \
+        count_total += count[k];                                                \
         mean += wt * mv[k];                                                     \
         spread += wt * dot(mv[k], mv[k]);                                       \
         quality += wt * q;                                                      \
@@ -3369,7 +3371,11 @@ static bool frame_interp_gather(pl_shader sh,
                                                                                 \
     vec4 blend = mix(${fr.conv[0]}(textureLod(${fr.tex[0]}, pos_a, 0.0)),       \
                      ${fr.conv[1]}(textureLod(${fr.tex[1]}, pos_b, 0.0)), t);   \
-    vec4 fallback = mix(plain / 8.0, blend, ${float: blend});                   \
+    /* Where the vectors are not trusted, the plain mean of the samples that    \
+     * belong to the pixel, and the blend as far as none does. */               \
+    vec4 fallback = plain_w > 1e-6 ? plain / plain_w : blend;                   \
+    fallback = mix(blend, fallback,                                             \
+                   (1.0 - ${float: blend}) * plain_w / count_total);            \
                                                                                 \
     /* Every sample is blurred by its interpolation, and their mean by as far   \
      * as the vectors differ. As far as they do not, by their variance, one     \
