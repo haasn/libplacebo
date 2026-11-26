@@ -313,6 +313,12 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // uses besides those at a pixel.
 #define MOTION_GATHER_MIX_NEIGHBOUR 4
 
+// Difference, in pixels, between a gathered vector and the flow field at either
+// end of its trajectory at which the sample along it is trusted 1/e as much,
+// plus this fraction of the length of the vector.
+#define MOTION_GATHER_TOLERANCE     2.0f
+#define MOTION_GATHER_TOLERANCE_REL 0.25f
+
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
@@ -3233,9 +3239,14 @@ static bool frame_interp_gather(pl_shader sh,
     // clang-format off
 #pragma GLSLH /* frame_interp_gather */                                         \
     /* The mix of both frames along `mv`, which leads from frame `a` to frame   \
-     * `b` and is at `pos_a` (`pos_b`) at the time `t`. */                      \
+     * `b` and is at `pos_a` (`pos_b`) at the time `t`. `consistency` is how    \
+     * well the flow fields agree with `mv` at either end of it: whether this   \
+     * is the content that passes through the pixel at all. The vectors around  \
+     * a pixel are those of whatever is there in either frame, which need not   \
+     * be what is there at `t`. Each frame is sampled as far as its end agrees, \
+     * which also leaves out the frame the content is occluded in. */           \
     vec4 gather_sample(vec2 pos_a, vec2 pos_b, vec2 mv, float t,                \
-                       out float quality)                                       \
+                       out float quality, out float consistency)                \
     {                                                                           \
         vec2 pa = pos_a - t * mv * ${fr.pt[0]};                                 \
         vec2 pb = pos_b + (1.0 - t) * mv * ${fr.pt[1]};                         \
@@ -3244,8 +3255,15 @@ static bool frame_interp_gather(pl_shader sh,
         /* Don't sample from outside the frame */                               \
         bool in_a = pa == clamp(pa, 0.0, 1.0);                                  \
         bool in_b = pb == clamp(pb, 0.0, 1.0);                                  \
-        float wa = in_a ? 1.0 - t : 0.0;                                        \
-        float wb = in_b ? t : 0.0;                                              \
+        float tol = ${const float: MOTION_GATHER_TOLERANCE}                     \
+                  + ${const float: MOTION_GATHER_TOLERANCE_REL} * length(mv);   \
+        float sa = in_a ? exp(-length(textureLod($fwd, pa, 0.0).xy - mv) / tol)\
+                        : 0.0;                                                  \
+        float sb = in_b ? exp(-length(textureLod($bwd, pb, 0.0).xy + mv) / tol)\
+                        : 0.0;                                                  \
+        consistency = max(sa, sb);                                              \
+        float wa = in_a ? (1.0 - t) * (sa + 1e-3) : 0.0;                        \
+        float wb = in_b ? t * (sb + 1e-3) : 0.0;                                \
         quality = min(in_a ? textureLod($fwd_q, pa, 0.0).x : 1.0,               \
                       in_b ? textureLod($bwd_q, pb, 0.0).x : 1.0);              \
         if (!in_a && !in_b)                                                     \
@@ -3311,12 +3329,17 @@ static bool frame_interp_gather(pl_shader sh,
      * to have a mean when all of them are bad. */                              \
     vec4 sum = vec4(0.0), plain = vec4(0.0);                                    \
     vec2 mean = vec2(0.0);                                                      \
-    float total = 0.0, quality = 0.0, spread = 0.0, q;                          \
+    float total = 0.0, quality = 0.0, spread = 0.0, q, tc;                      \
+    float total_q = 0.0;                                                        \
     for (int k = 0; k < 6; k++) {                                               \
         if (count[k] == 0.0)                                                    \
             continue;                                                           \
-        vec4 c = gather_sample(pos_a, pos_b, mv[k], t, q);                      \
-        float wt = count[k] * (q + 0.02);                                       \
+        vec4 c = gather_sample(pos_a, pos_b, mv[k], t, q, tc);                  \
+        /* A sample that does not belong to the pixel is no more trusted for    \
+         * the quality of its vector. */                                        \
+        float wq = count[k] * (q + 0.02);                                       \
+        float wt = wq * tc;                                                     \
+        total_q += wq;                                                          \
         sum += wt * c;                                                          \
         plain += count[k] * c;                                                  \
         mean += wt * mv[k];                                                     \
@@ -3333,7 +3356,8 @@ static bool frame_interp_gather(pl_shader sh,
      * as the vectors differ. As far as they do not, by their variance, one     \
      * sample along their mean vector with a sharper filter is better. Only     \
      * needed where the quality is not zero. */                                 \
-    quality /= total;                                                           \
+    total = max(total, 1e-6);                                                   \
+    quality /= total_q;                                                         \
     vec4 gathered = sum / total;                                                \
     @if (params->bicubic) {                                                     \
     if (quality > 0.0) {                                                        \
