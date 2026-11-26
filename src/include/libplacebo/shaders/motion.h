@@ -37,7 +37,7 @@ enum pl_motion_direction {
 // flow vectors themselves.
 enum pl_motion_feature {
     PL_MOTION_GLOBAL    = 1 << 0,   // pl_motion_get_global()
-    PL_MOTION_QUALITY   = 1 << 1,   // pl_motion_get_quality()
+    PL_MOTION_QUALITY   = 1 << 1,   // pl_motion_get_quality(), PL_MOTION_BOTH
     PL_MOTION_OCCLUSION = 1 << 2,   // pl_motion_get_occlusion()
 };
 
@@ -170,11 +170,13 @@ PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
 // Returns the quality of the flow field of a single direction, or NULL. The
 // returned texture is owned by the state object.
 //
-// This is a single component UNORM texture in the range [0, 1], with a value
-// of 1.0 corresponding to high quality and 0.0 meaning low quality vectors.
-// With PL_MOTION_OCCLUSION, occluded vectors have a lowered quality.
+// This is a single component UNORM texture with the dimensions of the flow
+// field, from 1.0 for a vector that the other direction leads back along, to
+// 0.0 for one it does not: content that is occluded in the other frame, or a
+// vector that is just wrong. Vectors that were filled in from the content
+// around them keep the quality they had before.
 //
-// See pl_motion_get_flow(), PL_MOTION_QUALITY.
+// See pl_motion_get_flow(), PL_MOTION_QUALITY. Requires PL_MOTION_BOTH.
 PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,
                                     enum pl_motion_direction dir);
 

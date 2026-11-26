@@ -76,7 +76,8 @@ struct sh_motion_obj {
         pl_tex_pyramid input;  // input features
         pl_tex_pyramid raw;    // coarse flow field (blocks), before smoothing
         pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
-        pl_tex_pyramid coarse_vis; // visibility of `coarse`, or {0}
+        pl_tex_pyramid coarse_vis; // visibility of `coarse`, see
+                                   // `motion_check_pass`, or {0}
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
         pl_tex_pyramid fine_vis; // visibility of `fine`, or {0}
         pl_tex_pyramid fine_tmp; // like `fine`, to check it into, or {0}
@@ -270,24 +271,6 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // a mean squared error in 8 bit code values.
 #define MOTION_REFINE_1X1_MARGIN 1.0f
 
-// Side length, in pixels, of the squares that `motion_quality_pass` averages
-// the quality of the vectors over.
-#define MOTION_QUALITY_SUB 2
-
-// Mismatch between the 3x3 window around a pixel and where its vector leads,
-// relative to the texture of the window, from which the quality of the vector
-// starts to fall, and at which it is gone.
-#define MOTION_QUALITY_COST_LO 0.6f
-#define MOTION_QUALITY_COST_HI 1.2f
-
-// Texture added to that of the window, as a standard deviation in 8 bit code
-// values: the level of noise below which a mismatch means nothing.
-#define MOTION_QUALITY_NOISE 6.0f
-
-// Distance, in pixels, of a vector from the median of the 3x3 vectors around
-// it at which its quality falls to 1/e.
-#define MOTION_QUALITY_OUTLIER 4.0f
-
 // Tolerance margins for the occlusion pass.
 #define MOTION_OCCLUSION_ALPHA 16.0f
 #define MOTION_OCCLUSION_BETA  0.03f
@@ -301,6 +284,10 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // on the way there and back. At twice that, it counts as not visible at all.
 #define MOTION_CHECK_TOLERANCE     1.0f
 #define MOTION_CHECK_TOLERANCE_REL 0.05f
+
+// Round trip distance, in pixels, at which the confidence in a vector falls to
+// 1/e, see `motion_check_pass`.
+#define MOTION_CHECK_FALLOFF 2.0f
 
 // Visibility below which `motion_check_pass` replaces a vector, and the factor
 // by which the visibility of the vector it takes falls on the way.
@@ -837,6 +824,12 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
 
     if ((input->features & PL_MOTION_OCCLUSION) && input->direction != PL_MOTION_BOTH) {
         PL_ERR(gpu, "pl_motion_estimate: PL_MOTION_OCCLUSION requires "
+               "PL_MOTION_BOTH!");
+        return false;
+    }
+
+    if ((input->features & PL_MOTION_QUALITY) && input->direction != PL_MOTION_BOTH) {
+        PL_ERR(gpu, "pl_motion_estimate: PL_MOTION_QUALITY requires "
                "PL_MOTION_BOTH!");
         return false;
     }
@@ -1550,6 +1543,7 @@ struct check_field {
     pl_tex out, vis_out;      // the checked field and its visibility
     pl_tex parent, parent_vis; // the next coarser field and its visibility,
                                // or NULL
+    pl_tex quality_out;       // the confidence in the checked field, or NULL
     int w, h;                 // size of the frames at the field's resolution
     int bs;                   // pixels per vector of the field
     int parent_bs;            // pixels per vector of the parent, in its own
@@ -1564,6 +1558,14 @@ struct check_field {
 // vector around its parent, if that is more visible, and takes over its
 // visibility. That is the vector of the content around it, most likely, and
 // it is the one the next finer field starts from.
+//
+// Writes the visibility, the confidence in each vector and whether it was
+// filled in. The confidence is how close the nearest vector of the other
+// direction comes to leading back, which counts more strictly than the
+// visibility: replacing a vector takes a clear failure, trusting one takes a
+// clear success. A filled vector, and any vector refined from one, keeps the
+// lowest confidence on its way: the fields of both directions are filled from
+// the same content, so they agree with each other whether right or not.
 static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
 {
     const int grid_w = f->flow->params.w, grid_h = f->flow->params.h;
@@ -1587,6 +1589,10 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
         parent = bind_tex(sh, "parent", f->parent);
         parent_vis = bind_tex(sh, "parent_vis", f->parent_vis);
     }
+    const bool has_quality = f->quality_out != NULL;
+    ident_t quality_out = NULL_IDENT;
+    if (has_quality)
+        quality_out = bind_img(sh, "quality_out", f->quality_out);
 
     // clang-format off
 #pragma GLSL /* motion_check_pass */                                            \
@@ -1610,9 +1616,24 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
             vis = 1.0 - smoothstep(tol, 2.0 * tol, length(mv + back));          \
         }                                                                       \
                                                                                 \
+        /* A vector that leads out of the frame cannot be confirmed. */         \
+        float conf = 1.0, filled = 0.0, dist = 1e30;                            \
+        ivec2 b0 = ivec2(floor(to / ${const float: (float) f->bs} - 0.5));      \
+        for (int k = 0; k < 4; k++) {                                           \
+            ivec2 b = clamp(b0 + ivec2(k & 1, k >> 1), ivec2(0), grid - 1);     \
+            dist = min(dist, length(mv + texelFetch($other, b, 0).xy));         \
+        }                                                                       \
+        if (dist >= ${const float: MOTION_OCCLUSION_MIN})                       \
+            conf = exp(-dist * ${const float: 1.0f / MOTION_CHECK_FALLOFF});    \
+                                                                                \
         @if (has_parent) {                                                      \
             ivec2 pblk = min(ivec2(c) / ${const int: ratio * pbs},              \
                              ivec2(${const int: pw - 1}, ${const int: ph - 1}));\
+            vec4 pv = texelFetch($parent_vis, pblk, 0);                         \
+            if (pv.z > 0.0) {                                                   \
+                conf = min(conf, pv.y);                                         \
+                filled = 1.0;                                                   \
+            }                                                                   \
             ivec2 best = pblk;                                                  \
             float best_vis = -1.0;                                              \
             for (int k = 0; k < 9; k++) {                                       \
@@ -1629,13 +1650,17 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
             if (vis < ${const float: MOTION_CHECK_THRESHOLD} && best_vis > vis) {\
                 vec2 pmv = ${const float: (float) ratio}                        \
                          * texelFetch($parent, best, 0).xy;                     \
+                conf = min(conf, texelFetch($parent_vis, best, 0).y);           \
+                filled = 1.0;                                                   \
                 mv = (vis * mv + best_vis * pmv) / (vis + best_vis);            \
                 vis = (vis * vis + best_vis * best_vis) / (vis + best_vis)      \
                     * ${const float: MOTION_CHECK_DECAY};                       \
             }                                                                   \
         @}                                                                      \
         imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
-        imageStore($vis_out, blk, vec4(vis, 0.0, 0.0, 0.0));                    \
+        imageStore($vis_out, blk, vec4(vis, conf, filled, 0.0));                \
+        @if (has_quality)                                                       \
+            imageStore($quality_out, blk, vec4(conf, 0.0, 0.0, 0.0));           \
     }
     // clang-format on
 
@@ -1661,6 +1686,7 @@ static bool motion_check_coarse_pass(pl_dispatch dispatch,
         .other      = obj->dir[!d].coarse.elem[level],
         .out        = dir->raw.elem[level],
         .vis_out    = dir->coarse_vis.elem[level],
+        .quality_out = level == 0 && !dir->fine.num ? dir->quality : NULL,
         .parent     = top ? NULL : dir->coarse.elem[level + 1],
         .parent_vis = top ? NULL : dir->coarse_vis.elem[level + 1],
         .w          = dir->input.elem[level]->params.w,
@@ -2072,6 +2098,7 @@ static bool refine_flow(pl_dispatch dispatch, struct sh_motion_obj *obj,
                 .other      = obj->dir[!d].fine.elem[i],
                 .out        = dir->fine_tmp.elem[i],
                 .vis_out    = dir->fine_vis.elem[i],
+                .quality_out = i == 0 ? dir->quality : NULL,
                 .parent     = first ? pl_pyramid_base(dir->coarse)
                                     : dir->fine.elem[i + 1],
                 .parent_vis = first ? pl_pyramid_base(dir->coarse_vis)
@@ -2161,130 +2188,6 @@ static bool motion_occlusion_pass(pl_dispatch dispatch,
         .shader = &sh,
         .width  = grid_w,
         .height = grid_h,
-    ));
-}
-
-// Estimates the quality of `flow_tex`. The quality of a vector scales with the
-// consistency between the 3x3 window around its pixel and where it leads,
-// and with the consistency of the vector and its neighbors.
-//
-// A mismatch means less the more texture the window has, so it is taken
-// relative to that.
-static bool motion_quality_pass(pl_dispatch dispatch,
-                                const struct sh_motion_obj *obj, enum dir d)
-{
-    const struct motion_dir *dir = &obj->dir[d];
-    pl_tex prev_tex = pl_pyramid_base(dir->input);
-    pl_tex next_tex = pl_pyramid_base(obj->dir[!d].input);
-    pl_tex flow_tex = final_flow(dir);
-    pl_tex out_tex = dir->quality;
-    pl_tex occl_tex = dir->occlusion;
-    pl_buf gain_buf = dir->gain;
-
-    const int bs = obj->params.block_size_fine;
-    const int w = prev_tex->params.w, h = prev_tex->params.h;
-    const int out_w = out_tex->params.w, out_h = out_tex->params.h;
-    const int sub = MOTION_QUALITY_SUB, win = sub + 2;
-    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
-    const float noise = 9.0f * PL_SQUARE(MOTION_QUALITY_NOISE / 255.0f);
-    const float outlier = 1.0f / PL_SQUARE(MOTION_QUALITY_OUTLIER);
-
-    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
-                              "motion vector quality (%dx%d)", out_w, out_h);
-    if (!sh)
-        return false;
-
-    ident_t flow = bind_tex(sh, "flow", flow_tex);
-    ident_t out = bind_img(sh, "quality_out", out_tex);
-    ident_t prev = bind_tex(sh, "prev", prev_tex);
-    ident_t next = bind_tex(sh, "next", next_tex);
-    ident_t load_block = sh_tex_load_block(sh, win, win, 0x1, prev,
-                                           &prev_tex->params);
-    ident_t block_ssd = sh_block_ssd(sh, 3, 3, 0, next, &next_tex->params);
-    ident_t load_vectors = sh_tex_load_block(sh, 4, 4, 0x3, flow,
-                                             &flow_tex->params);
-    ident_t median9 = sh_median(sh, 9, 0x3);
-    ident_t gain = get_target_gain(sh, gain_buf);
-    ident_t occl = occl_tex ? bind_tex(sh, "occlusion", occl_tex) : NULL_IDENT;
-
-    // clang-format off
-#pragma GLSL /* motion_quality_pass */                                          \
-    ivec2 size = ivec2(${const int: w}, ${const int: h});                       \
-    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
-    ivec2 sq   = ivec2(gl_GlobalInvocationID.xy);                               \
-    if (all(lessThan(sq, ivec2(${const int: out_w}, ${const int: out_h})))) {   \
-        /* The pixels of the square, and those around it. */                    \
-        ivec2 org = sq * ${const int: sub};                                     \
-        float luma[${const int: win * win}];                                    \
-        $load_block(org - 1, luma);                                             \
-                                                                                \
-        /* The vectors of the pixels of the square, which are at most 2x2,      \
-         * and those around them. */                                            \
-        ivec2 blk_org = org / ${const int: bs} - 1;                             \
-        vec2 flow[16];                                                          \
-        $load_vectors(blk_org, flow);                                           \
-                                                                                \
-        float sum = 0.0, num = 0.0;                                             \
-        float ref_px[9], texture, ssd, d, q;                                    \
-        ivec2 pos, blk;                                                         \
-        vec2 mv, to, around[9];                                                 \
-        @for (y < sub) {                                                        \
-        @for (x < sub) {                                                        \
-            pos = org + ivec2(@x, @y);                                          \
-            if (all(lessThan(pos, size))) {                                     \
-                /* Spelled out for fields with a vector per pixel, to index     \
-                 * the array with constants. */                                 \
-                @if (bs == 1) {                                                 \
-                    blk = ivec2(@x + 1, @y + 1);                                \
-                @} else {                                                       \
-                    blk = pos / ${const int: bs} - blk_org;                     \
-                @}                                                              \
-                @for (j < 9) {                                                  \
-                    around[@j] = flow[(blk.y + @j / 3 - 1) * 4                  \
-                                      + blk.x + @j % 3 - 1];                    \
-                @}                                                              \
-                mv = around[4];                                                 \
-                d = distance(mv, $median9(around));                             \
-                q = exp(-d * d * ${const float: outlier});                      \
-                                                                                \
-                texture = ${const float: noise};                                \
-                @for (j < 9) {                                                  \
-                    ref_px[@j] = luma[(@y + @j / 3) * ${const int: win}         \
-                                      + @x + @j % 3];                           \
-                    d = ref_px[@j] - luma[(@y + 1) * ${const int: win}          \
-                                          + @x + 1];                            \
-                    texture += d * d;                                           \
-                @}                                                              \
-                ssd = $block_ssd(ref_px, vec2(pos - 1) + mv, $gain, 1e30);      \
-                                                                                \
-                /* Where a vector leaves the frame there is nothing to match    \
-                 * it against. */                                               \
-                to = vec2(pos) + 0.5 + mv;                                      \
-                if (all(greaterThanEqual(to, vec2(0.0))) &&                     \
-                    all(lessThanEqual(to, vec2(size))))                         \
-                {                                                               \
-                    q *= 1.0 - smoothstep(                                      \
-                        ${const float: MOTION_QUALITY_COST_LO},                 \
-                        ${const float: MOTION_QUALITY_COST_HI},                 \
-                        sqrt(ssd / texture));                                   \
-                }                                                               \
-                                                                                \
-                @if (occl_tex)                                                  \
-                    q *= 1.0 - texelFetch($occl, pos / ${const int: bs}, 0).x;  \
-                                                                                \
-                sum += q;                                                       \
-                num += 1.0;                                                     \
-            }                                                                   \
-        @}                                                                      \
-        @}                                                                      \
-        imageStore($out, sq, vec4(sum / num, 0.0, 0.0, 0.0));                   \
-    }
-    // clang-format on
-
-    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
-        .shader = &sh,
-        .width  = out_w,
-        .height = out_h,
     ));
 }
 
@@ -2541,21 +2444,6 @@ static bool scale_output(pl_gpu gpu, pl_dispatch dispatch,
     return true;
 }
 
-// Estimates the quality of the vectors of every direction in
-// `obj->valid`, from the luma of the frames they were estimated between.
-static bool estimate_quality(pl_dispatch dispatch,
-                             const struct sh_motion_obj *obj)
-{
-    for (enum dir d = 0; d < NUM_DIRS; d++) {
-        if (!(obj->valid & (1 << d)))
-            continue;
-        if (!motion_quality_pass(dispatch, obj, d))
-            return false;
-    }
-
-    return true;
-}
-
 // Creates all GPU objects needed for this motion estimation call. Whenever the
 // dimensions, parameters, directions or features change, this recreates the
 // entire state from scratch, discarding the temporal state.
@@ -2636,10 +2524,10 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
 
     // Visibility of the vectors, for checking them against each other
     if (direction == PL_MOTION_BOTH) {
-        pl_fmt vis_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
+        pl_fmt vis_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 0,
                                      PL_FMT_CAP_STORABLE);
         if (!vis_fmt) {
-            PL_ERR(gpu, "pl_motion_estimate: no storable single component "
+            PL_ERR(gpu, "pl_motion_estimate: no storable four component "
                         "float format available!");
             goto error;
         }
@@ -2716,11 +2604,10 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
             goto error;
         }
 
-        const int qw = PL_DIV_UP(w, MOTION_QUALITY_SUB);
-        const int qh = PL_DIV_UP(h, MOTION_QUALITY_SUB);
         for (enum dir d = 0; d < NUM_DIRS; d++) {
-            if (!(direction & (1 << d)))
-                continue;
+            // One quality per vector of the final field
+            pl_tex flow = final_flow(&obj->dir[d]);
+            const int qw = flow->params.w, qh = flow->params.h;
             bool ok = pl_tex_recreate(gpu, &obj->dir[d].quality, pl_tex_params(
                 .w          = qw,
                 .h          = qh,
@@ -2895,11 +2782,6 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     if (input->features & PL_MOTION_OCCLUSION) {
         if (!estimate_occlusion(input->dispatch, obj))
-            goto error;
-    }
-
-    if (input->features & PL_MOTION_QUALITY) {
-        if (!estimate_quality(input->dispatch, obj))
             goto error;
     }
 
@@ -3355,7 +3237,7 @@ bool pl_shader_frame_interp(pl_shader sh,
         me_features = PL_MOTION_QUALITY | PL_MOTION_OCCLUSION;
         break;
     case PL_FRAME_INTERP_QUALITY:
-        me_dir = PL_MOTION_FORWARD;
+        me_dir = PL_MOTION_BOTH;
         me_features = PL_MOTION_QUALITY;
         break;
     case PL_FRAME_INTERP_OCCLUSION:
