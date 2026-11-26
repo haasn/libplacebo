@@ -319,6 +319,10 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 #define MOTION_GATHER_TOLERANCE     2.0f
 #define MOTION_GATHER_TOLERANCE_REL 0.25f
 
+// Number of steps that `frame_interp_gather_mix` follows the flow fields for
+// to find the vectors that pass through a pixel.
+#define MOTION_GATHER_TRACE_STEPS 3
+
 // Total number of bins considered when creating the histogram of global
 // motion. NOTE: if the median motion is outside of [-`MOTION_GLOBAL_BINS/2`,
 // `MOTION_GLOBAL_BINS-1`], the global motion is clamped.
@@ -3293,27 +3297,42 @@ static bool frame_interp_gather(pl_shader sh,
     float t = ${dynamic float: t};                                              \
     vec2 pos_a = ${fr.pos[0]}, pos_b = ${fr.pos[1]};                            \
     /* The vectors, all from frame `a` to frame `b`: the forward and the        \
-     * backward one at the pixel, then those next to it along x, then y. */     \
-    vec2 mv[6];                                                                 \
+     * backward one at the pixel, then those next to it along x, then y, then   \
+     * the forward and the backward one that pass through the pixel at `t`,     \
+     * found by following the field from where the pixel's own vectors lead.   \
+     * Thin moving content passes through pixels whose own vectors are all     \
+     * those of what is behind it. */                                           \
+    vec2 mv[8];                                                                 \
     /* How many of the vectors each one stands for, 0 for a duplicate. Vectors  \
      * within 1/8 px of each other give nearly the same sample, so only the     \
      * first is sampled. That is not transitive, so a vector only counts        \
      * towards the first one it matches that is not a duplicate itself. It is   \
      * only compared with the pixel's own vectors and the other one on its      \
      * axis: missing a match only costs time. */                                \
-    float count[6];                                                             \
-    for (int k = 0; k < 6; k++) {                                               \
+    float count[8];                                                             \
+    for (int k = 0; k < 8; k++) {                                               \
         vec2 ofs = vec2(0.0);                                                   \
-        if (k >= 2) {                                                           \
-            bool x = k < 4;                                                     \
-            vec2 dir = mv[0] + mv[1];                                           \
-            bool ahead = (x ? dir.x : dir.y) >= 0.0;                            \
-            float n = ((k & 1) == 0) == ahead ? -${const float: neighbour}      \
-                                              : ${const float: neighbour};      \
-            ofs = (x ? vec2(n, 0.0) : vec2(0.0, n)) * ${fr.pt[0]};              \
+        if (k >= 6) {                                                           \
+            vec2 v = mv[k - 6];                                                 \
+            for (int i = 0; i < ${const int: MOTION_GATHER_TRACE_STEPS}; i++) { \
+                v = k == 6                                                      \
+                  ?  textureLod($fwd, pos_a - t * v * ${fr.pt[0]}, 0.0).xy      \
+                  : -textureLod($bwd, pos_b + (1.0 - t) * v * ${fr.pt[1]},      \
+                                0.0).xy;                                        \
+            }                                                                   \
+            mv[k] = v;                                                          \
+        } else {                                                                \
+            if (k >= 2) {                                                       \
+                bool x = k < 4;                                                 \
+                vec2 dir = mv[0] + mv[1];                                       \
+                bool ahead = (x ? dir.x : dir.y) >= 0.0;                        \
+                float n = ((k & 1) == 0) == ahead ? -${const float: neighbour}  \
+                                                  : ${const float: neighbour};  \
+                ofs = (x ? vec2(n, 0.0) : vec2(0.0, n)) * ${fr.pt[0]};          \
+            }                                                                   \
+            mv[k] = (k & 1) == 0 ?  textureLod($fwd, pos_a + ofs, 0.0).xy       \
+                                 : -textureLod($bwd, pos_a + ofs, 0.0).xy;      \
         }                                                                       \
-        mv[k] = (k & 1) == 0 ?  textureLod($fwd, pos_a + ofs, 0.0).xy           \
-                             : -textureLod($bwd, pos_a + ofs, 0.0).xy;          \
         count[k] = 1.0;                                                         \
         for (int j = 0; j < k; j++) {                                           \
             if (count[k] > 0.0 && count[j] > 0.0 && (j < 2 || j == (k ^ 1)) &&  \
@@ -3331,7 +3350,7 @@ static bool frame_interp_gather(pl_shader sh,
     vec2 mean = vec2(0.0);                                                      \
     float total = 0.0, quality = 0.0, spread = 0.0, q, tc;                      \
     float total_q = 0.0;                                                        \
-    for (int k = 0; k < 6; k++) {                                               \
+    for (int k = 0; k < 8; k++) {                                               \
         if (count[k] == 0.0)                                                    \
             continue;                                                           \
         vec4 c = gather_sample(pos_a, pos_b, mv[k], t, q, tc);                  \
@@ -3350,7 +3369,7 @@ static bool frame_interp_gather(pl_shader sh,
                                                                                 \
     vec4 blend = mix(${fr.conv[0]}(textureLod(${fr.tex[0]}, pos_a, 0.0)),       \
                      ${fr.conv[1]}(textureLod(${fr.tex[1]}, pos_b, 0.0)), t);   \
-    vec4 fallback = mix(plain / 6.0, blend, ${float: blend});                   \
+    vec4 fallback = mix(plain / 8.0, blend, ${float: blend});                   \
                                                                                 \
     /* Every sample is blurred by its interpolation, and their mean by as far   \
      * as the vectors differ. As far as they do not, by their variance, one     \
