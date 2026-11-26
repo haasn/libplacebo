@@ -261,11 +261,9 @@ struct pl_frame_interp_params {
 
     // When a pixel's motion vector is low quality, fall back to a regular
     // in-place temporal mix. Setting this higher trades artefacts for
-    // blurriness or stutter. The default of 0.5 provides a reasonable visual
-    // balance.
-    //
-    // Lower values maximize PSNR and visual smoothness, but result in the
-    // most motion artefacts.
+    // blurriness or stutter. Samples that do not belong to a pixel fall back
+    // to it regardless, so the default of 0.0 leaves it to where the vectors
+    // of the pixel are trusted too little.
     float gather_mix_blend;
 
     // If true, sample the frames with bicubic interpolation rather than
@@ -276,7 +274,7 @@ struct pl_frame_interp_params {
 #define PL_FRAME_INTERP_DEFAULTS                                               \
     .algo = PL_FRAME_INTERP_GATHER,                                            \
     .motion = {PL_MOTION_ESTIMATE_DEFAULTS},                                   \
-    .gather_mix_blend = 0.5f,                                                  \
+    .gather_mix_blend = 0.0f,                                                  \
     .bicubic = true,
 
 #define pl_frame_interp_params(...)                                            \
