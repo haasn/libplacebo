@@ -76,6 +76,7 @@ struct sh_motion_obj {
         pl_tex_pyramid input;  // input features
         pl_tex_pyramid raw;    // coarse flow field (blocks), before smoothing
         pl_tex_pyramid coarse; // coarse flow field (blocks), after smoothing
+        pl_tex_pyramid coarse_vis; // visibility of `coarse`, or {0}
         pl_tex_pyramid fine;   // fine flow field (pixels), or {0}
         pl_buf gain;           // brightness gain (float), or NULL
         pl_tex occlusion;      // occlusion map, or NULL
@@ -292,6 +293,21 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // Round-trip distance, in pixels, below which a vector counts as visible
 // without checking the content at the end of the round trip.
 #define MOTION_OCCLUSION_MIN   0.5f
+
+// Round trip distance, in pixels, at which `motion_check_pass` starts to count
+// a vector as not visible, plus this fraction of the length of the vectors
+// on the way there and back. At twice that, it counts as not visible at all.
+#define MOTION_CHECK_TOLERANCE     1.0f
+#define MOTION_CHECK_TOLERANCE_REL 0.05f
+
+// Visibility below which `motion_check_pass` replaces a vector, and the factor
+// by which the visibility of the vector it takes falls on the way.
+#define MOTION_CHECK_THRESHOLD 0.5f
+#define MOTION_CHECK_DECAY     0.9f
+
+// Visibility that `motion_check_pass` takes off the neighbours of a parent
+// vector, so that they only win over the parent if clearly more visible.
+#define MOTION_CHECK_NEIGHBOUR 0.05f
 
 // Distance, in pixels, of the neighbouring vectors `frame_interp_gather_mix`
 // uses besides those at a pixel.
@@ -559,6 +575,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].input);
         pl_pyramid_destroy(gpu, &obj->dir[d].raw);
         pl_pyramid_destroy(gpu, &obj->dir[d].coarse);
+        pl_pyramid_destroy(gpu, &obj->dir[d].coarse_vis);
         pl_pyramid_destroy(gpu, &obj->dir[d].fine);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
         pl_tex_destroy(gpu, &obj->dir[d].occlusion);
@@ -1523,6 +1540,133 @@ error:
     return false;
 }
 
+// A field of one direction for `motion_check_pass`
+struct check_field {
+    pl_tex flow, other;       // the field, and that of the other direction
+    pl_tex out, vis_out;      // the checked field and its visibility
+    pl_tex parent, parent_vis; // the next coarser field and its visibility,
+                               // or NULL
+    int w, h;                 // size of the frames at the field's resolution
+    int bs;                   // pixels per vector of the field
+    int parent_bs;            // pixels per vector of the parent, in its own
+    int ratio;                // resolution of the field over the parent's
+};
+
+// Checks every vector of a field against the field of the other direction:
+// the visibility of a vector falls as it fails to lead back from where it
+// lands. Content that moved out of view, and vectors that are just wrong,
+// both fail; either way the vector is no good. One that is less visible than
+// `MOTION_CHECK_THRESHOLD` is mixed, by visibility, with the most visible
+// vector around its parent, if that is more visible, and takes over its
+// visibility. That is the vector of the content around it, most likely, and
+// it is the one the next finer field starts from.
+static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
+{
+    const int grid_w = f->flow->params.w, grid_h = f->flow->params.h;
+    const bool has_parent = f->parent != NULL;
+    const int pw = has_parent ? f->parent->params.w : 1;
+    const int ph = has_parent ? f->parent->params.h : 1;
+    const int pbs = has_parent ? f->parent_bs : 1, ratio = f->ratio;
+
+    pl_shader sh = pass_begin(dispatch, 8, 8, 0,
+                              "motion round trip check (%dx%d)", grid_w,
+                              grid_h);
+    if (!sh)
+        return false;
+
+    ident_t flow = bind_tex(sh, "flow", f->flow);
+    ident_t other = bind_tex(sh, "other", f->other);
+    ident_t out = bind_img(sh, "flow_out", f->out);
+    ident_t vis_out = bind_img(sh, "vis_out", f->vis_out);
+    ident_t parent = NULL_IDENT, parent_vis = NULL_IDENT;
+    if (has_parent) {
+        parent = bind_tex(sh, "parent", f->parent);
+        parent_vis = bind_tex(sh, "parent_vis", f->parent_vis);
+    }
+
+    // clang-format off
+#pragma GLSL /* motion_check_pass */                                            \
+    ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
+    ivec2 grid = ivec2(${const int: grid_w}, ${const int: grid_h});             \
+    if (all(lessThan(blk, grid))) {                                             \
+        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
+        vec2 c = (vec2(blk) + 0.5) * ${const float: (float) f->bs};             \
+        vec2 to = c + mv;                                                       \
+                                                                                \
+        /* Where a vector leaves the frame there is nothing to check. */        \
+        float vis = 1.0;                                                        \
+        if (all(greaterThanEqual(to, vec2(0.0))) &&                             \
+            all(lessThan(to, vec2(${const int: f->w}, ${const int: f->h}))))    \
+        {                                                                       \
+            ivec2 b = min(ivec2(to / ${const float: (float) f->bs}), grid - 1); \
+            vec2 back = texelFetch($other, b, 0).xy;                            \
+            float tol = ${const float: MOTION_CHECK_TOLERANCE}                  \
+                      + ${const float: MOTION_CHECK_TOLERANCE_REL}              \
+                      * (length(mv) + length(back));                            \
+            vis = 1.0 - smoothstep(tol, 2.0 * tol, length(mv + back));          \
+        }                                                                       \
+                                                                                \
+        @if (has_parent) {                                                      \
+            ivec2 pblk = min(ivec2(c) / ${const int: ratio * pbs},              \
+                             ivec2(${const int: pw - 1}, ${const int: ph - 1}));\
+            ivec2 best = pblk;                                                  \
+            float best_vis = -1.0;                                              \
+            for (int k = 0; k < 9; k++) {                                       \
+                ivec2 p = clamp(pblk + ivec2(k % 3, k / 3) - 1, ivec2(0),       \
+                                ivec2(${const int: pw - 1},                     \
+                                      ${const int: ph - 1}));                   \
+                float v = texelFetch($parent_vis, p, 0).x                       \
+                        - ${const float: MOTION_CHECK_NEIGHBOUR} * float(k != 4);\
+                if (v > best_vis) {                                             \
+                    best = p;                                                   \
+                    best_vis = v;                                               \
+                }                                                               \
+            }                                                                   \
+            if (vis < ${const float: MOTION_CHECK_THRESHOLD} && best_vis > vis) {\
+                vec2 pmv = ${const float: (float) ratio}                        \
+                         * texelFetch($parent, best, 0).xy;                     \
+                mv = (vis * mv + best_vis * pmv) / (vis + best_vis);            \
+                vis = (vis * vis + best_vis * best_vis) / (vis + best_vis)      \
+                    * ${const float: MOTION_CHECK_DECAY};                       \
+            }                                                                   \
+        @}                                                                      \
+        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
+        imageStore($vis_out, blk, vec4(vis, 0.0, 0.0, 0.0));                    \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = grid_w,
+        .height = grid_h,
+    ));
+}
+
+// Checks level `level` of the coarse field of `d`, see `motion_check_pass`,
+// into `raw`.
+static bool motion_check_coarse_pass(pl_dispatch dispatch,
+                                     const struct sh_motion_obj *obj,
+                                     enum dir d, int level)
+{
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex flow = dir->coarse.elem[level];
+    const bool top = flow == pl_pyramid_tip(dir->coarse);
+    const int bs = obj->params.block_size_coarse;
+    return motion_check_pass(dispatch, &(struct check_field) {
+        .flow       = flow,
+        .other      = obj->dir[!d].coarse.elem[level],
+        .out        = dir->raw.elem[level],
+        .vis_out    = dir->coarse_vis.elem[level],
+        .parent     = top ? NULL : dir->coarse.elem[level + 1],
+        .parent_vis = top ? NULL : dir->coarse_vis.elem[level + 1],
+        .w          = dir->input.elem[level]->params.w,
+        .h          = dir->input.elem[level]->params.h,
+        .bs         = bs,
+        .parent_bs  = bs,
+        .ratio      = 2,
+    });
+}
+
 // Replace every block's motion vector with one derived from the surrounding 3x3
 // neighbourhood of blocks, to suppress vectors that the search got wrong.
 static bool motion_smooth_pass(pl_dispatch dispatch,
@@ -2438,6 +2582,25 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
             goto error;
     }
 
+    // Visibility of the vectors, for checking them against each other
+    if (direction == PL_MOTION_BOTH) {
+        pl_fmt vis_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 0,
+                                     PL_FMT_CAP_STORABLE);
+        if (!vis_fmt) {
+            PL_ERR(gpu, "pl_motion_estimate: no storable single component "
+                        "float format available!");
+            goto error;
+        }
+
+        struct pl_tex_params vis_params = *flow_params;
+        vis_params.format = vis_fmt;
+        for (enum dir d = 0; d < NUM_DIRS; d++) {
+            if (!pl_pyramid_recreate(gpu, obj, &obj->dir[d].coarse_vis, levels,
+                                     &vis_params))
+                goto error;
+        }
+    }
+
     int refine[MOTION_MAX_REFINE_PASSES];
     const int num_refine = refine_plan(params, refine);
     for (enum dir d = 0; d < NUM_DIRS; d++) {
@@ -2630,7 +2793,10 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
 
     // Both directions level by level, the forward one first, which is the order
-    // the temporal prior of the backward direction expects
+    // the temporal prior of the backward direction expects. With both, each
+    // level is checked against the other direction before the next one starts
+    // from it.
+    const bool check = input->direction == PL_MOTION_BOTH;
     bool ok = true;
     for (int i = levels - 1; ok && i >= 0; i--) {
         for (enum dir d = 0; ok && d < NUM_DIRS; d++) {
@@ -2638,7 +2804,19 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
                 continue;
             ok = motion_search_pass(input->dispatch, obj, d, i) &&
                  motion_smooth_pass(input->dispatch, obj, d, i);
-            if (ok && i == levels - 1 && i > 0)
+        }
+
+        if (check) {
+            for (enum dir d = 0; ok && d < NUM_DIRS; d++)
+                ok = motion_check_coarse_pass(input->dispatch, obj, d, i);
+            // The checked fields replace the coarse ones, which are no longer
+            // needed, and the raw ones are free until the next level
+            for (enum dir d = 0; ok && d < NUM_DIRS; d++)
+                PL_SWAP(obj->dir[d].coarse.elem[i], obj->dir[d].raw.elem[i]);
+        }
+
+        for (enum dir d = 0; ok && d < NUM_DIRS; d++) {
+            if ((input->direction & (1 << d)) && i == levels - 1 && i > 0)
                 ok = motion_gain_pass(input->dispatch, obj, d);
         }
     }
