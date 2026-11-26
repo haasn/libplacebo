@@ -69,6 +69,12 @@ struct pl_motion_estimate_params {
     int search_radius_coarse;
     int search_radius_fine;
 
+    // With PL_MOTION_OCCLUSION, vectors whose visibility (1 - occlusion, see
+    // pl_motion_get_occlusion) is below this threshold are blended with those
+    // of more visible content around them. Must be in the range [0, 1]. 0.0
+    // disables this.
+    float fill_threshold;
+
     // Scale, relative to the frames, to estimate the motion at. Must be in the
     // range (0, 1]. Lower values trade the detail of the flow fields for
     // speed. Frames that were upscaled hold no more detail than their source,
@@ -85,6 +91,7 @@ struct pl_motion_estimate_params {
     .pyramid_levels         = 0,                                               \
     .search_radius_coarse   = 8,                                               \
     .search_radius_fine     = 1,                                               \
+    .fill_threshold         = 0.35,                                            \
     .scale                  = 0.5,
 
 #define pl_motion_estimate_params(...)                                         \

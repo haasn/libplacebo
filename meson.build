@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '407': 'add pl_motion_estimate_params.fill_threshold',
       '406': 'PL_MOTION_QUALITY requires PL_MOTION_BOTH',
       '405': 'add pl_motion_estimate_params.scale',
       '404': 'add pl_frame_interp_params.bicubic',

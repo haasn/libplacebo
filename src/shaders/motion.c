@@ -83,6 +83,10 @@ struct sh_motion_obj {
         pl_tex_pyramid fine_tmp; // like `fine`, to check it into, or {0}
         pl_buf gain;           // brightness gain (float), or NULL
         pl_tex occlusion;      // occlusion map, or NULL
+        pl_tex_pyramid fill_mv;  // most visible vectors, see motion_fill_pass,
+        pl_tex_pyramid fill_vis; // and their visibility, or {0}
+        pl_tex filled;         // final flow field with the occluded vectors
+                               // filled in, or NULL
         pl_tex scaled;         // output flow field in pixels of the frames,
                                // or NULL if those are the estimated ones
         pl_tex quality;        // flow quality estimate, or NULL
@@ -109,6 +113,12 @@ static pl_tex final_flow(const struct motion_dir *dir)
 {
     return dir->fine.num ? pl_pyramid_base(dir->fine)
                          : pl_pyramid_base(dir->coarse);
+}
+
+// The flow field that is output for `dir`.
+static pl_tex output_flow(const struct motion_dir *dir)
+{
+    return dir->filled ? dir->filled : final_flow(dir);
 }
 
 // Binds `tex` for use with `texelFetch`.
@@ -274,6 +284,11 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // Round trip distance, in pixels, below which `motion_check_pass` fully trusts
 // a vector.
 #define MOTION_OCCLUSION_MIN   0.5f
+
+// Number of levels of blocks that `motion_fill_pass` takes the vectors of
+// occluded content from, the largest being 2^MOTION_FILL_LEVELS flow texels
+// across.
+#define MOTION_FILL_LEVELS 7
 
 // Round trip distance, in pixels, at which `motion_check_pass` starts to count
 // a vector as not visible, plus this fraction of the length of the vectors
@@ -566,6 +581,9 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].fine_tmp);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
         pl_tex_destroy(gpu, &obj->dir[d].occlusion);
+        pl_pyramid_destroy(gpu, &obj->dir[d].fill_mv);
+        pl_pyramid_destroy(gpu, &obj->dir[d].fill_vis);
+        pl_tex_destroy(gpu, &obj->dir[d].filled);
         pl_tex_destroy(gpu, &obj->dir[d].scaled);
         pl_tex_destroy(gpu, &obj->dir[d].quality);
         pl_buf_destroy(gpu, &obj->dir[d].global_flow);
@@ -627,7 +645,7 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
     if (!obj || d < 0 || !(obj->valid & dir))
         return NULL;
 
-    return obj->dir[d].scaled ? obj->dir[d].scaled : final_flow(&obj->dir[d]);
+    return obj->dir[d].scaled ? obj->dir[d].scaled : output_flow(&obj->dir[d]);
 }
 
 pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
@@ -776,6 +794,7 @@ static bool params_eq(const struct pl_motion_estimate_params *a,
            a->pyramid_levels == b->pyramid_levels &&
            a->search_radius_coarse == b->search_radius_coarse &&
            a->search_radius_fine == b->search_radius_fine &&
+           a->fill_threshold == b->fill_threshold &&
            a->scale == b->scale;
 }
 
@@ -865,6 +884,11 @@ static bool validate(pl_gpu gpu, const struct pl_motion_estimate_input *input,
 
     if (params->search_radius_coarse > 64 || params->search_radius_fine > 64) {
         PL_ERR(gpu, "pl_motion_estimate: search radii must be <= 64!");
+        return false;
+    }
+
+    if (!(params->fill_threshold >= 0.0f && params->fill_threshold <= 1.0f)) {
+        PL_ERR(gpu, "pl_motion_estimate: fill_threshold must be in [0, 1]!");
         return false;
     }
 
@@ -2301,12 +2325,167 @@ static bool estimate_global(pl_dispatch dispatch,
            motion_global_median_pass(dispatch, obj, d);
 }
 
+// Reduces each 2x2 texels of level `i - 1` of the fill pyramid of `d`, or of
+// the final flow field for `i` = 0, to the vector and visibility of the most
+// visible one, at level `i`.
+static bool motion_fill_reduce_pass(pl_dispatch dispatch,
+                                    const struct sh_motion_obj *obj,
+                                    enum dir d, int i)
+{
+    const struct motion_dir *dir = &obj->dir[d];
+    const bool base = i == 0;
+    pl_tex in_mv_tex   = base ? final_flow(dir) : dir->fill_mv.elem[i - 1];
+    pl_tex in_vis_tex  = base ? dir->occlusion : dir->fill_vis.elem[i - 1];
+    pl_tex out_mv_tex  = dir->fill_mv.elem[i];
+    pl_tex out_vis_tex = dir->fill_vis.elem[i];
+
+    const int in_w = in_mv_tex->params.w, in_h = in_mv_tex->params.h;
+    const int out_w = out_mv_tex->params.w, out_h = out_mv_tex->params.h;
+
+    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
+                              "motion fill reduce (%dx%d)", out_w, out_h);
+    if (!sh)
+        return false;
+
+    ident_t in_mv   = bind_tex(sh, "fill_mv_in", in_mv_tex);
+    ident_t in_vis  = bind_tex(sh, "fill_vis_in", in_vis_tex);
+    ident_t out_mv  = bind_img(sh, "fill_mv_out", out_mv_tex);
+    ident_t out_vis = bind_img(sh, "fill_vis_out", out_vis_tex);
+
+    // clang-format off
+#pragma GLSL /* motion_fill_reduce_pass */                                      \
+    ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
+    if (all(lessThan(blk, ivec2(${const int: out_w}, ${const int: out_h})))) {  \
+        vec2 mv = vec2(0.0);                                                    \
+        float vis = -1.0;                                                       \
+        for (int j = 0; j < 4; j++) {                                           \
+            ivec2 c = min(2 * blk + ivec2(j & 1, j >> 1), ivec2(                \
+                          ${const int: in_w - 1}, ${const int: in_h - 1}));     \
+            float v = texelFetch($in_vis, c, 0).x;                              \
+            @if (base)                                                          \
+                v = 1.0 - v;                                                    \
+            if (v > vis) {                                                      \
+                vis = v;                                                        \
+                mv = texelFetch($in_mv, c, 0).xy;                               \
+            }                                                                   \
+        }                                                                       \
+        imageStore($out_mv, blk, vec4(mv, 0.0, 0.0));                           \
+        imageStore($out_vis, blk, vec4(vis, 0.0, 0.0, 0.0));                    \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = out_w,
+        .height = out_h,
+    ));
+}
+
+// Fills in the vectors of `d` that are less visible than `fill_threshold`.
+//
+// Content that is occluded in the other frame cannot be matched, so its vector
+// is whatever happened to look similar. It most likely moves like the visible
+// content around it. So, from the largest block down, each block that holds
+// such a vector takes over the result of the block around it if that is more
+// visible, mixed with its own vector by visibility, and so does the vector.
+static bool motion_fill_pass(pl_dispatch dispatch,
+                             const struct sh_motion_obj *obj, enum dir d)
+{
+    const struct motion_dir *dir = &obj->dir[d];
+    pl_tex flow_tex = final_flow(dir);
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
+    const float thresh = obj->params.fill_threshold;
+    const int top = dir->fill_vis.num - 1;
+
+    pl_shader sh = pass_begin(dispatch, 16, 16, 0,
+                              "motion fill (%dx%d)", grid_w, grid_h);
+    if (!sh)
+        return false;
+
+    ident_t flow = bind_tex(sh, "flow", flow_tex);
+    ident_t occl = bind_tex(sh, "occlusion", dir->occlusion);
+    ident_t out  = bind_img(sh, "flow_out", dir->filled);
+
+    // clang-format off
+#pragma GLSL /* motion_fill_pass */                                             \
+    ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
+    if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h})))) {\
+        const float thresh = ${const float: thresh};                            \
+        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
+        float vis = 1.0 - texelFetch($occl, blk, 0).x;                          \
+        if (vis < thresh) {                                                     \
+            vec2 fill_mv, mv_i;                                                 \
+            float fill_vis, vis_i;
+    // clang-format on
+
+    for (int i = top; i >= 0; i--) {
+        pl_tex lvl_mv_tex = dir->fill_mv.elem[i];
+        ident_t lvl_mv  = bind_tex(sh, "fill_mv", lvl_mv_tex);
+        ident_t lvl_vis = bind_tex(sh, "fill_vis", dir->fill_vis.elem[i]);
+        const int lvl_w = lvl_mv_tex->params.w, lvl_h = lvl_mv_tex->params.h;
+
+        // clang-format off
+#pragma GLSL /* motion_fill_pass */                                             \
+            {                                                                   \
+                ivec2 p = min(blk >> ${const int: i + 1},                       \
+                              ivec2(${const int: lvl_w - 1},                    \
+                                    ${const int: lvl_h - 1}));                  \
+                mv_i = texelFetch($lvl_mv, p, 0).xy;                            \
+                vis_i = texelFetch($lvl_vis, p, 0).x;                           \
+            }                                                                   \
+            @if (i == top) {                                                    \
+                fill_mv = mv_i;                                                 \
+                fill_vis = vis_i;                                               \
+            @} else {                                                           \
+                if (vis_i < thresh && fill_vis > vis_i) {                       \
+                    fill_mv = (vis_i * mv_i + fill_vis * fill_mv)               \
+                            / (vis_i + fill_vis);                               \
+                } else {                                                        \
+                    fill_mv = mv_i;                                             \
+                    fill_vis = vis_i;                                           \
+                }                                                               \
+            @}
+        // clang-format on
+    }
+
+    // clang-format off
+#pragma GLSL /* motion_fill_pass */                                             \
+            if (fill_vis > vis)                                                 \
+                mv = (vis * mv + fill_vis * fill_mv) / (vis + fill_vis);        \
+        }                                                                       \
+        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
+    }
+    // clang-format on
+
+    return pl_dispatch_compute(dispatch, pl_dispatch_compute_params(
+        .shader = &sh,
+        .width  = grid_w,
+        .height = grid_h,
+    ));
+}
+
+// Fills in the occluded vectors of both directions, see `motion_fill_pass`.
+static bool fill_occluded(pl_dispatch dispatch, const struct sh_motion_obj *obj)
+{
+    pl_assert(obj->valid == PL_MOTION_BOTH);
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        for (int i = 0; i < obj->dir[d].fill_vis.num; i++) {
+            if (!motion_fill_reduce_pass(dispatch, obj, d, i))
+                return false;
+        }
+        if (!motion_fill_pass(dispatch, obj, d))
+            return false;
+    }
+
+    return true;
+}
+
 // Converts the output flow field of `d` to pixels of the frames.
 static bool motion_scale_pass(pl_dispatch dispatch,
                               const struct sh_motion_obj *obj, enum dir d)
 {
     const struct motion_dir *dir = &obj->dir[d];
-    pl_tex in_tex = final_flow(dir);
+    pl_tex in_tex = output_flow(dir);
     const int grid_w = in_tex->params.w, grid_h = in_tex->params.h;
 
     pl_shader sh = pass_begin(dispatch, 16, 16, 0,
@@ -2517,6 +2696,41 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
                             "occlusion map!", ow, oh);
                 goto error;
             }
+
+            if (params->fill_threshold > 0.0f) {
+                const int fw = PL_DIV_UP(ow, 2), fh = PL_DIV_UP(oh, 2);
+                const int fill_levels = PL_MIN(MOTION_FILL_LEVELS,
+                                               pl_pyramid_max_levels(fw, fh));
+                ok = pl_pyramid_recreate(gpu, obj, &obj->dir[d].fill_mv,
+                                         fill_levels, pl_tex_params(
+                    .w          = fw,
+                    .h          = fh,
+                    .format     = flow->params.format,
+                    .sampleable = true,
+                    .storable   = true,
+                ));
+                ok = ok && pl_pyramid_recreate(gpu, obj, &obj->dir[d].fill_vis,
+                                               fill_levels, pl_tex_params(
+                    .w          = fw,
+                    .h          = fh,
+                    .format     = ofmt,
+                    .sampleable = true,
+                    .storable   = true,
+                ));
+                ok = ok && pl_tex_recreate(gpu, &obj->dir[d].filled,
+                                           pl_tex_params(
+                    .w          = ow,
+                    .h          = oh,
+                    .format     = flow->params.format,
+                    .sampleable = true,
+                    .storable   = true,
+                ));
+                if (!ok) {
+                    PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d "
+                                "fill fields!", ow, oh);
+                    goto error;
+                }
+            }
         }
     }
 
@@ -2704,6 +2918,9 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
         goto error;
 
     obj->valid = input->direction;
+
+    if (obj->dir[FWD].filled && !fill_occluded(input->dispatch, obj))
+        goto error;
 
     if (!scale_output(gpu, input->dispatch, obj))
         goto error;
