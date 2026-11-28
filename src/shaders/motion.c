@@ -3200,6 +3200,9 @@ static bool frame_interp_gather(pl_shader sh,
     }
 
     sh_describe(sh, "frame interpolation (gather)");
+    // Leaves the alpha of every sample unused, which the compiler can drop
+    const bool opaque = input->a.repr.alpha == PL_ALPHA_NONE &&
+                        input->b.repr.alpha == PL_ALPHA_NONE;
     const float t = PL_CLAMP(input->t, 0.0f, 1.0f);
     const int neighbour = MOTION_GATHER_MIX_NEIGHBOUR;
     const float blend = PL_CLAMP(params->gather_mix_blend, 0.0f, 1.0f);
@@ -3377,6 +3380,8 @@ static bool frame_interp_gather(pl_shader sh,
     }                                                                           \
     @}                                                                          \
     color = mix(fallback, gathered, quality);                                   \
+    @if (opaque)                                                                \
+        color.a = 1.0;                                                          \
     }
     // clang-format on
 
