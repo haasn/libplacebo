@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     7,
     # API version
     {
+      '408': 'merge pl_motion_get_quality/occlusion into pl_motion_get_flow',
       '407': 'add pl_motion_estimate_params.fill_threshold',
       '406': 'PL_MOTION_QUALITY requires PL_MOTION_BOTH',
       '405': 'add pl_motion_estimate_params.scale',

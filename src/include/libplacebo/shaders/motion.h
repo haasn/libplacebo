@@ -37,8 +37,8 @@ enum pl_motion_direction {
 // flow vectors themselves.
 enum pl_motion_feature {
     PL_MOTION_GLOBAL    = 1 << 0,   // pl_motion_get_global()
-    PL_MOTION_QUALITY   = 1 << 1,   // pl_motion_get_quality(), PL_MOTION_BOTH
-    PL_MOTION_OCCLUSION = 1 << 2,   // pl_motion_get_occlusion()
+    PL_MOTION_QUALITY   = 1 << 1,   // pl_motion_get_flow(), PL_MOTION_BOTH
+    PL_MOTION_OCCLUSION = 1 << 2,   // pl_motion_get_flow(), PL_MOTION_BOTH
 };
 
 // Tunable parameters. Kept separate from the per-call inputs so that callers
@@ -69,8 +69,8 @@ struct pl_motion_estimate_params {
     int search_radius_coarse;
     int search_radius_fine;
 
-    // With PL_MOTION_OCCLUSION, vectors whose visibility (1 - occlusion, see
-    // pl_motion_get_occlusion) is below this threshold are blended with those
+    // With PL_MOTION_OCCLUSION, vectors whose visibility (see
+    // pl_motion_get_flow) is below this threshold are blended with those
     // of more visible content around them. Must be in the range [0, 1]. 0.0
     // disables this.
     float fill_threshold;
@@ -159,12 +159,23 @@ PL_API void pl_motion_reset(pl_shader_obj state);
 // texture is owned by the state object and must not be modified by the caller,
 // nor used after another `pl_motion_estimate` or `pl_motion_reset` call.
 //
-// This returns a float-valued texture such that `vec2(mv.x, mv.y)` is the
-// displacement in pixels from the earlier frame to the later frame. (Or
-// from the later frame to the earlier frame, for PL_MOTION_BACKWARD)
+// This is a four component float texture, holding for every vector:
 //
-// In other words, if the field holds `d` at position `p`, then the content
-// at source frame location `p` corresponds to `p + d` in the target frame.
+//   .xy  the displacement `vec2(mv.x, mv.y)` in pixels of the frames, from the
+//        earlier frame to the later frame (or from the later frame to the
+//        earlier frame, for PL_MOTION_BACKWARD). If the field holds `d` at
+//        position `p`, the content at source frame location `p` corresponds
+//        to `p + d` in the target frame.
+//
+//   .z   with PL_MOTION_QUALITY, the quality of the vector, from 1.0 for one
+//        that the other direction leads back along, to 0.0 for one it does
+//        not: content that is occluded in the other frame, or a vector that is
+//        just wrong. Vectors that were filled in from the content around them
+//        keep the quality they had before. 1.0 otherwise.
+//
+//   .w   with PL_MOTION_OCCLUSION, how likely the source content of the vector
+//        is to be visible in the target frame, from 1.0 for visible to 0.0 for
+//        occluded content. 1.0 otherwise.
 //
 // This texture may have a size that differs from the inputs themselves.
 // However, the granularity is guaranteed to lie somewhere in the range
@@ -173,31 +184,6 @@ PL_API void pl_motion_reset(pl_shader_obj state);
 // provides the exact dimensions and format.
 PL_API pl_tex pl_motion_get_flow(pl_shader_obj state,
                                  enum pl_motion_direction dir);
-
-// Returns the quality of the flow field of a single direction, or NULL. The
-// returned texture is owned by the state object.
-//
-// This is a single component UNORM texture with the dimensions of the flow
-// field, from 1.0 for a vector that the other direction leads back along, to
-// 0.0 for one it does not: content that is occluded in the other frame, or a
-// vector that is just wrong. Vectors that were filled in from the content
-// around them keep the quality they had before.
-//
-// See pl_motion_get_flow(), PL_MOTION_QUALITY. Requires PL_MOTION_BOTH.
-PL_API pl_tex pl_motion_get_quality(pl_shader_obj state,
-                                    enum pl_motion_direction dir);
-
-// Returns the occlusion estimate of a single direction, or NULL. The
-// returned texture is owned by the state object, and has the same dimensions
-// as the flow field.
-//
-// This is a single component UNORM texture estimating how likely the source
-// content of each vector is to be occluded in the target frame, from 0.0 for
-// visible to 1.0 for occluded content.
-//
-// See pl_motion_get_flow(), PL_MOTION_OCCLUSION. Requires PL_MOTION_BOTH.
-PL_API pl_tex pl_motion_get_occlusion(pl_shader_obj state,
-                                      enum pl_motion_direction dir);
 
 // Returns the buffer holding the global motion vector, or NULL. The returned
 // buffer is owned by the state object.

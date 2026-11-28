@@ -87,8 +87,7 @@ struct sh_motion_obj {
         pl_tex_pyramid fill_vis; // and their visibility, or {0}
         pl_tex filled;         // final flow field with the occluded vectors
                                // filled in, or NULL
-        pl_tex scaled;         // output flow field in pixels of the frames,
-                               // or NULL if those are the estimated ones
+        pl_tex output;         // output field, see pl_motion_get_flow
         pl_tex quality;        // flow quality estimate, or NULL
         pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
@@ -594,7 +593,7 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].fill_mv);
         pl_pyramid_destroy(gpu, &obj->dir[d].fill_vis);
         pl_tex_destroy(gpu, &obj->dir[d].filled);
-        pl_tex_destroy(gpu, &obj->dir[d].scaled);
+        pl_tex_destroy(gpu, &obj->dir[d].output);
         pl_tex_destroy(gpu, &obj->dir[d].quality);
         pl_buf_destroy(gpu, &obj->dir[d].global_flow);
     }
@@ -655,31 +654,7 @@ pl_tex pl_motion_get_flow(pl_shader_obj state, enum pl_motion_direction dir)
     if (!obj || d < 0 || !(obj->valid & dir))
         return NULL;
 
-    return obj->dir[d].scaled ? obj->dir[d].scaled : output_flow(&obj->dir[d]);
-}
-
-pl_tex pl_motion_get_quality(pl_shader_obj state, enum pl_motion_direction dir)
-{
-    struct sh_motion_obj *obj = SH_OBJ_LOOKUP(state, PL_SHADER_OBJ_MOTION,
-                                              struct sh_motion_obj);
-    const int d = dir_index(dir);
-    if (!obj || d < 0 || !(obj->features & PL_MOTION_QUALITY) ||
-        !(obj->valid & dir))
-        return NULL;
-
-    return obj->dir[d].quality;
-}
-
-pl_tex pl_motion_get_occlusion(pl_shader_obj state, enum pl_motion_direction dir)
-{
-    struct sh_motion_obj *obj = SH_OBJ_LOOKUP(state, PL_SHADER_OBJ_MOTION,
-                                              struct sh_motion_obj);
-    const int d = dir_index(dir);
-    if (!obj || d < 0 || !(obj->features & PL_MOTION_OCCLUSION) ||
-        !(obj->valid & dir))
-        return NULL;
-
-    return obj->dir[d].occlusion;
+    return obj->dir[d].output;
 }
 
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
@@ -690,16 +665,6 @@ ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
         return NULL_IDENT;
 
     return bind_tex(sh, "motion_flow", flow);
-}
-
-ident_t sh_motion_quality(pl_shader sh, pl_shader_obj state,
-                          enum pl_motion_direction dir)
-{
-    pl_tex quality = pl_motion_get_quality(state, dir);
-    if (!quality)
-        return NULL_IDENT;
-
-    return bind_tex_linear(sh, "motion_quality", quality, NULL, NULL);
 }
 
 pl_buf pl_motion_get_global_buf(pl_shader_obj state,
@@ -2490,30 +2455,38 @@ static bool fill_occluded(pl_dispatch dispatch, const struct sh_motion_obj *obj)
     return true;
 }
 
-// Converts the output flow field of `d` to pixels of the frames.
-static bool motion_scale_pass(pl_dispatch dispatch,
-                              const struct sh_motion_obj *obj, enum dir d)
+// Writes the output field of `d`, see pl_motion_get_flow.
+static bool motion_output_pass(pl_dispatch dispatch,
+                               const struct sh_motion_obj *obj, enum dir d)
 {
     const struct motion_dir *dir = &obj->dir[d];
     pl_tex in_tex = output_flow(dir);
     const int grid_w = in_tex->params.w, grid_h = in_tex->params.h;
 
     pl_shader sh = pass_begin(dispatch, 16, 16, 0,
-                              "motion vector scaling (%dx%d)", grid_w, grid_h);
+                              "motion output (%dx%d)", grid_w, grid_h);
     if (!sh)
         return false;
 
+    const bool has_q = dir->quality, has_occl = dir->occlusion;
     ident_t in  = bind_tex(sh, "flow", in_tex);
-    ident_t out = bind_img(sh, "flow_out", dir->scaled);
+    ident_t out = bind_img(sh, "flow_out", dir->output);
+    ident_t q = has_q ? bind_tex(sh, "quality", dir->quality) : NULL_IDENT;
+    ident_t occl = has_occl ? bind_tex(sh, "occlusion", dir->occlusion)
+                            : NULL_IDENT;
 
     // clang-format off
-#pragma GLSL /* motion_scale_pass */                                            \
+#pragma GLSL /* motion_output_pass */                                           \
     ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
     if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h})))) {\
         vec2 scale = vec2(${float: obj->mv_scale[0]},                           \
                           ${float: obj->mv_scale[1]});                          \
-        vec2 mv = texelFetch($in, blk, 0).xy * scale;                           \
-        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
+        vec4 res = vec4(texelFetch($in, blk, 0).xy * scale, 1.0, 1.0);          \
+        @if (has_q)                                                             \
+            res.z = texelFetch($q, blk, 0).x;                                   \
+        @if (has_occl)                                                          \
+            res.w = 1.0 - texelFetch($occl, blk, 0).x;                          \
+        imageStore($out, blk, res);                                             \
     }
     // clang-format on
 
@@ -2522,40 +2495,6 @@ static bool motion_scale_pass(pl_dispatch dispatch,
         .width  = grid_w,
         .height = grid_h,
     ));
-}
-
-// Converts the output flow fields of every direction in `obj->valid` to pixels
-// of the frames, unless those are the pixels they were estimated in.
-static bool scale_output(pl_gpu gpu, pl_dispatch dispatch,
-                         struct sh_motion_obj *obj)
-{
-    const bool scaled = obj->mv_scale[0] != 1.0f || obj->mv_scale[1] != 1.0f;
-    for (enum dir d = 0; d < NUM_DIRS; d++) {
-        struct motion_dir *dir = &obj->dir[d];
-        if (!scaled || !(obj->valid & (1 << d))) {
-            pl_tex_destroy(gpu, &dir->scaled);
-            continue;
-        }
-
-        pl_tex flow = final_flow(dir);
-        bool ok = pl_tex_recreate(gpu, &dir->scaled, pl_tex_params(
-            .w          = flow->params.w,
-            .h          = flow->params.h,
-            .format     = flow->params.format,
-            .sampleable = true,
-            .storable   = true,
-        ));
-        if (!ok) {
-            PL_ERR(gpu, "pl_motion_estimate: failed creating scaled flow "
-                        "field!");
-            return false;
-        }
-
-        if (!motion_scale_pass(dispatch, obj, d))
-            return false;
-    }
-
-    return true;
 }
 
 // Creates all GPU objects needed for this motion estimation call. Whenever the
@@ -2772,6 +2711,31 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
         }
     }
 
+    pl_fmt out_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 0,
+                                 PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR);
+    if (!out_fmt) {
+        PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
+                    "four component float format available!");
+        goto error;
+    }
+
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        if (!(direction & (1 << d)))
+            continue;
+        pl_tex flow = final_flow(&obj->dir[d]);
+        bool ok = pl_tex_recreate(gpu, &obj->dir[d].output, pl_tex_params(
+            .w          = flow->params.w,
+            .h          = flow->params.h,
+            .format     = out_fmt,
+            .sampleable = true,
+            .storable   = true,
+        ));
+        if (!ok) {
+            PL_ERR(gpu, "pl_motion_estimate: failed creating output field!");
+            goto error;
+        }
+    }
+
     if (features & PL_MOTION_GLOBAL) {
         if (!global_buf_create(gpu, &obj->scratch.hist,
                                2 * MOTION_GLOBAL_BINS * sizeof(uint32_t),
@@ -2932,8 +2896,11 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
     if (obj->dir[FWD].filled && !fill_occluded(input->dispatch, obj))
         goto error;
 
-    if (!scale_output(gpu, input->dispatch, obj))
-        goto error;
+    for (enum dir d = 0; d < NUM_DIRS; d++) {
+        if ((obj->valid & (1 << d)) &&
+            !motion_output_pass(input->dispatch, obj, d))
+            goto error;
+    }
 
 
     // Reuse frame `b`'s luma pyramid as the next frame `a`, and `a`'s buffers
@@ -3066,12 +3033,6 @@ static bool frame_interp_visualize(pl_shader sh,
         return false;
     }
 
-    ident_t quality = sh_motion_quality(sh, *input->state, PL_MOTION_FORWARD);
-    if (!quality) {
-        PL_ERR(sh, "pl_shader_frame_interp: no flow quality available!");
-        return false;
-    }
-
     ident_t pos, frame = sh_bind(sh, input->a.tex, PL_TEX_ADDRESS_CLAMP,
                                  PL_TEX_SAMPLE_NEAREST, "frame", NULL, &pos,
                                  NULL);
@@ -3099,7 +3060,8 @@ static bool frame_interp_visualize(pl_shader sh,
     const vec3 R = vec3(1.0, 0.0, 0.0), Y = vec3(1.0, 1.0, 0.0),                \
                G = vec3(0.0, 1.0, 0.0), C = vec3(0.0, 1.0, 1.0),                \
                B = vec3(0.0, 0.0, 1.0), M = vec3(1.0, 0.0, 1.0);                \
-    vec2 uv = textureLod($flow, $pos, 0.0).xy;                                  \
+    vec3 uvq = textureLod($flow, $pos, 0.0).xyz;                                \
+    vec2 uv = uvq.xy;                                                           \
     float rad = length(uv);                                                     \
     vec3 col = vec3(1.0);                                                       \
     if (rad > 0.0) {                                                            \
@@ -3113,7 +3075,7 @@ static bool frame_interp_visualize(pl_shader sh,
         col = vec3(1.0) - rad / (rad + 4.0) * (vec3(1.0) - col);                \
     }                                                                           \
     float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));                        \
-    col = mix(vec3(luma), col, textureLod($quality, $pos, 0.0).x);              \
+    col = mix(vec3(luma), col, uvq.z);                                          \
     color = vec4(col, 1.0);
     // clang-format on
 
@@ -3130,16 +3092,18 @@ static bool frame_interp_visualize(pl_shader sh,
     return true;
 }
 
-// Draws a grayscale map
+// Draws component `comp` of the forward output field as a grayscale map,
+// optionally inverted
 static bool frame_interp_map(pl_shader sh,
                              const struct pl_frame_interp_input *input,
-                             pl_tex map_tex, const char *name,
+                             int comp, bool invert, const char *name,
                              const struct pl_color_space *out_color)
 {
     const struct pl_tex_params *tpars = &input->a.tex->params;
     if (!sh_require(sh, PL_SHADER_SIG_NONE, tpars->w, tpars->h))
         return false;
 
+    pl_tex map_tex = pl_motion_get_flow(*input->state, PL_MOTION_FORWARD);
     if (!map_tex) {
         PL_ERR(sh, "pl_shader_frame_interp: no %s available!", name);
         return false;
@@ -3153,7 +3117,9 @@ static bool frame_interp_map(pl_shader sh,
 
     // clang-format off
 #pragma GLSL /* pl_shader_frame_interp (visualize map) */                       \
-    float v = textureLod($map, $pos, 0.0).x;                                    \
+    float v = textureLod($map, $pos, 0.0)[${const int: comp}];                  \
+    @if (invert)                                                                \
+        v = 1.0 - v;                                                            \
     vec4 color = vec4(vec3(v), 1.0);
     // clang-format on
 
@@ -3222,9 +3188,7 @@ static bool frame_interp_gather(pl_shader sh,
     const pl_shader_obj state = *input->state;
     ident_t fwd = sh_motion_flow(sh, state, PL_MOTION_FORWARD);
     ident_t bwd = sh_motion_flow(sh, state, PL_MOTION_BACKWARD);
-    ident_t fwd_q = sh_motion_quality(sh, state, PL_MOTION_FORWARD);
-    ident_t bwd_q = sh_motion_quality(sh, state, PL_MOTION_BACKWARD);
-    if (!fwd || !bwd || !fwd_q || !bwd_q) {
+    if (!fwd || !bwd) {
         PL_ERR(sh, "pl_shader_frame_interp: no flow fields available!");
         return false;
     }
@@ -3261,15 +3225,14 @@ static bool frame_interp_gather(pl_shader sh,
         bool in_b = pb == clamp(pb, 0.0, 1.0);                                  \
         float tol = ${const float: MOTION_GATHER_TOLERANCE}                     \
                   + ${const float: MOTION_GATHER_TOLERANCE_REL} * length(mv);   \
-        float sa = in_a ? exp(-length(textureLod($fwd, pa, 0.0).xy - mv) / tol)\
-                        : 0.0;                                                  \
-        float sb = in_b ? exp(-length(textureLod($bwd, pb, 0.0).xy + mv) / tol)\
-                        : 0.0;                                                  \
+        vec3 fa = textureLod($fwd, pa, 0.0).xyz;                                \
+        vec3 fb = textureLod($bwd, pb, 0.0).xyz;                                \
+        float sa = in_a ? exp(-length(fa.xy - mv) / tol) : 0.0;                 \
+        float sb = in_b ? exp(-length(fb.xy + mv) / tol) : 0.0;                 \
         consistency = max(sa, sb);                                              \
         float wa = in_a ? (1.0 - t) * (sa + 1e-3) : 0.0;                        \
         float wb = in_b ? t * (sb + 1e-3) : 0.0;                                \
-        quality = min(in_a ? textureLod($fwd_q, pa, 0.0).x : 1.0,               \
-                      in_b ? textureLod($bwd_q, pb, 0.0).x : 1.0);              \
+        quality = min(in_a ? fa.z : 1.0, in_b ? fb.z : 1.0);                    \
         if (!in_a && !in_b)                                                     \
             quality = 0.0;                                                      \
         return wa + wb > 0.0 ? (wa * ca + wb * cb) / (wa + wb)                  \
@@ -3495,12 +3458,10 @@ bool pl_shader_frame_interp(pl_shader sh,
         return frame_interp_global(sh, input, &out_color);
     case PL_FRAME_INTERP_VISUALIZE:
         return frame_interp_visualize(sh, input, &out_color);
-    case PL_FRAME_INTERP_QUALITY:;
-        pl_tex quality = pl_motion_get_quality(*input->state, PL_MOTION_FORWARD);
-        return frame_interp_map(sh, input, quality, "flow quality", &out_color);
-    case PL_FRAME_INTERP_OCCLUSION:;
-        pl_tex occl = pl_motion_get_occlusion(*input->state, PL_MOTION_FORWARD);
-        return frame_interp_map(sh, input, occl, "occlusion", &out_color);
+    case PL_FRAME_INTERP_QUALITY:
+        return frame_interp_map(sh, input, 2, false, "flow quality", &out_color);
+    case PL_FRAME_INTERP_OCCLUSION:
+        return frame_interp_map(sh, input, 3, true, "occlusion", &out_color);
     case PL_FRAME_INTERP_ALGO_COUNT:
         break;
     }

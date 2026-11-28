@@ -41,17 +41,9 @@ ident_t sh_motion_global(pl_shader sh, pl_shader_obj state,
 // The texture is not guaranteed to match the dimensions of the frames that it
 // estimated motion between, as motion may be stored in block granularity; the
 // texture should be sampled with relative coordinates. Each element of the
-// texture holds in .xy the vector `vec2(mv.x, mv.y)`, in pixels, which may be
-// fractional. Returns NULL_IDENT if the most recent call to
+// texture is laid out as described for `pl_motion_get_flow`. Returns
+// NULL_IDENT if the most recent call to
 // `pl_motion_estimate` did not compute `dir`, or if it was not successfully
 // called prior to this function call.
 ident_t sh_motion_flow(pl_shader sh, pl_shader_obj state,
                        enum pl_motion_direction dir);
-
-// Binds the quality of the flow field of a single direction to `sh` as a
-// read-only texture with linear sampling, and returns an identifier for the
-// texture, to be sampled with relative coordinates. See
-// `pl_motion_get_quality`. Returns NULL_IDENT if the quality of `dir` was not
-// estimated for the current frame pair.
-ident_t sh_motion_quality(pl_shader sh, pl_shader_obj state,
-                          enum pl_motion_direction dir);
