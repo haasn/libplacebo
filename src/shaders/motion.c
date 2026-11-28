@@ -83,7 +83,8 @@ struct sh_motion_obj {
         pl_tex_pyramid fine_tmp; // like `fine`, to check it into, or {0}
         pl_buf gain;           // brightness gain (float), or NULL
         pl_tex_pyramid fill_mv;  // most visible vectors, see motion_fill_pass,
-        pl_tex_pyramid fill_vis; // and their visibility, or {0}
+        pl_tex_pyramid fill_vis; // and their visibility (and, at the base,
+                                 // the least visibility), or {0}
         pl_tex output;         // output field, see pl_motion_get_flow
         pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
@@ -2320,7 +2321,8 @@ static bool estimate_global(pl_dispatch dispatch,
 
 // Reduces each 2x2 texels of level `i - 1` of the fill pyramid of `d`, or of
 // the output field for `i` = 0, to the vector and visibility of the most
-// visible one, at level `i`.
+// visible one, at level `i`. For `i` = 0, also to the least visibility, for
+// `motion_fill_pass` to skip the blocks that need no filling.
 static bool motion_fill_reduce_pass(pl_dispatch dispatch,
                                     const struct sh_motion_obj *obj,
                                     enum dir d, int i)
@@ -2351,7 +2353,7 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
     ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
     if (all(lessThan(blk, ivec2(${const int: out_w}, ${const int: out_h})))) {  \
         vec2 mv = vec2(0.0);                                                    \
-        float vis = -1.0;                                                       \
+        float vis = -1.0, least = 1.0;                                          \
         for (int j = 0; j < 4; j++) {                                           \
             ivec2 c = min(2 * blk + ivec2(j & 1, j >> 1), ivec2(                \
                           ${const int: in_w - 1}, ${const int: in_h - 1}));     \
@@ -2359,13 +2361,14 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
                 float v = texelFetch($in_vis, c, 0).w;                          \
             @else                                                               \
                 float v = texelFetch($in_vis, c, 0).x;                          \
+            least = min(least, v);                                              \
             if (v > vis) {                                                      \
                 vis = v;                                                        \
                 mv = texelFetch($in_mv, c, 0).xy;                               \
             }                                                                   \
         }                                                                       \
         imageStore($out_mv, blk, vec4(mv, 0.0, 0.0));                           \
-        imageStore($out_vis, blk, vec4(vis, 0.0, 0.0, 0.0));                    \
+        imageStore($out_vis, blk, vec4(vis, least, 0.0, 0.0));                  \
     }
     // clang-format on
 
@@ -2388,65 +2391,76 @@ static bool motion_fill_pass(pl_dispatch dispatch,
                              const struct sh_motion_obj *obj, enum dir d)
 {
     const struct motion_dir *dir = &obj->dir[d];
-    const int grid_w = dir->output->params.w, grid_h = dir->output->params.h;
+    const int out_w = dir->output->params.w, out_h = dir->output->params.h;
+    pl_tex base_tex = dir->fill_vis.elem[0];
+    const int grid_w = base_tex->params.w, grid_h = base_tex->params.h;
     const float thresh = obj->params.fill_threshold;
     const int top = dir->fill_vis.num - 1;
 
     pl_shader sh = pass_begin(dispatch, 16, 16, 0,
-                              "motion fill (%dx%d)", grid_w, grid_h);
+                              "motion fill (%dx%d)", out_w, out_h);
     if (!sh)
         return false;
 
     ident_t field = bind_img_rw(sh, "field", dir->output);
+    ident_t base = bind_tex(sh, "fill_base", base_tex);
 
+    // One thread per 2x2 texels, which share the blocks they are filled from
     // clang-format off
 #pragma GLSL /* motion_fill_pass */                                             \
     ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
-    if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h})))) {\
-        const float thresh = ${const float: thresh};                            \
-        vec4 res = imageLoad($field, blk);                                      \
-        float vis = res.w;                                                      \
-        if (vis < thresh) {                                                     \
-            vec2 fill_mv, mv_i;                                                 \
-            float fill_vis, vis_i;
+    const float thresh = ${const float: thresh};                                \
+    vec2 fill_mv, mv_i;                                                         \
+    float fill_vis, vis_i;                                                      \
+    if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h}))) &&\
+        texelFetch($base, blk, 0).y < thresh)                                   \
+    {
     // clang-format on
 
     for (int i = top; i >= 0; i--) {
         pl_tex lvl_mv_tex = dir->fill_mv.elem[i];
         ident_t lvl_mv  = bind_tex(sh, "fill_mv", lvl_mv_tex);
-        ident_t lvl_vis = bind_tex(sh, "fill_vis", dir->fill_vis.elem[i]);
+        ident_t lvl_vis = i ? bind_tex(sh, "fill_vis", dir->fill_vis.elem[i])
+                            : base;
         const int lvl_w = lvl_mv_tex->params.w, lvl_h = lvl_mv_tex->params.h;
 
         // clang-format off
 #pragma GLSL /* motion_fill_pass */                                             \
-            {                                                                   \
-                ivec2 p = min(blk >> ${const int: i + 1},                       \
-                              ivec2(${const int: lvl_w - 1},                    \
-                                    ${const int: lvl_h - 1}));                  \
-                mv_i = texelFetch($lvl_mv, p, 0).xy;                            \
-                vis_i = texelFetch($lvl_vis, p, 0).x;                           \
-            }                                                                   \
-            @if (i == top) {                                                    \
+        {                                                                       \
+            ivec2 p = min(blk >> ${const int: i},                               \
+                          ivec2(${const int: lvl_w - 1},                        \
+                                ${const int: lvl_h - 1}));                      \
+            mv_i = texelFetch($lvl_mv, p, 0).xy;                                \
+            vis_i = texelFetch($lvl_vis, p, 0).x;                               \
+        }                                                                       \
+        @if (i == top) {                                                        \
+            fill_mv = mv_i;                                                     \
+            fill_vis = vis_i;                                                   \
+        @} else {                                                               \
+            if (vis_i < thresh && fill_vis > vis_i) {                           \
+                fill_mv = (vis_i * mv_i + fill_vis * fill_mv)                   \
+                        / (vis_i + fill_vis);                                   \
+            } else {                                                            \
                 fill_mv = mv_i;                                                 \
                 fill_vis = vis_i;                                               \
-            @} else {                                                           \
-                if (vis_i < thresh && fill_vis > vis_i) {                       \
-                    fill_mv = (vis_i * mv_i + fill_vis * fill_mv)               \
-                            / (vis_i + fill_vis);                               \
-                } else {                                                        \
-                    fill_mv = mv_i;                                             \
-                    fill_vis = vis_i;                                           \
-                }                                                               \
-            @}
+            }                                                                   \
+        @}
         // clang-format on
     }
 
     // clang-format off
 #pragma GLSL /* motion_fill_pass */                                             \
-            if (fill_vis > vis) {                                               \
+        for (int j = 0; j < 4; j++) {                                           \
+            ivec2 c = 2 * blk + ivec2(j & 1, j >> 1);                           \
+            if (any(greaterThanEqual(c, ivec2(${const int: out_w},              \
+                                              ${const int: out_h}))))           \
+                continue;                                                       \
+            vec4 res = imageLoad($field, c);                                    \
+            float vis = res.w;                                                  \
+            if (vis < thresh && fill_vis > vis) {                               \
                 res.xy = (vis * res.xy + fill_vis * fill_mv)                    \
                        / (vis + fill_vis);                                      \
-                imageStore($field, blk, res);                                   \
+                imageStore($field, c, res);                                     \
             }                                                                   \
         }                                                                       \
     }
@@ -2621,10 +2635,10 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
     // The vectors of occluded content are filled in from the most visible ones
     // around them
     if ((features & PL_MOTION_OCCLUSION) && params->fill_threshold > 0.0f) {
-        pl_fmt vfmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
+        pl_fmt vfmt = pl_find_fmt(gpu, PL_FMT_UNORM, 2, 8, 8,
                                   PL_FMT_CAP_STORABLE);
         if (!vfmt) {
-            PL_ERR(gpu, "pl_motion_estimate: no storable single component "
+            PL_ERR(gpu, "pl_motion_estimate: no storable two component "
                         "format available!");
             goto error;
         }
