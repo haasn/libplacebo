@@ -308,8 +308,8 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // vector, so that they only win over the parent if clearly more visible.
 #define MOTION_CHECK_NEIGHBOUR 0.05f
 
-// Distance, in pixels, of the neighbouring vectors `frame_interp_gather_mix`
-// uses besides those at a pixel.
+// Distance, in pixels, along the motion at a pixel, of the neighbouring vectors
+// `frame_interp_gather` uses besides those at the pixel.
 #define MOTION_GATHER_MIX_NEIGHBOUR 4
 
 // Difference, in pixels, between a gathered vector and the flow field at either
@@ -3260,25 +3260,26 @@ static bool frame_interp_gather(pl_shader sh,
     float t = ${dynamic float: t};                                              \
     vec2 pos_a = ${fr.pos[0]}, pos_b = ${fr.pos[1]};                            \
     /* The vectors, all from frame `a` to frame `b`: the forward and the        \
-     * backward one at the pixel, then those next to it along x, then y, then   \
-     * the forward and the backward one that pass through the pixel at `t`,     \
-     * found by following the field from where the pixel's own vectors lead.   \
-     * Thin moving content passes through pixels whose own vectors are all     \
-     * those of what is behind it. */                                           \
-    vec2 mv[8];                                                                 \
+     * backward one at the pixel, then the forward one behind it and the        \
+     * backward one ahead of it along their motion, then the forward and the    \
+     * backward one that pass through the pixel at `t`, found by following the  \
+     * field from where the pixel's own vectors lead. Thin moving content       \
+     * passes through pixels whose own vectors are all those of what is behind  \
+     * it. */                                                                   \
+    vec2 mv[6];                                                                 \
     /* How many of the vectors each one stands for, 0 for a duplicate. Vectors  \
      * within 1/8 px of each other give nearly the same sample, so only the     \
      * first is sampled. That is not transitive, so a vector only counts        \
      * towards the first one it matches that is not a duplicate itself. It is   \
-     * only compared with the pixel's own vectors and the other one on its      \
-     * axis: missing a match only costs time. */                                \
-    float count[8];                                                             \
-    @for (k < 8) {                                                              \
+     * only compared with the pixel's own vectors and the other one of its      \
+     * pair: missing a match only costs time. */                                \
+    float count[6];                                                             \
+    @for (k < 6) {                                                              \
     {                                                                           \
-        @if @(k >= 6) {                                                         \
-            vec2 v = mv[@k - 6];                                                \
+        @if @(k >= 4) {                                                         \
+            vec2 v = mv[@k - 4];                                                \
             for (int i = 0; i < ${const int: MOTION_GATHER_TRACE_STEPS}; i++) { \
-                @if @(k == 6) {                                                 \
+                @if @(k == 4) {                                                 \
                     v = textureLod($fwd, pos_a - t * v * ${fr.pt[0]}, 0.0).xy;  \
                 @} else {                                                       \
                     v = -textureLod($bwd, pos_b + (1.0 - t) * v * ${fr.pt[1]},  \
@@ -3290,20 +3291,11 @@ static bool frame_interp_gather(pl_shader sh,
             vec2 ofs = vec2(0.0);                                               \
             @if @(k >= 2) {                                                     \
                 vec2 dir = mv[0] + mv[1];                                       \
-                /* The forward vector behind the pixel along the motion, the    \
-                 * backward one ahead of it */                                  \
-                @if @(k < 4)                                                    \
-                    bool ahead = dir.x >= 0.0;                                  \
+                dir = dot(dir, dir) > 0.0 ? normalize(dir) : vec2(1.0, 0.0);    \
+                @if @(k == 2)                                                   \
+                    ofs = -${const float: neighbour} * dir * ${fr.pt[0]};       \
                 @else                                                           \
-                    bool ahead = dir.y >= 0.0;                                  \
-                float n = ahead ? ${const float: neighbour}                     \
-                                : -${const float: neighbour};                   \
-                @if @((k & 1) == 0)                                             \
-                    n = -n;                                                     \
-                @if @(k < 4)                                                    \
-                    ofs = vec2(n, 0.0) * ${fr.pt[0]};                           \
-                @else                                                           \
-                    ofs = vec2(0.0, n) * ${fr.pt[0]};                           \
+                    ofs = ${const float: neighbour} * dir * ${fr.pt[0]};        \
             @}                                                                  \
             @if @((k & 1) == 0)                                                 \
                 mv[@k] = textureLod($fwd, pos_a + ofs, 0.0).xy;                 \
@@ -3342,7 +3334,7 @@ static bool frame_interp_gather(pl_shader sh,
     vec2 mean = vec2(0.0);                                                      \
     float total = 0.0, quality = 0.0, spread = 0.0, q, tc;                      \
     float total_q = 0.0, plain_w = 0.0, count_total = 0.0;                      \
-    for (int k = 0; k < 8; k++) {                                               \
+    for (int k = 0; k < 6; k++) {                                               \
         if (count[k] == 0.0)                                                    \
             continue;                                                           \
         vec4 c = gather_sample(pos_a, pos_b, mv[k], t, q, tc);                  \
