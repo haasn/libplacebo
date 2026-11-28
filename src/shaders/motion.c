@@ -3310,39 +3310,68 @@ static bool frame_interp_gather(pl_shader sh,
      * only compared with the pixel's own vectors and the other one on its      \
      * axis: missing a match only costs time. */                                \
     float count[8];                                                             \
-    for (int k = 0; k < 8; k++) {                                               \
-        vec2 ofs = vec2(0.0);                                                   \
-        if (k >= 6) {                                                           \
-            vec2 v = mv[k - 6];                                                 \
+    @for (k < 8) {                                                              \
+    {                                                                           \
+        @if @(k >= 6) {                                                         \
+            vec2 v = mv[@k - 6];                                                \
             for (int i = 0; i < ${const int: MOTION_GATHER_TRACE_STEPS}; i++) { \
-                v = k == 6                                                      \
-                  ?  textureLod($fwd, pos_a - t * v * ${fr.pt[0]}, 0.0).xy      \
-                  : -textureLod($bwd, pos_b + (1.0 - t) * v * ${fr.pt[1]},      \
-                                0.0).xy;                                        \
+                @if @(k == 6) {                                                 \
+                    v = textureLod($fwd, pos_a - t * v * ${fr.pt[0]}, 0.0).xy;  \
+                @} else {                                                       \
+                    v = -textureLod($bwd, pos_b + (1.0 - t) * v * ${fr.pt[1]},  \
+                                    0.0).xy;                                    \
+                @}                                                              \
             }                                                                   \
-            mv[k] = v;                                                          \
-        } else {                                                                \
-            if (k >= 2) {                                                       \
-                bool x = k < 4;                                                 \
+            mv[@k] = v;                                                         \
+        @} else {                                                               \
+            vec2 ofs = vec2(0.0);                                               \
+            @if @(k >= 2) {                                                     \
                 vec2 dir = mv[0] + mv[1];                                       \
-                bool ahead = (x ? dir.x : dir.y) >= 0.0;                        \
-                float n = ((k & 1) == 0) == ahead ? -${const float: neighbour}  \
-                                                  : ${const float: neighbour};  \
-                ofs = (x ? vec2(n, 0.0) : vec2(0.0, n)) * ${fr.pt[0]};          \
+                /* The forward vector behind the pixel along the motion, the    \
+                 * backward one ahead of it */                                  \
+                @if @(k < 4)                                                    \
+                    bool ahead = dir.x >= 0.0;                                  \
+                @else                                                           \
+                    bool ahead = dir.y >= 0.0;                                  \
+                float n = ahead ? ${const float: neighbour}                     \
+                                : -${const float: neighbour};                   \
+                @if @((k & 1) == 0)                                             \
+                    n = -n;                                                     \
+                @if @(k < 4)                                                    \
+                    ofs = vec2(n, 0.0) * ${fr.pt[0]};                           \
+                @else                                                           \
+                    ofs = vec2(0.0, n) * ${fr.pt[0]};                           \
+            @}                                                                  \
+            @if @((k & 1) == 0)                                                 \
+                mv[@k] = textureLod($fwd, pos_a + ofs, 0.0).xy;                 \
+            @else                                                               \
+                mv[@k] = -textureLod($bwd, pos_a + ofs, 0.0).xy;                \
+        @}                                                                      \
+        count[@k] = 1.0;                                                        \
+        @if @(k >= 1) {                                                         \
+            if (all(lessThanEqual(abs(mv[@k] - mv[0]), vec2(0.125)))) {         \
+                count[0] += 1.0;                                                \
+                count[@k] = 0.0;                                                \
             }                                                                   \
-            mv[k] = (k & 1) == 0 ?  textureLod($fwd, pos_a + ofs, 0.0).xy       \
-                                 : -textureLod($bwd, pos_a + ofs, 0.0).xy;      \
-        }                                                                       \
-        count[k] = 1.0;                                                         \
-        for (int j = 0; j < k; j++) {                                           \
-            if (count[k] > 0.0 && count[j] > 0.0 && (j < 2 || j == (k ^ 1)) &&  \
-                all(lessThanEqual(abs(mv[k] - mv[j]), vec2(0.125))))            \
+        @}                                                                      \
+        @if @(k >= 2) {                                                         \
+            if (count[@k] > 0.0 && count[1] > 0.0 &&                            \
+                all(lessThanEqual(abs(mv[@k] - mv[1]), vec2(0.125))))           \
             {                                                                   \
-                count[j] += 1.0;                                                \
-                count[k] = 0.0;                                                 \
+                count[1] += 1.0;                                                \
+                count[@k] = 0.0;                                                \
             }                                                                   \
-        }                                                                       \
+        @}                                                                      \
+        @if @(k >= 3 && (k & 1)) {                                              \
+            if (count[@k] > 0.0 && count[@k - 1] > 0.0 &&                       \
+                all(lessThanEqual(abs(mv[@k] - mv[@k - 1]), vec2(0.125))))      \
+            {                                                                   \
+                count[@k - 1] += 1.0;                                           \
+                count[@k] = 0.0;                                                \
+            }                                                                   \
+        @}                                                                      \
     }                                                                           \
+    @}                                                                          \
                                                                                 \
     /* The samples are weighted by their quality, which never is quite none,    \
      * to have a mean when all of them are bad. */                              \
