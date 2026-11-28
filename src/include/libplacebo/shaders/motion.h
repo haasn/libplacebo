@@ -92,7 +92,7 @@ struct pl_motion_estimate_params {
     .search_radius_coarse   = 8,                                               \
     .search_radius_fine     = 1,                                               \
     .fill_threshold         = 0.35,                                            \
-    .scale                  = 0.5,
+    .scale                  = 1.0,
 
 #define pl_motion_estimate_params(...)                                         \
     (&(struct pl_motion_estimate_params) {                                     \
@@ -268,6 +268,11 @@ struct pl_frame_interp_params {
 
 PL_API extern const struct pl_frame_interp_params
     pl_frame_interp_default_params;
+
+// Estimates the motion at half resolution, for a fraction of the cost and a
+// small loss of quality.
+PL_API extern const struct pl_frame_interp_params
+    pl_frame_interp_fast_params;
 
 // Per-call inputs.
 struct pl_frame_interp_input {

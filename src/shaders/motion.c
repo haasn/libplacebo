@@ -36,6 +36,14 @@ const struct pl_frame_interp_params pl_frame_interp_default_params = {
     PL_FRAME_INTERP_DEFAULTS
 };
 
+const struct pl_frame_interp_params pl_frame_interp_fast_params = {
+    PL_FRAME_INTERP_DEFAULTS
+    .motion = {
+        PL_MOTION_ESTIMATE_DEFAULTS
+        .scale = 0.5,
+    },
+};
+
 enum dir {
     FWD = 0,
     BWD = 1,
