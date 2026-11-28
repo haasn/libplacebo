@@ -82,13 +82,9 @@ struct sh_motion_obj {
         pl_tex_pyramid fine_vis; // visibility of `fine`, or {0}
         pl_tex_pyramid fine_tmp; // like `fine`, to check it into, or {0}
         pl_buf gain;           // brightness gain (float), or NULL
-        pl_tex occlusion;      // occlusion map, or NULL
         pl_tex_pyramid fill_mv;  // most visible vectors, see motion_fill_pass,
         pl_tex_pyramid fill_vis; // and their visibility, or {0}
-        pl_tex filled;         // final flow field with the occluded vectors
-                               // filled in, or NULL
         pl_tex output;         // output field, see pl_motion_get_flow
-        pl_tex quality;        // flow quality estimate, or NULL
         pl_buf global_flow;    // global flow buffer, or NULL
     } dir[NUM_DIRS];
 
@@ -112,12 +108,6 @@ static pl_tex final_flow(const struct motion_dir *dir)
 {
     return dir->fine.num ? pl_pyramid_base(dir->fine)
                          : pl_pyramid_base(dir->coarse);
-}
-
-// The flow field that is output for `dir`.
-static pl_tex output_flow(const struct motion_dir *dir)
-{
-    return dir->filled ? dir->filled : final_flow(dir);
 }
 
 // Binds `tex` for use with `texelFetch`.
@@ -150,6 +140,19 @@ static ident_t bind_img(pl_shader sh, const char *name, pl_tex tex)
             .name   = name,
             .type   = PL_DESC_STORAGE_IMG,
             .access = PL_DESC_ACCESS_WRITEONLY,
+        },
+        .binding.object = tex,
+    });
+}
+
+// Binds `tex` for use with `imageLoad` and `imageStore`.
+static ident_t bind_img_rw(pl_shader sh, const char *name, pl_tex tex)
+{
+    return sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name   = name,
+            .type   = PL_DESC_STORAGE_IMG,
+            .access = PL_DESC_ACCESS_READWRITE,
         },
         .binding.object = tex,
     });
@@ -589,12 +592,9 @@ static void motion_uninit(pl_gpu gpu, void *ptr)
         pl_pyramid_destroy(gpu, &obj->dir[d].fine_vis);
         pl_pyramid_destroy(gpu, &obj->dir[d].fine_tmp);
         pl_buf_destroy(gpu, &obj->dir[d].gain);
-        pl_tex_destroy(gpu, &obj->dir[d].occlusion);
         pl_pyramid_destroy(gpu, &obj->dir[d].fill_mv);
         pl_pyramid_destroy(gpu, &obj->dir[d].fill_vis);
-        pl_tex_destroy(gpu, &obj->dir[d].filled);
         pl_tex_destroy(gpu, &obj->dir[d].output);
-        pl_tex_destroy(gpu, &obj->dir[d].quality);
         pl_buf_destroy(gpu, &obj->dir[d].global_flow);
     }
     pl_buf_destroy(gpu, &obj->scratch.hist);
@@ -1535,12 +1535,13 @@ error:
 // A field of one direction for `motion_check_pass`
 struct check_field {
     pl_tex flow, other;       // the field, and that of the other direction
-    pl_tex out, vis_out;      // the checked field and its visibility
+    pl_tex out, vis_out;      // the checked field and its visibility, or NULL
     pl_tex parent, parent_vis; // the next coarser field and its visibility,
                                // or NULL
-    pl_tex quality_out;       // the confidence in the checked field, or NULL
-    pl_tex occlusion_out;     // how likely the content of each of its vectors
-                              // is occluded, or NULL
+    pl_tex final_out;         // the output field for the final level, see
+                              // pl_motion_get_flow, or NULL
+    const float *mv_scale;    // see `sh_motion_obj.mv_scale`, for `final_out`
+    bool quality, visibility; // whether `final_out` holds these
     int w, h;                 // size of the frames at the field's resolution
     int bs;                   // pixels per vector of the field
     int parent_bs;            // pixels per vector of the parent, in its own
@@ -1557,13 +1558,14 @@ struct check_field {
 // it is the one the next finer field starts from.
 //
 // Writes the visibility, the confidence in each vector and whether it was
-// filled in. The occlusion is the lack of confidence in the vector as found,
-// before any of this. The confidence is how close the nearest vector of the other
-// direction comes to leading back, which counts more strictly than the
-// visibility: replacing a vector takes a clear failure, trusting one takes a
-// clear success. A filled vector, and any vector refined from one, keeps the
-// lowest confidence on its way: the fields of both directions are filled from
-// the same content, so they agree with each other whether right or not.
+// filled in. For the output, the quality is the confidence, and the
+// visibility the confidence in the vector as found, before any of this. The
+// confidence is how close the nearest vector of the other direction comes to
+// leading back, which counts more strictly than the visibility: replacing a
+// vector takes a clear failure, trusting one takes a clear success. A filled
+// vector, and any vector refined from one, keeps the lowest confidence on its
+// way: the fields of both directions are filled from the same content, so they
+// agree with each other whether right or not.
 static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
 {
     const int grid_w = f->flow->params.w, grid_h = f->flow->params.h;
@@ -1578,22 +1580,25 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
     if (!sh)
         return false;
 
+    const bool has_out = f->out != NULL, has_final = f->final_out != NULL;
     ident_t flow = bind_tex(sh, "flow", f->flow);
     ident_t other = bind_tex(sh, "other", f->other);
-    ident_t out = bind_img(sh, "flow_out", f->out);
-    ident_t vis_out = bind_img(sh, "vis_out", f->vis_out);
+    ident_t out = NULL_IDENT, vis_out = NULL_IDENT, final_out = NULL_IDENT;
+    if (has_out) {
+        out = bind_img(sh, "flow_out", f->out);
+        vis_out = bind_img(sh, "vis_out", f->vis_out);
+    }
+    if (has_final)
+        final_out = bind_img(sh, "final_out", f->final_out);
     ident_t parent = NULL_IDENT, parent_vis = NULL_IDENT;
     if (has_parent) {
         parent = bind_tex(sh, "parent", f->parent);
         parent_vis = bind_tex(sh, "parent_vis", f->parent_vis);
     }
-    const bool has_quality = f->quality_out != NULL;
-    const bool has_occlusion = f->occlusion_out != NULL;
-    ident_t quality_out = NULL_IDENT, occlusion_out = NULL_IDENT;
-    if (has_quality)
-        quality_out = bind_img(sh, "quality_out", f->quality_out);
-    if (has_occlusion)
-        occlusion_out = bind_img(sh, "occlusion_out", f->occlusion_out);
+    const bool has_quality = has_final && f->quality;
+    const bool has_vis = has_final && f->visibility;
+    const float scale_x = has_final ? f->mv_scale[0] : 1.0f;
+    const float scale_y = has_final ? f->mv_scale[1] : 1.0f;
 
     // clang-format off
 #pragma GLSL /* motion_check_pass */                                            \
@@ -1626,8 +1631,7 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
         }                                                                       \
         if (dist >= ${const float: MOTION_OCCLUSION_MIN})                       \
             conf = exp(-dist * ${const float: 1.0f / MOTION_CHECK_FALLOFF});    \
-        @if (has_occlusion)                                                     \
-            imageStore($occlusion_out, blk, vec4(1.0 - conf, 0.0, 0.0, 0.0));   \
+        float found = conf;                                                     \
                                                                                 \
         @if (has_parent) {                                                      \
             ivec2 pblk = min(ivec2(c) / ${const int: ratio * pbs},              \
@@ -1660,10 +1664,19 @@ static bool motion_check_pass(pl_dispatch dispatch, const struct check_field *f)
                     * ${const float: MOTION_CHECK_DECAY};                       \
             }                                                                   \
         @}                                                                      \
-        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
-        imageStore($vis_out, blk, vec4(vis, conf, filled, 0.0));                \
-        @if (has_quality)                                                       \
-            imageStore($quality_out, blk, vec4(conf, 0.0, 0.0, 0.0));           \
+        @if (has_out) {                                                         \
+            imageStore($out, blk, vec4(mv, 0.0, 0.0));                          \
+            imageStore($vis_out, blk, vec4(vis, conf, filled, 0.0));            \
+        @}                                                                      \
+        @if (has_final) {                                                       \
+            vec4 res = vec4(mv * vec2(${float: scale_x}, ${float: scale_y}),    \
+                            1.0, 1.0);                                          \
+            @if (has_quality)                                                   \
+                res.z = conf;                                                   \
+            @if (has_vis)                                                       \
+                res.w = found;                                                  \
+            imageStore($final_out, blk, res);                                   \
+        @}                                                                      \
     }
     // clang-format on
 
@@ -1689,8 +1702,10 @@ static bool motion_check_coarse_pass(pl_dispatch dispatch,
         .other      = obj->dir[!d].coarse.elem[level],
         .out        = dir->raw.elem[level],
         .vis_out    = dir->coarse_vis.elem[level],
-        .quality_out = level == 0 && !dir->fine.num ? dir->quality : NULL,
-        .occlusion_out = level == 0 && !dir->fine.num ? dir->occlusion : NULL,
+        .final_out  = level == 0 && !dir->fine.num ? dir->output : NULL,
+        .mv_scale   = obj->mv_scale,
+        .quality    = obj->features & PL_MOTION_QUALITY,
+        .visibility = obj->features & PL_MOTION_OCCLUSION,
         .parent     = top ? NULL : dir->coarse.elem[level + 1],
         .parent_vis = top ? NULL : dir->coarse_vis.elem[level + 1],
         .w          = dir->input.elem[level]->params.w,
@@ -2100,10 +2115,13 @@ static bool refine_flow(pl_dispatch dispatch, struct sh_motion_obj *obj,
             bool ok = motion_check_pass(dispatch, &(struct check_field) {
                 .flow       = dir->fine.elem[i],
                 .other      = obj->dir[!d].fine.elem[i],
-                .out        = dir->fine_tmp.elem[i],
-                .vis_out    = dir->fine_vis.elem[i],
-                .quality_out = i == 0 ? dir->quality : NULL,
-                .occlusion_out = i == 0 ? dir->occlusion : NULL,
+                // Nothing refines the final level any further
+                .out        = i > 0 ? dir->fine_tmp.elem[i] : NULL,
+                .vis_out    = i > 0 ? dir->fine_vis.elem[i] : NULL,
+                .final_out  = i == 0 ? dir->output : NULL,
+                .mv_scale   = obj->mv_scale,
+                .quality    = obj->features & PL_MOTION_QUALITY,
+                .visibility = obj->features & PL_MOTION_OCCLUSION,
                 .parent     = first ? pl_pyramid_base(dir->coarse)
                                     : dir->fine.elem[i + 1],
                 .parent_vis = first ? pl_pyramid_base(dir->coarse_vis)
@@ -2117,7 +2135,7 @@ static bool refine_flow(pl_dispatch dispatch, struct sh_motion_obj *obj,
             if (!ok)
                 return false;
         }
-        for (enum dir d = 0; d < NUM_DIRS; d++)
+        for (enum dir d = 0; i > 0 && d < NUM_DIRS; d++)
             PL_SWAP(obj->dir[d].fine.elem[i], obj->dir[d].fine_tmp.elem[i]);
     }
 
@@ -2301,7 +2319,7 @@ static bool estimate_global(pl_dispatch dispatch,
 }
 
 // Reduces each 2x2 texels of level `i - 1` of the fill pyramid of `d`, or of
-// the final flow field for `i` = 0, to the vector and visibility of the most
+// the output field for `i` = 0, to the vector and visibility of the most
 // visible one, at level `i`.
 static bool motion_fill_reduce_pass(pl_dispatch dispatch,
                                     const struct sh_motion_obj *obj,
@@ -2309,8 +2327,8 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
 {
     const struct motion_dir *dir = &obj->dir[d];
     const bool base = i == 0;
-    pl_tex in_mv_tex   = base ? final_flow(dir) : dir->fill_mv.elem[i - 1];
-    pl_tex in_vis_tex  = base ? dir->occlusion : dir->fill_vis.elem[i - 1];
+    pl_tex in_mv_tex   = base ? dir->output : dir->fill_mv.elem[i - 1];
+    pl_tex in_vis_tex  = base ? dir->output : dir->fill_vis.elem[i - 1];
     pl_tex out_mv_tex  = dir->fill_mv.elem[i];
     pl_tex out_vis_tex = dir->fill_vis.elem[i];
 
@@ -2322,8 +2340,9 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
     if (!sh)
         return false;
 
+    // The output field holds both
     ident_t in_mv   = bind_tex(sh, "fill_mv_in", in_mv_tex);
-    ident_t in_vis  = bind_tex(sh, "fill_vis_in", in_vis_tex);
+    ident_t in_vis  = base ? in_mv : bind_tex(sh, "fill_vis_in", in_vis_tex);
     ident_t out_mv  = bind_img(sh, "fill_mv_out", out_mv_tex);
     ident_t out_vis = bind_img(sh, "fill_vis_out", out_vis_tex);
 
@@ -2336,9 +2355,10 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
         for (int j = 0; j < 4; j++) {                                           \
             ivec2 c = min(2 * blk + ivec2(j & 1, j >> 1), ivec2(                \
                           ${const int: in_w - 1}, ${const int: in_h - 1}));     \
-            float v = texelFetch($in_vis, c, 0).x;                              \
             @if (base)                                                          \
-                v = 1.0 - v;                                                    \
+                float v = texelFetch($in_vis, c, 0).w;                          \
+            @else                                                               \
+                float v = texelFetch($in_vis, c, 0).x;                          \
             if (v > vis) {                                                      \
                 vis = v;                                                        \
                 mv = texelFetch($in_mv, c, 0).xy;                               \
@@ -2356,7 +2376,8 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
     ));
 }
 
-// Fills in the vectors of `d` that are less visible than `fill_threshold`.
+// Fills in the vectors of the output field of `d` that are less visible than
+// `fill_threshold`.
 //
 // Content that is occluded in the other frame cannot be matched, so its vector
 // is whatever happened to look similar. It most likely moves like the visible
@@ -2367,8 +2388,7 @@ static bool motion_fill_pass(pl_dispatch dispatch,
                              const struct sh_motion_obj *obj, enum dir d)
 {
     const struct motion_dir *dir = &obj->dir[d];
-    pl_tex flow_tex = final_flow(dir);
-    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
+    const int grid_w = dir->output->params.w, grid_h = dir->output->params.h;
     const float thresh = obj->params.fill_threshold;
     const int top = dir->fill_vis.num - 1;
 
@@ -2377,17 +2397,15 @@ static bool motion_fill_pass(pl_dispatch dispatch,
     if (!sh)
         return false;
 
-    ident_t flow = bind_tex(sh, "flow", flow_tex);
-    ident_t occl = bind_tex(sh, "occlusion", dir->occlusion);
-    ident_t out  = bind_img(sh, "flow_out", dir->filled);
+    ident_t field = bind_img_rw(sh, "field", dir->output);
 
     // clang-format off
 #pragma GLSL /* motion_fill_pass */                                             \
     ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
     if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h})))) {\
         const float thresh = ${const float: thresh};                            \
-        vec2 mv = texelFetch($flow, blk, 0).xy;                                 \
-        float vis = 1.0 - texelFetch($occl, blk, 0).x;                          \
+        vec4 res = imageLoad($field, blk);                                      \
+        float vis = res.w;                                                      \
         if (vis < thresh) {                                                     \
             vec2 fill_mv, mv_i;                                                 \
             float fill_vis, vis_i;
@@ -2425,10 +2443,12 @@ static bool motion_fill_pass(pl_dispatch dispatch,
 
     // clang-format off
 #pragma GLSL /* motion_fill_pass */                                             \
-            if (fill_vis > vis)                                                 \
-                mv = (vis * mv + fill_vis * fill_mv) / (vis + fill_vis);        \
+            if (fill_vis > vis) {                                               \
+                res.xy = (vis * res.xy + fill_vis * fill_mv)                    \
+                       / (vis + fill_vis);                                      \
+                imageStore($field, blk, res);                                   \
+            }                                                                   \
         }                                                                       \
-        imageStore($out, blk, vec4(mv, 0.0, 0.0));                              \
     }
     // clang-format on
 
@@ -2439,41 +2459,22 @@ static bool motion_fill_pass(pl_dispatch dispatch,
     ));
 }
 
-// Fills in the occluded vectors of both directions, see `motion_fill_pass`.
-static bool fill_occluded(pl_dispatch dispatch, const struct sh_motion_obj *obj)
-{
-    pl_assert(obj->valid == PL_MOTION_BOTH);
-    for (enum dir d = 0; d < NUM_DIRS; d++) {
-        for (int i = 0; i < obj->dir[d].fill_vis.num; i++) {
-            if (!motion_fill_reduce_pass(dispatch, obj, d, i))
-                return false;
-        }
-        if (!motion_fill_pass(dispatch, obj, d))
-            return false;
-    }
-
-    return true;
-}
-
-// Writes the output field of `d`, see pl_motion_get_flow.
+// Writes the output field of `d` from its final flow field, where no round
+// trip check did, see pl_motion_get_flow.
 static bool motion_output_pass(pl_dispatch dispatch,
                                const struct sh_motion_obj *obj, enum dir d)
 {
     const struct motion_dir *dir = &obj->dir[d];
-    pl_tex in_tex = output_flow(dir);
-    const int grid_w = in_tex->params.w, grid_h = in_tex->params.h;
+    pl_tex flow_tex = final_flow(dir);
+    const int grid_w = flow_tex->params.w, grid_h = flow_tex->params.h;
 
     pl_shader sh = pass_begin(dispatch, 16, 16, 0,
                               "motion output (%dx%d)", grid_w, grid_h);
     if (!sh)
         return false;
 
-    const bool has_q = dir->quality, has_occl = dir->occlusion;
-    ident_t in  = bind_tex(sh, "flow", in_tex);
-    ident_t out = bind_img(sh, "flow_out", dir->output);
-    ident_t q = has_q ? bind_tex(sh, "quality", dir->quality) : NULL_IDENT;
-    ident_t occl = has_occl ? bind_tex(sh, "occlusion", dir->occlusion)
-                            : NULL_IDENT;
+    ident_t flow = bind_tex(sh, "flow", flow_tex);
+    ident_t out  = bind_img(sh, "flow_out", dir->output);
 
     // clang-format off
 #pragma GLSL /* motion_output_pass */                                           \
@@ -2481,12 +2482,8 @@ static bool motion_output_pass(pl_dispatch dispatch,
     if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h})))) {\
         vec2 scale = vec2(${float: obj->mv_scale[0]},                           \
                           ${float: obj->mv_scale[1]});                          \
-        vec4 res = vec4(texelFetch($in, blk, 0).xy * scale, 1.0, 1.0);          \
-        @if (has_q)                                                             \
-            res.z = texelFetch($q, blk, 0).x;                                   \
-        @if (has_occl)                                                          \
-            res.w = 1.0 - texelFetch($occl, blk, 0).x;                          \
-        imageStore($out, blk, res);                                             \
+        vec2 mv = texelFetch($flow, blk, 0).xy * scale;                         \
+        imageStore($out, blk, vec4(mv, 1.0, 1.0));                              \
     }
     // clang-format on
 
@@ -2621,91 +2618,42 @@ static bool motion_setup(pl_gpu gpu, struct sh_motion_obj *obj, int w, int h,
             goto error;
     }
 
-    if (features & PL_MOTION_OCCLUSION) {
-        pl_fmt ofmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
-                                  PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR);
-        if (!ofmt) {
-            PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
-                        "single component format available!");
+    // The vectors of occluded content are filled in from the most visible ones
+    // around them
+    if ((features & PL_MOTION_OCCLUSION) && params->fill_threshold > 0.0f) {
+        pl_fmt vfmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
+                                  PL_FMT_CAP_STORABLE);
+        if (!vfmt) {
+            PL_ERR(gpu, "pl_motion_estimate: no storable single component "
+                        "format available!");
             goto error;
         }
 
         for (enum dir d = 0; d < NUM_DIRS; d++) {
             pl_tex flow = final_flow(&obj->dir[d]);
-            const int ow = flow->params.w, oh = flow->params.h;
-            bool ok = pl_tex_recreate(gpu, &obj->dir[d].occlusion, pl_tex_params(
-                .w          = ow,
-                .h          = oh,
-                .format     = ofmt,
+            const int fw = PL_DIV_UP(flow->params.w, 2);
+            const int fh = PL_DIV_UP(flow->params.h, 2);
+            const int fill_levels = PL_MIN(MOTION_FILL_LEVELS,
+                                           pl_pyramid_max_levels(fw, fh));
+            bool ok = pl_pyramid_recreate(gpu, obj, &obj->dir[d].fill_mv,
+                                          fill_levels, pl_tex_params(
+                .w          = fw,
+                .h          = fh,
+                .format     = flow->params.format,
+                .sampleable = true,
+                .storable   = true,
+            ));
+            ok = ok && pl_pyramid_recreate(gpu, obj, &obj->dir[d].fill_vis,
+                                           fill_levels, pl_tex_params(
+                .w          = fw,
+                .h          = fh,
+                .format     = vfmt,
                 .sampleable = true,
                 .storable   = true,
             ));
             if (!ok) {
-                PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d "
-                            "occlusion map!", ow, oh);
-                goto error;
-            }
-
-            if (params->fill_threshold > 0.0f) {
-                const int fw = PL_DIV_UP(ow, 2), fh = PL_DIV_UP(oh, 2);
-                const int fill_levels = PL_MIN(MOTION_FILL_LEVELS,
-                                               pl_pyramid_max_levels(fw, fh));
-                ok = pl_pyramid_recreate(gpu, obj, &obj->dir[d].fill_mv,
-                                         fill_levels, pl_tex_params(
-                    .w          = fw,
-                    .h          = fh,
-                    .format     = flow->params.format,
-                    .sampleable = true,
-                    .storable   = true,
-                ));
-                ok = ok && pl_pyramid_recreate(gpu, obj, &obj->dir[d].fill_vis,
-                                               fill_levels, pl_tex_params(
-                    .w          = fw,
-                    .h          = fh,
-                    .format     = ofmt,
-                    .sampleable = true,
-                    .storable   = true,
-                ));
-                ok = ok && pl_tex_recreate(gpu, &obj->dir[d].filled,
-                                           pl_tex_params(
-                    .w          = ow,
-                    .h          = oh,
-                    .format     = flow->params.format,
-                    .sampleable = true,
-                    .storable   = true,
-                ));
-                if (!ok) {
-                    PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d "
-                                "fill fields!", ow, oh);
-                    goto error;
-                }
-            }
-        }
-    }
-
-    if (features & PL_MOTION_QUALITY) {
-        pl_fmt qfmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 8, 8,
-                                  PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR);
-        if (!qfmt) {
-            PL_ERR(gpu, "pl_motion_estimate: no storable, linearly filterable "
-                        "single component format available!");
-            goto error;
-        }
-
-        for (enum dir d = 0; d < NUM_DIRS; d++) {
-            // One quality per vector of the final field
-            pl_tex flow = final_flow(&obj->dir[d]);
-            const int qw = flow->params.w, qh = flow->params.h;
-            bool ok = pl_tex_recreate(gpu, &obj->dir[d].quality, pl_tex_params(
-                .w          = qw,
-                .h          = qh,
-                .format     = qfmt,
-                .sampleable = true,
-                .storable   = true,
-            ));
-            if (!ok) {
-                PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d quality "
-                            "texture!", qw, qh);
+                PL_ERR(gpu, "pl_motion_estimate: failed creating %dx%d fill "
+                            "fields!", fw, fh);
                 goto error;
             }
         }
@@ -2893,12 +2841,18 @@ bool pl_motion_estimate(const struct pl_motion_estimate_input *input,
 
     obj->valid = input->direction;
 
-    if (obj->dir[FWD].filled && !fill_occluded(input->dispatch, obj))
-        goto error;
-
+    // With both directions, the final round trip check wrote the output
     for (enum dir d = 0; d < NUM_DIRS; d++) {
-        if ((obj->valid & (1 << d)) &&
-            !motion_output_pass(input->dispatch, obj, d))
+        if (!(obj->valid & (1 << d)))
+            continue;
+        if (!check && !motion_output_pass(input->dispatch, obj, d))
+            goto error;
+        for (int i = 0; i < obj->dir[d].fill_vis.num; i++) {
+            if (!motion_fill_reduce_pass(input->dispatch, obj, d, i))
+                goto error;
+        }
+        if (obj->dir[d].fill_vis.num &&
+            !motion_fill_pass(input->dispatch, obj, d))
             goto error;
     }
 
