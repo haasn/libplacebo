@@ -301,6 +301,11 @@ static void sh_partial_sums(pl_shader sh, enum pl_var_type type, uint8_t comps,
 // across.
 #define MOTION_FILL_LEVELS 7
 
+// Distance, in flow texels, over which a vector to fill in with counts as
+// 1/e as visible: the further it comes from, the more visible it must be to
+// win, and the less of it is mixed in.
+#define MOTION_FILL_FALLOFF 16.0f
+
 // Round trip distance, in pixels, at which `motion_check_pass` starts to count
 // a vector as not visible, plus this fraction of the length of the vectors
 // on the way there and back. At twice that, it counts as not visible at all.
@@ -2395,6 +2400,12 @@ static bool motion_fill_reduce_pass(pl_dispatch dispatch,
 // content around it. So, from the largest block down, each block that holds
 // such a vector takes over the result of the block around it if that is more
 // visible, mixed with its own vector by visibility, and so does the vector.
+//
+// Each level offers the vector of whichever of the 4 blocks nearest to the
+// texels is most visible, weighted by how near it is, rather than that of the
+// block they are in: the latter would fill a large occluded area with
+// squares. Vectors from further away count as less visible when weighed
+// against others, see MOTION_FILL_FALLOFF.
 static bool motion_fill_pass(pl_dispatch dispatch,
                              const struct sh_motion_obj *obj, enum dir d)
 {
@@ -2419,38 +2430,59 @@ static bool motion_fill_pass(pl_dispatch dispatch,
     ivec2 blk = ivec2(gl_GlobalInvocationID.xy);                                \
     const float thresh = ${const float: thresh};                                \
     vec2 fill_mv, mv_i;                                                         \
-    float fill_vis, vis_i;                                                      \
+    float fill_vis, vis_i, near_i;                                              \
     if (all(lessThan(blk, ivec2(${const int: grid_w}, ${const int: grid_h}))) &&\
         texelFetch($base, blk, 0).y < thresh)                                   \
     {
     // clang-format on
 
     for (int i = top; i >= 0; i--) {
-        pl_tex lvl_mv_tex = dir->fill_mv.elem[i];
-        ident_t lvl_mv  = bind_tex(sh, "fill_mv", lvl_mv_tex);
-        ident_t lvl_vis = i ? bind_tex(sh, "fill_vis", dir->fill_vis.elem[i])
-                            : base;
-        const int lvl_w = lvl_mv_tex->params.w, lvl_h = lvl_mv_tex->params.h;
+        pl_tex lvl_vis_tex = dir->fill_vis.elem[i];
+        ident_t lvl_mv  = bind_tex(sh, "fill_mv", dir->fill_mv.elem[i]);
+        ident_t lvl_vis = i ? bind_tex(sh, "fill_vis", lvl_vis_tex) : base;
+        ident_t vis_quad = i ? sh_tex_quad(sh, 0x1, lvl_vis,
+                                           &lvl_vis_tex->params)
+                             : NULL_IDENT;
+        const int lvl_w = lvl_vis_tex->params.w, lvl_h = lvl_vis_tex->params.h;
+        // The blocks of level `i` span 2^(i + 1) texels
+        const float falloff = expf(-(float) (2 << i) / MOTION_FILL_FALLOFF);
 
         // clang-format off
 #pragma GLSL /* motion_fill_pass */                                             \
         {                                                                       \
-            ivec2 p = min(blk >> ${const int: i},                               \
-                          ivec2(${const int: lvl_w - 1},                        \
-                                ${const int: lvl_h - 1}));                      \
-            mv_i = texelFetch($lvl_mv, p, 0).xy;                                \
+            ivec2 lmax = ivec2(${const int: lvl_w - 1},                         \
+                               ${const int: lvl_h - 1});                        \
+            @if (i > 0) {                                                       \
+            vec2 q = (vec2(blk) + 0.5) * ${const float: 1.0f / (1 << i)} - 0.5; \
+            ivec2 q0 = ivec2(floor(q));                                         \
+            vec2 f = q - vec2(q0);                                              \
+            vec4 vq = $vis_quad(q0);                                            \
+            vec4 wq = vec4(1.0 - f.x, f.x, 1.0 - f.x, f.x)                      \
+                    * vec4(1.0 - f.y, 1.0 - f.y, f.y, f.y) * (vq + 1e-3);       \
+            int best = 0;                                                       \
+            for (int j = 1; j < 4; j++) {                                       \
+                if (wq[j] > wq[best])                                           \
+                    best = j;                                                   \
+            }                                                                   \
+            ivec2 p = clamp(q0 + ivec2(best & 1, best >> 1), ivec2(0), lmax);   \
+            vis_i = vq[best];                                                   \
+            @} else {                                                           \
+            ivec2 p = min(blk, lmax);                                           \
             vis_i = texelFetch($lvl_vis, p, 0).x;                               \
+            @}                                                                  \
+            mv_i = texelFetch($lvl_mv, p, 0).xy;                                \
+            near_i = vis_i * ${const float: falloff};                           \
         }                                                                       \
         @if (i == top) {                                                        \
             fill_mv = mv_i;                                                     \
-            fill_vis = vis_i;                                                   \
+            fill_vis = near_i;                                                  \
         @} else {                                                               \
-            if (vis_i < thresh && fill_vis > vis_i) {                           \
-                fill_mv = (vis_i * mv_i + fill_vis * fill_mv)                   \
-                        / (vis_i + fill_vis);                                   \
+            if (vis_i < thresh && fill_vis > near_i) {                          \
+                fill_mv = (near_i * mv_i + fill_vis * fill_mv)                  \
+                        / (near_i + fill_vis);                                  \
             } else {                                                            \
                 fill_mv = mv_i;                                                 \
-                fill_vis = vis_i;                                               \
+                fill_vis = near_i;                                              \
             }                                                                   \
         @}
         // clang-format on
