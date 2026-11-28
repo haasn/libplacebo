@@ -425,10 +425,12 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
         if (nk_tree_push(nk, NK_TREE_NODE, "Frame interpolation", NK_MINIMIZED)) {
             struct pl_frame_interp_params *ipar = &opts->frame_interp_params;
             struct pl_motion_estimate_params *mpar = &ipar->motion;
-            nk_layout_row_dynamic(nk, 24, 2);
+            nk_layout_row_dynamic(nk, 24, 3);
             par->frame_interp_params = nk_check_label(nk, "Enable", par->frame_interp_params) ? ipar : NULL;
             if (nk_button_label(nk, "Reset settings"))
                 *ipar = pl_frame_interp_default_params;
+            if (nk_button_label(nk, "Fast settings"))
+                *ipar = pl_frame_interp_fast_params;
 
             static const char *interp_algos[PL_FRAME_INTERP_ALGO_COUNT] = {
                 [PL_FRAME_INTERP_GATHER]        = "Pixel gather",
@@ -438,6 +440,7 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_FRAME_INTERP_OCCLUSION]     = "Visualize occlusion",
             };
 
+            nk_layout_row_dynamic(nk, 24, 2);
             nk_label(nk, "Algorithm", NK_TEXT_LEFT);
             ipar->algo = nk_combo(nk, interp_algos, PL_FRAME_INTERP_ALGO_COUNT,
                                   ipar->algo, 16, nk_vec2(nk_widget_width(nk), 300));

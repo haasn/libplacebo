@@ -1264,7 +1264,8 @@ const struct pl_opt_t pl_option_list[] = {
     // Frame interpolation
     OPT_ENABLE_PARAMS("frame_interp", "Enable frame interpolation", frame_interp_params),
     OPT_PRESET("frame_interp_preset", "Frame interpolation preset", frame_interp_params, LIST(
-               {"default", &pl_frame_interp_default_params})),
+               {"default", &pl_frame_interp_default_params},
+               {"fast",    &pl_frame_interp_fast_params})),
     OPT_ENUM("frame_interp_algo", "Frame interpolation algorithm", frame_interp_params.algo, LIST(
              {"gather",         PL_FRAME_INTERP_GATHER},
              {"global_motion",  PL_FRAME_INTERP_GLOBAL_MOTION},
